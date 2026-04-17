@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 
 export default function ProjectManagerHomePage() {
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center px-6 pb-16 pt-8">
+    <section className="space-y-4">
       <p className="text-sm font-medium text-blue-400">project-manager / apps/web</p>
       <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-100">
         案件管理
@@ -15,7 +15,7 @@ export default function ProjectManagerHomePage() {
       <p className="mt-4 text-slate-400">
         Next.js スキャフォールドが有効です。ここから一覧・詳細・ドキュメント編集へ拡張します。
       </p>
-      <ul className="mt-8 list-inside list-disc space-y-2 text-sm text-slate-500">
+      <ul className="mt-6 list-inside list-disc space-y-2 text-sm text-slate-400">
         <li>
           ドキュメント雛形: <code className="text-slate-400">docs/projects/_sample</code>
         </li>
@@ -31,6 +31,6 @@ export default function ProjectManagerHomePage() {
           <code className="text-slate-400">http://dev-ALRfy-AI.com:8001/project-manager</code>
         </li>
       </ul>
-    </main>
+    </section>
   );
 }

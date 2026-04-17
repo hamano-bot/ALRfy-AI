@@ -6,6 +6,8 @@ import type { NextConfig } from "next";
  */
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Hide the bottom-right Next.js dev indicator ("N") in development.
+  devIndicators: false,
   /** hosts で別名を当てたときに /_next 静的アセット・HMR を許可する */
   allowedDevOrigins: [
     "dev-alrfy-ai.com",

@@ -3,13 +3,137 @@
 @tailwind utilities;
 
 :root {
+  --surface: #1a2332;
+  --surface-soft: #151f2e;
+  --border: #2d3a4d;
   --background: #0f1419;
   --foreground: #e7edf5;
   --muted: #8b9cb3;
   --accent: #3b82f6;
 }
 
+:root[data-theme="dark"] {
+  --surface: #161d29;
+  --surface-soft: #111723;
+  --border: #273244;
+  --background: #090d14;
+  --foreground: #e4ebf7;
+  --muted: #94a6bf;
+  --accent: #60a5fa;
+}
+
+:root[data-theme="default"] {
+  --surface: #1a2332;
+  --surface-soft: #151f2e;
+  --border: #2d3a4d;
+  --background: #0f1419;
+  --foreground: #e7edf5;
+  --muted: #8b9cb3;
+  --accent: #3b82f6;
+}
+
+:root[data-theme="ocean"] {
+  --surface: #112536;
+  --surface-soft: #0d1d2c;
+  --border: #23445f;
+  --background: #09131d;
+  --foreground: #dcf4ff;
+  --muted: #82a4b8;
+  --accent: #22d3ee;
+}
+
+:root[data-theme="violet"] {
+  --surface: #221933;
+  --surface-soft: #1a1229;
+  --border: #41315b;
+  --background: #100d19;
+  --foreground: #ece6ff;
+  --muted: #a79bbf;
+  --accent: #a78bfa;
+}
+
 body {
   color: var(--foreground);
   background: var(--background);
+}
+
+.surface-card {
+  border-radius: 1rem;
+  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+/* Modern scrollbar kit (Tailwind-friendly utility class). */
+.modern-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--accent) 42%, #9ca3af 58%) transparent;
+}
+
+.modern-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.modern-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.modern-scrollbar::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 85%, #cbd5e1 15%) 0%,
+    color-mix(in srgb, var(--accent) 60%, #64748b 40%) 100%
+  );
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 2px 10px rgba(15, 23, 42, 0.4);
+}
+
+.modern-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 95%, #e2e8f0 5%) 0%,
+    color-mix(in srgb, var(--accent) 68%, #475569 32%) 100%
+  );
+}
+
+.modern-scrollbar::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.brand-led {
+  font-family: var(--font-montserrat), "Montserrat", "Segoe UI", sans-serif;
+  font-weight: 700;
+  background: linear-gradient(110deg, #38bdf8 0%, #6366f1 45%, #c084fc 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 0 10px rgba(129, 140, 248, 0.18);
+  animation: ledGlow 6s ease-in-out infinite;
+}
+
+@keyframes ledGlow {
+  0%,
+  100% {
+    text-shadow:
+      0 0 8px rgba(96, 165, 250, 0.12),
+      0 0 14px rgba(192, 132, 252, 0.1);
+    filter: brightness(1);
+  }
+  50% {
+    text-shadow:
+      0 0 12px rgba(96, 165, 250, 0.2),
+      0 0 18px rgba(192, 132, 252, 0.16);
+    filter: brightness(1.05);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-led {
+    animation: none;
+  }
 }

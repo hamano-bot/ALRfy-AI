@@ -79,6 +79,12 @@ PowerShell で PATH が通らない場合は `.\dev-lan.ps1`。
 | `npm run start` | 本番サーバー（`build` 後。既定 3000） |
 | `npm run lint` | ESLint |
 
+## UI文言ルール（共通）
+
+- 画面の閉じる操作ラベルは **`Close`** に統一する。
+- 新規画面・モーダル・ドロワー・BottomSheet も同様に **`Close`** を使う。
+- `閉じる` / `キャンセル` など別表記は、明確な要件がない限り使用しない。
+
 ## ディレクトリ
 
 - `app/` — App Router（`layout.tsx`, `page.tsx`＝`/`, `project-manager/page.tsx`＝`/project-manager`）
