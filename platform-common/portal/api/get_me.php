@@ -18,11 +18,13 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
+$allowUnassigned = isset($_GET['unassigned_ok']) && $_GET['unassigned_ok'] === '1';
+
 try {
     $pdo = createPdoFromApplicationEnv();
     $userId = (int)$_SESSION['user_id'];
 
-    if (!hasAnyMembership($pdo, $userId)) {
+    if (!$allowUnassigned && !hasAnyMembership($pdo, $userId)) {
         http_response_code(409);
         echo json_encode([
             'success' => false,
@@ -32,17 +34,26 @@ try {
         exit;
     }
 
-    // 議事録 users には display_name が無い場合がある。user_preferences も未作成のときがある。
-    $userStmt = $pdo->prepare(
-        'SELECT u.id, u.email, u.theme
-         FROM users u
-         WHERE u.id = :user_id
-         LIMIT 1'
-    );
-    $userStmt->execute([
-        ':user_id' => $userId,
-    ]);
-    $user = $userStmt->fetch();
+    $user = null;
+    try {
+        $userStmt = $pdo->prepare(
+            'SELECT u.id, u.email, u.theme, u.redmine_base_url, u.redmine_api_key
+             FROM users u
+             WHERE u.id = :user_id
+             LIMIT 1'
+        );
+        $userStmt->execute([':user_id' => $userId]);
+        $user = $userStmt->fetch();
+    } catch (Throwable $e) {
+        $userStmt = $pdo->prepare(
+            'SELECT u.id, u.email, u.theme
+             FROM users u
+             WHERE u.id = :user_id
+             LIMIT 1'
+        );
+        $userStmt->execute([':user_id' => $userId]);
+        $user = $userStmt->fetch();
+    }
 
     if ($user === false) {
         http_response_code(404);
@@ -50,7 +61,14 @@ try {
         exit;
     }
 
-    // 代表的なロール要約（ここでは所属プロジェクトの最大ロールを global として返す）
+    $rb = is_array($user) && isset($user['redmine_base_url']) && is_string($user['redmine_base_url']) ? trim($user['redmine_base_url']) : '';
+    $rk = is_array($user) && isset($user['redmine_api_key']) && is_string($user['redmine_api_key']) ? trim($user['redmine_api_key']) : '';
+    $redmineConfigured = $rb !== '' && $rk !== '';
+    $redminePublic = [
+        'configured' => $redmineConfigured,
+        'base_url' => $redmineConfigured ? $rb : null,
+    ];
+
     $globalRole = 'no_access';
     $projectRoles = [];
 
@@ -127,6 +145,7 @@ try {
             'projects' => $projectRoles,
         ],
         'available_apps' => $availableApps,
+        'redmine' => $redminePublic,
     ], JSON_UNESCAPED_UNICODE);
 } catch (Throwable $e) {
     error_log('[platform-common/get_me] ' . $e->getMessage());

@@ -1,6 +1,6 @@
 # 3 API 実リクエスト確認シート（フェーズ1）
 
-フロント実装着手前に、`GET /me`、`GET /apps`、`GET /projects/:id/permission` 相当APIの実リクエスト結果を確認するためのシート。
+フロント実装着手前に、`GET /me`、`GET /apps`、`GET /my-projects`、`GET /projects/:id/permission` 相当APIの実リクエスト結果を確認するためのシート。
 
 **開発サーバー**: `platform-common` で `php -S 0.0.0.0:8001 router.php` を使うと、下記の **拡張子なしURL** が有効（`router.php` 参照）。`-t` のみだと `.php` 直指定が必要。
 
@@ -27,6 +27,7 @@
 
 4. `{{BASE_URL}}/portal/api/me`
 5. `{{BASE_URL}}/portal/api/apps`
+5b. `{{BASE_URL}}/portal/api/my-projects`
 6. `{{BASE_URL}}/portal/api/project-permission?project_id={{PROJECT_ID_ALLOWED}}`
 7. `{{BASE_URL}}/portal/api/project-permission?project_id={{PROJECT_ID_ALLOWED}}&resource_type={{RESOURCE_TYPE}}&resource_id={{RESOURCE_ID}}`
 

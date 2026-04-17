@@ -16,10 +16,10 @@ const montserrat = Montserrat({
 
 export const metadata: Metadata = {
   title: {
-    default: "ダッシュボード",
-    template: "%s | ALRfy",
+    default: "Dashboard",
+    template: "%s | ALRfy-AI",
   },
-  description: "ALRfy-AI のダッシュボード（案件管理 Web）",
+  description: "ALRfy-AI のダッシュボード（Project Web）",
   /** ブラウザ・OGP にページの主言語を明示（翻訳バーの誤判定を減らす） */
   alternates: {
     languages: {

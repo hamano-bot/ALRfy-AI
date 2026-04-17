@@ -18,6 +18,8 @@ const buttonVariants = cva(
         accent: `${accentButtonSurfaceBaseClassName} hover:brightness-110`,
         ghost:
           "text-[var(--muted)] hover:bg-[color:color-mix(in_srgb,var(--surface)_92%,black_8%)] hover:text-[var(--foreground)]",
+        destructive:
+          "border border-red-500/40 bg-[color:color-mix(in_srgb,var(--surface)_92%,black_8%)] text-red-500 hover:border-red-500/55 hover:bg-red-500/10 hover:text-red-400",
       },
       size: {
         default: "h-9 px-3 py-2",
@@ -42,7 +44,7 @@ export interface ButtonProps
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, asChild = false, ...props }, ref) => {
     const Comp = asChild ? Slot : "button";
-    return <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />;
+    return <Comp className={cn(buttonVariants({ variant, size }), className)} ref={ref} {...props} />;
   },
 );
 Button.displayName = "Button";

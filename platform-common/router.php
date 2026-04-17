@@ -23,6 +23,11 @@ $routes = [
     '/portal/api/me' => __DIR__ . '/portal/api/get_me.php',
     '/portal/api/apps' => __DIR__ . '/portal/api/get_apps.php',
     '/portal/api/project-permission' => __DIR__ . '/portal/api/get_project_permission.php',
+    '/portal/api/my-projects' => __DIR__ . '/portal/api/get_my_projects.php',
+    '/portal/api/projects' => __DIR__ . '/portal/api/post_projects.php',
+    '/portal/api/user/redmine' => __DIR__ . '/portal/api/patch_user_redmine.php',
+    '/portal/api/user/redmine/test' => __DIR__ . '/portal/api/post_user_redmine_test.php',
+    '/portal/api/redmine-project-suggest' => __DIR__ . '/portal/api/get_redmine_project_suggest.php',
 ];
 
 if (isset($routes[$path])) {

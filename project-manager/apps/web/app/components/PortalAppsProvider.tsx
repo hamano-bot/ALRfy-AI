@@ -40,11 +40,15 @@ export function PortalAppsProvider({ children }: PortalAppsProviderProps) {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    const controller = new AbortController();
+    const timeoutMs = 12_000;
+    const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch("/api/portal/apps", {
         method: "GET",
         credentials: "include",
         headers: { Accept: "application/json" },
+        signal: controller.signal,
       });
 
       const raw = await response.text();
@@ -93,10 +97,17 @@ export function PortalAppsProvider({ children }: PortalAppsProviderProps) {
         next.push({ app_key, title, route, required_role, visibility, reason });
       }
       setApps(next);
-    } catch {
+    } catch (cause: unknown) {
       setApps([]);
-      setError("アプリ一覧の取得に失敗しました。");
+      if (cause instanceof DOMException && cause.name === "AbortError") {
+        setError(
+          `アプリ一覧の取得が ${timeoutMs / 1000} 秒以内に完了しませんでした。PHP（platform-common）が起動しているか、.env.local の PORTAL_API_BASE_URL を確認してください。`,
+        );
+      } else {
+        setError("アプリ一覧の取得に失敗しました。");
+      }
     } finally {
+      window.clearTimeout(timeoutId);
       setLoading(false);
     }
   }, []);

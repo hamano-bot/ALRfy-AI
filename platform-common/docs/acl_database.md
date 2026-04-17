@@ -6,7 +6,10 @@
 
 | テーブル | 用途 |
 |----------|------|
-| `projects` | プロジェクト（案件）の論理コンテナ。`project_members.project_id` の参照先。 |
+| `projects` | プロジェクト（案件）の論理コンテナ。`project_members.project_id` の参照先。登録用に `client_name` / `site_type` / 日付などを保持。 |
+| `project_renewal_urls` | リニューアル案件の対象 URL（`project_id` に複数行）。 |
+| `project_redmine_links` | プロジェクトに紐づく Redmine プロジェクト ID（複数行）。 |
+| `project_misc_links` | 案件の任意リンク（表示名 + URL、複数行）。 |
 | `project_members` | `user_id` × `project_id` のロール（`owner` / `editor` / `viewer`）。 |
 | `resource_members` | リソース単位の上書き。`resolveEffectiveRole()` は **resource を優先**し、なければ project。 |
 | `apps` | ポータルに載せるアプリ行（`app_key`, `name`, `route`, …）。 |
@@ -20,6 +23,8 @@
 | ファイル | 内容 |
 |----------|------|
 | [database/migrations/20260417_platform_acl_and_apps.sql](../database/migrations/20260417_platform_acl_and_apps.sql) | DDL + 既定プロジェクト `id=1` + `apps` / `app_access_policies` の初期行 |
+| [database/migrations/20260420_project_registration_fields.sql](../database/migrations/20260420_project_registration_fields.sql) | `projects` 拡張（クライアント・サイト種別・日付等）+ `project_renewal_urls` + `project_redmine_links` |
+| [database/migrations/20260421_user_redmine_and_project_misc_links.sql](../database/migrations/20260421_user_redmine_and_project_misc_links.sql) | `users.redmine_base_url` / `redmine_api_key` + `project_misc_links` |
 
 ## 適用手順（例）
 
@@ -57,3 +62,5 @@ docker exec minutes-db-dev sh -c "mysql -uroot -proot --default-character-set=ut
 ## ロールバック
 
 外部キー依存のため、手動で子→親の順に `DROP TABLE` する。検証環境の再作成が簡単なら DB ダンプから復元でもよい。
+
+`20260420_project_registration_fields.sql` 適用後の巻き戻し例は、同ファイル末尾のコメント（`project_redmine_links` → `project_renewal_urls` → `projects` の列削除）を参照。

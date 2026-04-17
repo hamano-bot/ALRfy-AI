@@ -48,5 +48,5 @@
 
 ## 関連ドキュメント
 
-- ルート [README.md](../README.md) の「GitHub 運用」: `main` 直接 push と bot 追従コミット、`git pull` の注意。
+- ルート [README.md](../README.md) の「GitHub 運用」: `main` 直接 push と bot 追従コミット、**`git pull` のあと `next dev` を再起動**する旨。
 - 案件管理 Web のローカル手順: [project-manager/apps/web/README.md](../project-manager/apps/web/README.md)

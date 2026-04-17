@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { CalendarDays, ChevronLeft, ExternalLink } from "lucide-react";
+import { Briefcase, CalendarDays, ChevronLeft, ExternalLink } from "lucide-react";
 import { isExternalPortalRoute, isPortalAppInteractive } from "../lib/portal-app-helpers";
 import { Button, accentButtonSurfaceBaseClassName } from "./ui/button";
 import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
@@ -25,11 +25,12 @@ type SidebarNavItem = {
   disabledReason?: string | null;
 };
 
-const MEETING_HREF = process.env.NEXT_PUBLIC_MEETING_URL || "http://minutes-record.com:8080/";
+/** Meeting 導線は常に議事録（:8080）。`NEXT_PUBLIC_MEETING_URL` は参照しない。 */
+const MEETING_HREF = "http://minutes-record.com:8080/";
 
 function iconForPortalApp(appKey: string): ReactNode {
   if (appKey === "project-manager") {
-    return "⌘";
+    return <Briefcase className="h-3.5 w-3.5" aria-hidden />;
   }
   if (appKey === "minutes-record") {
     return "▷";
@@ -40,7 +41,8 @@ function iconForPortalApp(appKey: string): ReactNode {
 
 const AI_OPEN_STORAGE_KEY = "alrfy-ai-chat-open";
 const THEME_STORAGE_KEY = "alrfy-theme";
-const PROFILE_API_ENDPOINT = process.env.NEXT_PUBLIC_PROFILE_API_ENDPOINT;
+/** 同一オリジン BFF → PHP `GET /portal/api/me`（`PORTAL_API_BASE_URL` はサーバー専用） */
+const PROFILE_BFF_PATH = "/api/portal/me";
 const supportedThemes = new Set(["default", "cute", "midnight", "ocean", "system", "dark", "violet"]);
 
 const dummyMessages = [
@@ -90,13 +92,21 @@ export function DashboardShell({ children }: DashboardShellProps) {
   const [isDesktop, setIsDesktop] = useState(false);
   const [theme, setTheme] = useState<ThemeName>("default");
   const [rawLoginName, setRawLoginName] = useState("minutes-user-demo-account@example.com");
-  const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<"theme" | "redmine">("theme");
+  const [redmineBaseUrl, setRedmineBaseUrl] = useState("");
+  const [redmineApiKey, setRedmineApiKey] = useState("");
+  const [redmineTestMsg, setRedmineTestMsg] = useState<string | null>(null);
+  const [redmineSaving, setRedmineSaving] = useState(false);
+  const [redmineTesting, setRedmineTesting] = useState(false);
 
   const loginDisplayName = useMemo(() => clampLoginName(rawLoginName), [rawLoginName]);
 
   const sidebarNavItems = useMemo((): SidebarNavItem[] => {
-    const items: SidebarNavItem[] = [{ key: "dashboard", href: "/", label: "ダッシュボード", icon: "▦" }];
-    for (const app of portalApps) {
+    const items: SidebarNavItem[] = [{ key: "dashboard", href: "/", label: "Dashboard", icon: "▦" }];
+    const pmApp = portalApps.find((a) => a.app_key === "project-manager");
+    const appsWithoutPm = portalApps.filter((a) => a.app_key !== "project-manager");
+    for (const app of appsWithoutPm) {
       const interactive = isPortalAppInteractive(app.visibility);
       const external = interactive && isExternalPortalRoute(app.route);
       items.push({
@@ -112,9 +122,19 @@ export function DashboardShell({ children }: DashboardShellProps) {
     items.push({
       key: "meeting",
       href: MEETING_HREF,
-      label: "ミーティング",
+      label: "Meeting",
       icon: <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />,
       external: true,
+    });
+    const pmInteractive = pmApp ? isPortalAppInteractive(pmApp.visibility) : true;
+    items.push({
+      key: "project-manager-fixed",
+      href: "/project-manager",
+      label: pmApp?.title ?? "Project",
+      icon: iconForPortalApp("project-manager"),
+      external: false,
+      disabled: !pmInteractive,
+      disabledReason: pmApp?.reason ?? null,
     });
     return items;
   }, [portalApps]);
@@ -135,14 +155,11 @@ export function DashboardShell({ children }: DashboardShellProps) {
   useEffect(() => {
     const savedTheme = normalizeTheme(window.localStorage.getItem(THEME_STORAGE_KEY));
     setTheme(savedTheme);
-    if (!PROFILE_API_ENDPOINT) {
-      return;
-    }
 
     const controller = new AbortController();
     const fetchProfile = async () => {
       try {
-        const response = await fetch(PROFILE_API_ENDPOINT, {
+        const response = await fetch(PROFILE_BFF_PATH, {
           method: "GET",
           credentials: "include",
           signal: controller.signal,
@@ -165,7 +182,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
         }
         setRawLoginName(payload.user.display_name || payload.user.email || "minutes-user-demo-account@example.com");
       } catch {
-        // Keep defaults when API is unavailable from local frontend.
+        // Keep defaults when BFF / portal is unavailable.
       }
     };
     void fetchProfile();
@@ -180,6 +197,35 @@ export function DashboardShell({ children }: DashboardShellProps) {
   useEffect(() => {
     window.sessionStorage.setItem(AI_OPEN_STORAGE_KEY, isAiOpen ? "1" : "0");
   }, [isAiOpen]);
+
+  useEffect(() => {
+    const openRedmine = () => {
+      setSettingsTab("redmine");
+      setIsSettingsModalOpen(true);
+    };
+    window.addEventListener("open-redmine-settings", openRedmine);
+    return () => window.removeEventListener("open-redmine-settings", openRedmine);
+  }, []);
+
+  useEffect(() => {
+    if (!isSettingsModalOpen || settingsTab !== "redmine") {
+      return;
+    }
+    const load = async () => {
+      try {
+        const res = await fetch("/api/portal/me?unassigned_ok=1", { credentials: "include", cache: "no-store" });
+        const data = (await res.json()) as {
+          redmine?: { base_url?: string | null };
+        };
+        if (data.redmine?.base_url) {
+          setRedmineBaseUrl(data.redmine.base_url);
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    void load();
+  }, [isSettingsModalOpen, settingsTab]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -240,7 +286,10 @@ export function DashboardShell({ children }: DashboardShellProps) {
               size="sm"
               className="h-9 w-9 shrink-0 rounded-full p-0 text-base leading-none shadow-lg shadow-slate-900/40"
               aria-label="設定"
-              onClick={() => setIsThemeModalOpen(true)}
+              onClick={() => {
+                setSettingsTab("theme");
+                setIsSettingsModalOpen(true);
+              }}
             >
               ⚙
             </Button>
@@ -438,62 +487,185 @@ export function DashboardShell({ children }: DashboardShellProps) {
         ) : null}
       </Sheet>
 
-      <Dialog open={isThemeModalOpen} onOpenChange={setIsThemeModalOpen}>
-        <DialogContent aria-label="テーマ設定" className="w-full max-w-sm p-4">
+      <Dialog open={isSettingsModalOpen} onOpenChange={setIsSettingsModalOpen}>
+        <DialogContent aria-label="設定" className="w-full max-w-md p-4">
           <DialogHeader className="mb-3 flex-row items-center justify-between space-y-0">
-            <DialogTitle className="text-sm">テーマ設定</DialogTitle>
+            <DialogTitle className="text-sm">設定</DialogTitle>
             <DialogClose asChild>
               <Button type="button" variant="default" size="sm" className="h-7 px-2 py-1 text-xs">
                 Close
               </Button>
             </DialogClose>
           </DialogHeader>
-          <div className="space-y-2">
+          <div className="mb-3 flex gap-2 border-b border-[color:color-mix(in_srgb,var(--border)_88%,transparent)] pb-2">
             <Button
               type="button"
-              variant={theme === "default" ? "accent" : "default"}
-              className="w-full justify-start text-sm"
-              onClick={() => {
-                setTheme("default");
-                setIsThemeModalOpen(false);
-              }}
+              size="sm"
+              variant={settingsTab === "theme" ? "accent" : "default"}
+              onClick={() => setSettingsTab("theme")}
             >
-              デフォルト
+              テーマ
             </Button>
             <Button
               type="button"
-              variant={theme === "midnight" ? "accent" : "default"}
-              className="w-full justify-start text-sm"
-              onClick={() => {
-                setTheme("midnight");
-                setIsThemeModalOpen(false);
-              }}
+              size="sm"
+              variant={settingsTab === "redmine" ? "accent" : "default"}
+              onClick={() => setSettingsTab("redmine")}
             >
-              ミッドナイト
-            </Button>
-            <Button
-              type="button"
-              variant={theme === "ocean" ? "accent" : "default"}
-              className="w-full justify-start text-sm"
-              onClick={() => {
-                setTheme("ocean");
-                setIsThemeModalOpen(false);
-              }}
-            >
-              オーシャン
-            </Button>
-            <Button
-              type="button"
-              variant={theme === "cute" ? "accent" : "default"}
-              className="w-full justify-start text-sm"
-              onClick={() => {
-                setTheme("cute");
-                setIsThemeModalOpen(false);
-              }}
-            >
-              キュート
+              Redmine 連携
             </Button>
           </div>
+          {settingsTab === "theme" ? (
+            <div className="space-y-2">
+              <Button
+                type="button"
+                variant={theme === "default" ? "accent" : "default"}
+                className="w-full justify-start text-sm"
+                onClick={() => {
+                  setTheme("default");
+                  setIsSettingsModalOpen(false);
+                }}
+              >
+                デフォルト
+              </Button>
+              <Button
+                type="button"
+                variant={theme === "midnight" ? "accent" : "default"}
+                className="w-full justify-start text-sm"
+                onClick={() => {
+                  setTheme("midnight");
+                  setIsSettingsModalOpen(false);
+                }}
+              >
+                ミッドナイト
+              </Button>
+              <Button
+                type="button"
+                variant={theme === "ocean" ? "accent" : "default"}
+                className="w-full justify-start text-sm"
+                onClick={() => {
+                  setTheme("ocean");
+                  setIsSettingsModalOpen(false);
+                }}
+              >
+                オーシャン
+              </Button>
+              <Button
+                type="button"
+                variant={theme === "cute" ? "accent" : "default"}
+                className="w-full justify-start text-sm"
+                onClick={() => {
+                  setTheme("cute");
+                  setIsSettingsModalOpen(false);
+                }}
+              >
+                キュート
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3 text-sm">
+              <label className="block text-xs text-[var(--muted)]">
+                Redmine の URL（ベース）
+                <input
+                  type="url"
+                  className="mt-1 w-full rounded-lg border border-[color:color-mix(in_srgb,var(--border)_90%,transparent)] bg-[color:color-mix(in_srgb,var(--background)_94%,black_6%)] px-3 py-2 text-sm"
+                  placeholder="https://redmine.example.com"
+                  value={redmineBaseUrl}
+                  onChange={(e) => setRedmineBaseUrl(e.target.value)}
+                  autoComplete="off"
+                />
+              </label>
+              <label className="block text-xs text-[var(--muted)]">
+                API キー（変更時のみ入力）
+                <input
+                  type="password"
+                  className="mt-1 w-full rounded-lg border border-[color:color-mix(in_srgb,var(--border)_90%,transparent)] bg-[color:color-mix(in_srgb,var(--background)_94%,black_6%)] px-3 py-2 text-sm"
+                  placeholder="••••••••"
+                  value={redmineApiKey}
+                  onChange={(e) => setRedmineApiKey(e.target.value)}
+                  autoComplete="off"
+                />
+              </label>
+              {redmineTestMsg ? (
+                <p className="text-xs text-[var(--muted)]" role="status">
+                  {redmineTestMsg}
+                </p>
+              ) : null}
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  disabled={redmineTesting}
+                  onClick={async () => {
+                    setRedmineTesting(true);
+                    setRedmineTestMsg(null);
+                    try {
+                      const body: Record<string, string> = {};
+                      if (redmineBaseUrl.trim() !== "") {
+                        body.redmine_base_url = redmineBaseUrl.trim();
+                      }
+                      if (redmineApiKey.trim() !== "") {
+                        body.redmine_api_key = redmineApiKey.trim();
+                      }
+                      const res = await fetch("/api/portal/user/redmine/test", {
+                        method: "POST",
+                        credentials: "include",
+                        headers: { "Content-Type": "application/json", Accept: "application/json" },
+                        body: JSON.stringify(body),
+                      });
+                      const data = (await res.json()) as { success?: boolean; message?: string };
+                      setRedmineTestMsg(data.message ?? (res.ok ? "OK" : "失敗"));
+                    } catch {
+                      setRedmineTestMsg("接続テストに失敗しました。");
+                    } finally {
+                      setRedmineTesting(false);
+                    }
+                  }}
+                >
+                  {redmineTesting ? "テスト中…" : "接続テスト"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="accent"
+                  size="sm"
+                  disabled={redmineSaving}
+                  onClick={async () => {
+                    setRedmineSaving(true);
+                    setRedmineTestMsg(null);
+                    try {
+                      const body: Record<string, string | null> = {
+                        redmine_base_url: redmineBaseUrl.trim() === "" ? null : redmineBaseUrl.trim(),
+                      };
+                      if (redmineApiKey.trim() !== "") {
+                        body.redmine_api_key = redmineApiKey.trim();
+                      }
+                      const res = await fetch("/api/portal/user/redmine", {
+                        method: "POST",
+                        credentials: "include",
+                        headers: { "Content-Type": "application/json", Accept: "application/json" },
+                        body: JSON.stringify(body),
+                      });
+                      const data = (await res.json()) as { success?: boolean; message?: string };
+                      if (!res.ok) {
+                        setRedmineTestMsg(data.message ?? "保存に失敗しました。");
+                        return;
+                      }
+                      setRedmineApiKey("");
+                      setRedmineTestMsg("保存しました。");
+                      window.dispatchEvent(new Event("redmine-config-updated"));
+                    } catch {
+                      setRedmineTestMsg("保存に失敗しました。");
+                    } finally {
+                      setRedmineSaving(false);
+                    }
+                  }}
+                >
+                  {redmineSaving ? "保存中…" : "保存"}
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

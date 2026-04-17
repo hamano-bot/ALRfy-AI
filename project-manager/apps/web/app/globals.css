@@ -88,6 +88,11 @@
   --brand-glow-b-strong: rgba(192, 132, 252, 0.18);
 }
 
+/* ダッシュボードの全テーマはダーク系。date / time / select のネイティブ UI をライトにしない。 */
+:root[data-theme] {
+  color-scheme: dark;
+}
+
 body {
   color: var(--foreground);
   background: var(--background);
@@ -177,4 +182,65 @@ body {
   .brand-led {
     animation: none;
   }
+}
+
+/* react-day-picker: プロジェクト登録フォームのテーマ連動カレンダー（議事録系ダーク UI に寄せる） */
+.theme-date-picker-panel .theme-dp-root {
+  --rdp-accent-color: var(--accent);
+  --rdp-accent-background-color: color-mix(in srgb, var(--accent) 20%, transparent);
+  --rdp-day_button-border-radius: 0.45rem;
+  --rdp-today-color: var(--accent);
+  color: var(--foreground);
+}
+
+.theme-date-picker-panel .rdp-month_caption {
+  color: var(--foreground);
+}
+
+.theme-date-picker-panel .rdp-weekday {
+  color: var(--muted);
+}
+
+/* 週頭日曜: 1=日 7=土（日曜・祝日はフォームの赤系エラー表示と同系 #ef4444） */
+.theme-date-picker-panel .rdp-weekdays .rdp-weekday:nth-child(1) {
+  color: #ef4444;
+  font-weight: 600;
+}
+
+.theme-date-picker-panel .rdp-weekdays .rdp-weekday:nth-child(7) {
+  color: color-mix(in srgb, #38bdf8 88%, var(--foreground) 12%);
+  font-weight: 600;
+}
+
+.theme-date-picker-panel .rdp-button_previous,
+.theme-date-picker-panel .rdp-button_next {
+  color: var(--foreground);
+  border-radius: 0.5rem;
+}
+
+.theme-date-picker-panel .rdp-button_previous:hover,
+.theme-date-picker-panel .rdp-button_next:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.theme-date-picker-panel .rdp-day.theme-dp-sat:not(.rdp-selected) .rdp-day_button {
+  color: color-mix(in srgb, #38bdf8 90%, var(--foreground) 10%);
+  font-weight: 600;
+}
+
+.theme-date-picker-panel .rdp-day.theme-dp-sun:not(.rdp-selected) .rdp-day_button {
+  color: #ef4444;
+  font-weight: 600;
+}
+
+/* 祝日は日曜と同じ赤の数字のみ（囲い・背景なし） */
+.theme-date-picker-panel .rdp-day.theme-dp-holiday:not(.rdp-selected) .rdp-day_button {
+  color: #ef4444;
+  font-weight: 600;
+  box-shadow: none;
+  background: transparent;
+}
+
+.theme-date-picker-panel .rdp-day.rdp-selected .rdp-day_button {
+  color: var(--accent-contrast);
 }

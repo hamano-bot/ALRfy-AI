@@ -84,7 +84,7 @@ export function EffectiveProjectRoleBanner() {
           let userMessage = message ?? `権限情報の取得に失敗しました（${response.status}）。`;
           if (code === "missing_config" || response.status === 503) {
             userMessage =
-              "ポータル連携の設定がありません。`project-manager/apps/web/.env.local` に PHP のオリジンを `PORTAL_API_BASE_URL`（末尾スラッシュなし）で書き、案件管理 Web を再起動してください。例: `PORTAL_API_BASE_URL=http://127.0.0.1:8000`（README「PHP と Next の併用」参照）。";
+              "ポータル連携の設定がありません。`project-manager/apps/web/.env.local` に PHP のオリジンを `PORTAL_API_BASE_URL`（末尾スラッシュなし）で書き、Project Web を再起動してください。例: `PORTAL_API_BASE_URL=http://127.0.0.1:8000`（README「PHP と Next の併用」参照）。";
           } else if (code === "upstream_unreachable" || response.status === 502) {
             userMessage =
               message ??

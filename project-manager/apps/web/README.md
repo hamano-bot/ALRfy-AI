@@ -48,7 +48,7 @@ npm run dev
 URL の役割:
 
 - **`/`** — ダッシュボード（Next）
-- **`/project-manager`** — 案件管理（Next）
+- **`/project-manager`** — Project（Next）
 
 例:
 
@@ -66,9 +66,13 @@ npm run dev:lan
 
 PowerShell で PATH が通らない場合は `.\dev-lan.ps1`。
 
-**注意:** 同じ PC で `platform-common` を `php -S ... 8001` している場合、**8001 はどちらか一方**しか使えません。案件管理を 8001 にするなら PHP 側は別ポート（例: 8002）にするか、一方を止めてください。
+**注意:** 同じ PC で `platform-common` を `php -S ... 8001` している場合、**8001 はどちらか一方**しか使えません。Project（Next）を 8001 にするなら PHP 側は別ポート（例: 8002）にするか、一方を止めてください。
+
+**`git pull` やリモートからの更新のあと:** すでに **`npm run dev:lan` を動かしている**場合は、**いったんそのターミナルで Ctrl+C で止めてから**、同じコマンドで起動し直してください（または **`npm run dev:lan:reset`**）。pull だけして dev を走らせたままにすると、キャッシュされた `.next` と新しいソースが食い違い、**真っ黒の `Internal Server Error`** や **CSS が効かない表示**になりやすいです。
 
 **スタイルが消えた／真っ黒で `Internal Server Error` だけ:** 多くは **8001 に古い Next が残っている**か、**`npm run clean` したあと dev を再起動していない**ためです。`npm run dev:lan` は起動前に **8001 を解放**します（`kill-port`）。それでも直らないときは **`npm run dev:lan:reset`**（解放 → `.next` 削除 → dev）。**HMR なしで安定**させたいときは `npm run build` のあと **`npm run start:lan`**（同じ 8001）。`dev:lan:turbo`（Turbopack）と webpack の `build` / `dev:lan` で同じ `.next` を行き来するとチャンク不整合で CSS が落ちることがあります。
+
+**hosts 名で開いたのに文字だけで CSS が一切当たらない:** Next.js 15 の **`allowedDevOrigins`** は、**`dev-alrfy-ai.com:8001` のようにポート付き**で書かないと `/_next/static/` のスタイルがブロックされることがあります。`next.config.ts` を更新したら **`npm run dev:lan` を再起動**してください。
 
 ## PHP（platform-common）と Next の併用（推奨）
 
@@ -111,6 +115,10 @@ PowerShell で PATH が通らない場合は `.\dev-lan.ps1`。
 ダッシュボードの **アプリカード** と **左サイドメニュー**は、同一オリジンの `GET /api/portal/apps`（Next Route Handler）経由で `platform-common` の `GET /portal/api/apps` を参照します。上記のとおり PHP を別ポートで起動し、`.env.local` の `PORTAL_API_BASE_URL` をそのオリジンに合わせてください。
 
 **実効ロール（`?project_id=` または `NEXT_PUBLIC_DEFAULT_PROJECT_ID`）**の帯表示も、同じ **`PORTAL_API_BASE_URL`** 経由で `GET /api/portal/project-permission` → PHP の `/portal/api/project-permission` を呼びます。未設定のまま `project_id` だけ付けると、帯に設定手順のエラーが出ます。
+
+ヘッダーの **表示名・テーマ初期値**は `GET /api/portal/me`（→ PHP `GET /portal/api/me`）です。`PORTAL_API_BASE_URL` が無い、または未ログインのときはデモ表示のままです。
+
+**`/project-manager`** の **所属案件一覧**は、サーバー側で `GET /portal/api/my-projects` を呼びます（同一オリジンの BFF は `GET /api/portal/my-projects`）。**`/project-manager/[projectId]`** は同じくサーバー側で **`my-projects`（メタ）と `project-permission`（実効ロール）** を並列取得します（ダッシュボード帯と同一上流）。PHP にログイン済み Cookie が届くよう、`.env.local` の `PORTAL_API_BASE_URL` と PHP 起動を揃えてください。
 
 方針の詳細は [`bff-portal-integration-decisions.md`](../../docs/engineering/bff-portal-integration-decisions.md) を参照してください。
 
