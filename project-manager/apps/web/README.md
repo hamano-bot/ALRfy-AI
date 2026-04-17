@@ -48,11 +48,11 @@ npm run dev
 アプリは **`basePath: /project-manager`** のため、トップは次のいずれかです。
 
 - ローカル: http://localhost:3000/project-manager
-- LAN 用（下記）: http://dev-alrfy-ai.com:8001/project-manager
+- LAN 用（下記）: http://dev-ALRfy-AI.com:8001/project-manager
 
-## 開発 URL（`dev-alrfy-ai.com:8001/project-manager`）
+## 開発 URL（`dev-ALRfy-AI.com:8001/project-manager`）
 
-1. **hosts**（管理者で編集）に例: `127.0.0.1 dev-alrfy-ai.com`
+1. **hosts** に例: `127.0.0.1 dev-ALRfy-AI.com`（既存の誤記 `dev-alrfy-ai.com` や LAN 用 `192.168.x.x` 行と重複しないよう整理）
 2. ポート **8001** で Next を起動:
 
 ```bash

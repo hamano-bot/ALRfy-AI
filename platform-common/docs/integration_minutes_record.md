@@ -51,10 +51,10 @@
 
 | 公開 URL | 役割 |
 |----------|------|
-| `http://dev-alrfy-ai.com:8001/minutes` | platform-common（`php -S` + `router.php`）の **ゲート**。`MINUTES_RECORD_MEETINGS_URL` へ **302** する。 |
+| `http://dev-ALRfy-AI.com:8001/minutes` | platform-common（`php -S` + `router.php`）の **ゲート**。`MINUTES_RECORD_MEETINGS_URL` へ **302** する。 |
 | `http://minutes-record.com:8080/meetings` | 議事録アプリ本体の会議一覧（開発なら `:8081` など環境に合わせる）。 |
 
-- **`MINUTES_RECORD_PORTAL_URL`** — ダッシュボード「開く」の `href`。例: `http://dev-alrfy-ai.com:8001/minutes`
+- **`MINUTES_RECORD_PORTAL_URL`** — ダッシュボード「開く」の `href`。例: `http://dev-ALRfy-AI.com:8001/minutes`
 - **`MINUTES_RECORD_MEETINGS_URL`** — `/minutes` がリダイレクトする先。例: `http://minutes-record.com:8080/meetings`（開発中は `:8081/meetings` にするとよい）
 
-`hosts` で `minutes-record.com` / `dev-alrfy-ai.com` をローカルに向けている前提。
+`hosts` で `minutes-record.com` / `dev-ALRfy-AI.com` をローカルに向けている前提。

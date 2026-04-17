@@ -1,4 +1,4 @@
-# 開発: dev-alrfy-ai.com:8001/project-manager 用（全インターフェイスで待受）
+# 開発: dev-ALRfy-AI.com:8001/project-manager 用（全インターフェイスで待受）
 $nodeDir = Join-Path $env:ProgramFiles "nodejs"
 if (-not (Test-Path (Join-Path $nodeDir "npm.cmd"))) {
     Write-Error "npm が見つかりません: $nodeDir。Node.js をインストールしてください。"

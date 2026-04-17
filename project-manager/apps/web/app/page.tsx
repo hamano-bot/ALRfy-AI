@@ -18,7 +18,7 @@ export default function HomePage() {
         </li>
         <li>
           開発 URL: <code className="text-slate-400">npm run dev:lan</code> →{" "}
-          <code className="text-slate-400">http://dev-alrfy-ai.com:8001/project-manager</code>
+          <code className="text-slate-400">http://dev-ALRfy-AI.com:8001/project-manager</code>
         </li>
       </ul>
     </main>
