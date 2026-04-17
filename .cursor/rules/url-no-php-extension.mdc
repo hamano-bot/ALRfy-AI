@@ -1,0 +1,26 @@
+---
+description: Public URLs must not expose .php; use clean paths and server/router mapping
+alwaysApply: true
+---
+
+# URL に `.php` を出さない（プロジェクト共通）
+
+## 必須
+
+- 新規の **画面・API・OAuth コールバック・Webhook** の公開URLは **拡張子なし** で設計する（例 `/api/me`, `/auth/callback`, `/login`）。
+- 仕様・OpenAPI・フロントのリクエスト先・リダイレクト先の **正（canonical）は拡張子なし**。
+- 実装は `*.php` でもよいが、**リライト／フロントコントローラ／Next の rewrites** で論理パスにマッピングする。
+- Google OAuth 等の **承認済みリダイレクト URI** は、ブラウザが実際に開くURLと **完全一致**（拡張子なしに統一するなら Console も同じ形で登録）。
+
+## 避ける（新規）
+
+- 公開URLに `something.php` を含める設計。
+- ドキュメントやクライアントに `get_foo.php` 形式を正として書き残す。
+
+## レガシー
+
+- 既存の `*.php` URL は互換のため残しうる。**新規追加やリファクタ時**は拡張子なしへ寄せ、必要なら 301 または併存期間を設ける。
+
+## 参照
+
+- 詳細: `platform-common/docs/url_routing_rules.md`

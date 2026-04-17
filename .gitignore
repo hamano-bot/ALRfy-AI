@@ -1,0 +1,21 @@
+# Secrets / local env
+**/.env.platform-common
+.env
+.env.*
+!.env*.example
+
+# Dependencies & build (Next.js 等)
+**/node_modules/
+**/.next/
+**/out/
+**/dist/
+
+# OS / IDE
+Thumbs.db
+Desktop.ini
+*.swp
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
