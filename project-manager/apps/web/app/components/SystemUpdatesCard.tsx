@@ -29,7 +29,7 @@ export function SystemUpdatesCard() {
   return (
     <Card className="backdrop-blur-sm">
       <CardHeader className="pb-3">
-        <CardTitle>システム更新履歴</CardTitle>
+        <CardTitle>システム更新履歴（Geminiが要約して自動反映しています）</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="modern-scrollbar max-h-72 overflow-y-auto pr-1">
