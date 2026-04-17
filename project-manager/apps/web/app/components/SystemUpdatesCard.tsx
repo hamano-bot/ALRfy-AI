@@ -8,7 +8,7 @@ type UpdateItem = {
   datetime: string;
   version: string;
   title: string;
-  summary: string;
+  summary?: string;
 };
 
 const updates = rawUpdates as readonly UpdateItem[];
@@ -43,9 +43,11 @@ export function SystemUpdatesCard() {
                 {formatMinutesLikeDateTime(item.datetime)} / {item.version}
               </p>
               <p className="mt-1 text-sm font-medium text-[var(--foreground)]">{item.title}</p>
-              <p className="mt-1 text-sm text-[color:color-mix(in_srgb,var(--foreground)_88%,transparent)]">
-                {item.summary}
-              </p>
+              {item.summary ? (
+                <p className="mt-1 text-sm text-[color:color-mix(in_srgb,var(--foreground)_88%,transparent)]">
+                  {item.summary}
+                </p>
+              ) : null}
             </li>
           ))}
         </ul>

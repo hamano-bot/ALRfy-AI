@@ -39,10 +39,10 @@ function collectPushContext(payload) {
 }
 
 function fallbackSummary(context) {
-  const headline = context.headMessage.split("\n")[0]?.trim() || "機能更新";
+  const headline = context.headMessage.split("\n")[0]?.trim() || "機能改善";
   return {
-    title: `更新: ${headline}`.slice(0, 40),
-    summary: "最新pushの変更内容を反映しました。詳細はコミット履歴をご確認ください。",
+    title: `更新：${headline}の品質向上をしました`.slice(0, 54),
+    summary: "",
   };
 }
 
@@ -55,10 +55,13 @@ async function summarizeInJapanese(context) {
 
   const prompt = [
     "あなたはGitの更新履歴要約アシスタントです。",
-    "以下のpush情報から、日本語で短い更新履歴を作成してください。",
+    "以下のpush情報から、日本語の更新履歴を作成してください。",
     "制約:",
-    "- title: 8〜24文字目安",
-    "- summary: 25〜70文字目安",
+    "- titleは必ず日本語で書く",
+    "- titleは「更新：」で始める",
+    "- titleには、何を更新したかと、なぜ更新したか(目的)を1文で含める",
+    "- titleは24〜56文字目安",
+    "- summaryは空文字にする",
     "- 誇張しない。実際の変更だけを書く",
     "- 出力はJSONのみ",
     '- JSON形式: {"title":"...","summary":"..."}',
@@ -106,7 +109,7 @@ async function summarizeInJapanese(context) {
     const parsed = JSON.parse(normalized);
     const title = String(parsed.title ?? "").trim();
     const summary = String(parsed.summary ?? "").trim();
-    if (!title || !summary) {
+    if (!title || !title.startsWith("更新：")) {
       return fallbackSummary(context);
     }
     return { title, summary };
