@@ -13,3 +13,17 @@
 ## セットアップ（platform-common）
 
 `platform-common/.env.platform-common.example` をコピーして `.env.platform-common` を作成し、DB 等を設定してください（`.env.platform-common` はコミットされません）。
+
+## GitHub に空リポジトリを作ってプッシュする手順
+
+1. [New repository](https://github.com/new) で **空のリポジトリ**を作成（README / .gitignore / license は追加しない）。
+2. このフォルダで次を実行（`YOUR_USER` / `YOUR_REPO` を置き換え）:
+
+```bash
+git remote add origin https://github.com/YOUR_USER/YOUR_REPO.git
+git push -u origin main
+```
+
+SSH を使う場合: `git@github.com:YOUR_USER/YOUR_REPO.git`
+
+**GitHub CLI**（`gh`）を入れていれば、ログイン後に `gh repo create YOUR_REPO --private --source=. --remote=origin --push` でも作成できます。
