@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { CalendarDays, ExternalLink } from "lucide-react";
 import { Button } from "./ui/button";
 import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "./ui/sheet";
@@ -11,13 +12,27 @@ type DashboardShellProps = {
   children: ReactNode;
 };
 
-const navItems = [
+type NavItem = {
+  href: string;
+  label: string;
+  icon: ReactNode;
+  external?: boolean;
+};
+
+const navItems: readonly NavItem[] = [
   { href: "/", label: "ダッシュボード", icon: "▦" },
+  {
+    href: process.env.NEXT_PUBLIC_MEETING_URL || "http://minutes-record.com:8080/",
+    label: "Meeting",
+    icon: <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />,
+    external: true,
+  },
   { href: "/project-manager", label: "案件管理", icon: "⌘" },
-] as const;
+];
 
 const AI_OPEN_STORAGE_KEY = "alrfy-ai-chat-open";
 const THEME_STORAGE_KEY = "alrfy-theme";
+const PROFILE_API_ENDPOINT = process.env.NEXT_PUBLIC_PROFILE_API_ENDPOINT;
 const supportedThemes = new Set(["default", "cute", "midnight", "ocean", "system", "dark", "violet"]);
 
 const dummyMessages = [
@@ -86,11 +101,14 @@ export function DashboardShell({ children }: DashboardShellProps) {
   useEffect(() => {
     const savedTheme = normalizeTheme(window.localStorage.getItem(THEME_STORAGE_KEY));
     setTheme(savedTheme);
+    if (!PROFILE_API_ENDPOINT) {
+      return;
+    }
 
     const controller = new AbortController();
     const fetchProfile = async () => {
       try {
-        const response = await fetch("/portal/api/me", {
+        const response = await fetch(PROFILE_API_ENDPOINT, {
           method: "GET",
           credentials: "include",
           signal: controller.signal,
@@ -193,7 +211,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
       >
         <aside
           className={[
-            "modern-scrollbar h-[calc(100vh-6rem)] shrink-0 overflow-x-hidden overflow-y-auto rounded-2xl border border-slate-800/80 bg-[color:color-mix(in_srgb,var(--surface)_88%,transparent)] p-2 motion-safe:transition-[width] motion-safe:duration-300 motion-safe:ease-out",
+            "modern-scrollbar h-[calc(100vh-6rem)] shrink-0 overflow-x-hidden overflow-y-auto rounded-2xl border border-slate-800/80 bg-[color:color-mix(in_srgb,var(--surface)_88%,transparent)] p-2",
             isSidebarOpen ? "w-[240px]" : "w-[72px]",
             isDesktop ? "relative" : "fixed inset-y-20 left-3 z-30",
             !isDesktop && !isSidebarOpen ? "hidden" : "",
@@ -202,19 +220,16 @@ export function DashboardShell({ children }: DashboardShellProps) {
         >
           <nav className="space-y-1">
             {navItems.map((item) => {
-              const active = isActivePath(pathname, item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={[
-                    "flex h-10 w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors duration-200",
-                    active
-                      ? "bg-[color:color-mix(in_srgb,var(--accent)_22%,var(--surface)_78%)] text-[var(--foreground)] shadow-sm"
-                      : "text-[var(--muted)] hover:bg-[color:color-mix(in_srgb,var(--surface)_92%,black_8%)] hover:text-[var(--foreground)]",
-                  ].join(" ")}
-                  title={isSidebarOpen ? undefined : item.label}
-                >
+              const active = !item.external && isActivePath(pathname, item.href);
+              const itemClassName = [
+                "flex h-10 w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors duration-200",
+                active
+                  ? "bg-[color:color-mix(in_srgb,var(--accent)_22%,var(--surface)_78%)] text-[var(--foreground)] shadow-sm"
+                  : "text-[var(--muted)] hover:bg-[color:color-mix(in_srgb,var(--surface)_92%,black_8%)] hover:text-[var(--foreground)]",
+              ].join(" ");
+
+              const itemContent = (
+                <>
                   <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-[color:color-mix(in_srgb,var(--border)_90%,white_10%)] text-xs font-semibold">
                     {item.icon}
                   </span>
@@ -229,6 +244,36 @@ export function DashboardShell({ children }: DashboardShellProps) {
                   >
                     {item.label}
                   </span>
+                  {item.external ? (
+                    <ExternalLink
+                      className={[
+                        "h-3.5 w-3.5 shrink-0 motion-safe:transition-all motion-safe:duration-200",
+                        isSidebarOpen ? "ml-auto opacity-80" : "opacity-0",
+                      ].join(" ")}
+                      aria-hidden="true"
+                    />
+                  ) : null}
+                </>
+              );
+
+              if (item.external) {
+                return (
+                  <a
+                    key={item.href}
+                    href={item.href}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className={itemClassName}
+                    title={isSidebarOpen ? undefined : `${item.label} (new tab)`}
+                  >
+                    {itemContent}
+                  </a>
+                );
+              }
+
+              return (
+                <Link key={item.href} href={item.href} className={itemClassName} title={isSidebarOpen ? undefined : item.label}>
+                  {itemContent}
                 </Link>
               );
             })}

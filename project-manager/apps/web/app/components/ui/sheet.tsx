@@ -15,20 +15,20 @@ const SheetOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Overlay
     ref={ref}
-    className={cn("fixed inset-0 z-[80] bg-[color:color-mix(in_srgb,var(--background)_65%,black_35%)]/70 backdrop-blur-[1px]", className)}
+    className={cn("fixed inset-0 z-[80] bg-[color:color-mix(in_srgb,var(--background)_62%,black_38%)]/68 backdrop-blur-[1px]", className)}
     {...props}
   />
 ));
 SheetOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
 const sheetVariants = cva(
-  "fixed z-[90] flex flex-col border-[color:color-mix(in_srgb,var(--border)_92%,transparent)] bg-[color:color-mix(in_srgb,var(--surface-soft)_94%,black)] shadow-2xl shadow-slate-950/60",
+  "fixed z-[90] flex flex-col border-[color:color-mix(in_srgb,var(--border)_92%,transparent)] bg-[color:color-mix(in_srgb,var(--surface-soft)_94%,black)] shadow-xl shadow-slate-950/45",
   {
     variants: {
       side: {
         right: "inset-y-0 right-0 h-full w-[380px] border-l p-4",
         bottom:
-          "inset-x-0 bottom-0 max-h-[75vh] rounded-t-2xl border-t p-4 shadow-2xl shadow-slate-950/70",
+          "inset-x-0 bottom-0 max-h-[75vh] rounded-t-2xl border-t p-4 shadow-xl shadow-slate-950/55",
       },
     },
     defaultVariants: {
@@ -58,8 +58,12 @@ function SheetHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElemen
   return <div className={cn("mb-3 flex items-center justify-between", className)} {...props} />;
 }
 
-function SheetTitle({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
-  return <h2 className={cn("text-sm font-semibold text-[var(--foreground)]", className)} {...props} />;
-}
+const SheetTitle = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Title>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>
+>(({ className, ...props }, ref) => (
+  <DialogPrimitive.Title ref={ref} className={cn("text-sm font-semibold text-[var(--foreground)]", className)} {...props} />
+));
+SheetTitle.displayName = DialogPrimitive.Title.displayName;
 
 export { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger };
