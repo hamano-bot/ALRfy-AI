@@ -13,7 +13,12 @@ export default function HomePage() {
           ドキュメント雛形: <code className="text-slate-400">docs/projects/_sample</code>
         </li>
         <li>
-          開発: <code className="text-slate-400">npm run dev</code>（ポート 3000）
+          ローカル: <code className="text-slate-400">npm run dev</code> →{" "}
+          <code className="text-slate-400">/project-manager</code>（例: localhost:3000）
+        </li>
+        <li>
+          開発 URL: <code className="text-slate-400">npm run dev:lan</code> →{" "}
+          <code className="text-slate-400">http://dev-alrfy-ai.com:8001/project-manager</code>
         </li>
       </ul>
     </main>

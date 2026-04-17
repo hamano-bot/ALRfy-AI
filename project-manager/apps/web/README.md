@@ -45,15 +45,32 @@ npm install
 npm run dev
 ```
 
-ブラウザで http://localhost:3000 を開く。
+アプリは **`basePath: /project-manager`** のため、トップは次のいずれかです。
+
+- ローカル: http://localhost:3000/project-manager
+- LAN 用（下記）: http://dev-alrfy-ai.com:8001/project-manager
+
+## 開発 URL（`dev-alrfy-ai.com:8001/project-manager`）
+
+1. **hosts**（管理者で編集）に例: `127.0.0.1 dev-alrfy-ai.com`
+2. ポート **8001** で Next を起動:
+
+```bash
+npm run dev:lan
+```
+
+PowerShell で PATH が通らない場合は `.\dev-lan.ps1`。
+
+**注意:** 同じ PC で `platform-common` を `php -S ... 8001` している場合、**8001 はどちらか一方**しか使えません。案件管理を 8001 にするなら PHP 側は別ポート（例: 8002）にするか、一方を止めてください。
 
 ## スクリプト
 
 | コマンド | 説明 |
 |----------|------|
-| `npm run dev` | 開発サーバー（Turbopack） |
+| `npm run dev` | 開発サーバー（Turbopack、既定ポート 3000） |
+| `npm run dev:lan` | ポート **8001**、ホスト **0.0.0.0**（上記 URL 向け） |
 | `npm run build` | 本番ビルド |
-| `npm run start` | 本番サーバー（`build` 後） |
+| `npm run start` | 本番サーバー（`build` 後。既定 3000） |
 | `npm run lint` | ESLint |
 
 ## ディレクトリ
