@@ -3,6 +3,49 @@ import { readFile, writeFile } from "node:fs/promises";
 const UPDATES_PATH = "project-manager/apps/web/app/data/updates.json";
 const MAX_ITEMS = 20;
 
+function describeFilePurpose(filePath) {
+  const normalized = String(filePath || "").replaceAll("\\", "/");
+  const knownPurposes = [
+    {
+      pattern: "/app/components/SystemUpdatesCard.tsx",
+      purpose: "システム更新履歴に表示される内容",
+    },
+    {
+      pattern: "/app/components/DashboardShell.tsx",
+      purpose: "共通ヘッダー・サイドメニュー・AIチャット導線",
+    },
+    {
+      pattern: "/app/page.tsx",
+      purpose: "ダッシュボードのメイン画面",
+    },
+    {
+      pattern: "/app/data/updates.json",
+      purpose: "システム更新履歴の表示データ",
+    },
+    {
+      pattern: "/.github/workflows/update-dashboard-history.yml",
+      purpose: "更新履歴を自動生成するGitHub Actions設定",
+    },
+    {
+      pattern: "/.github/scripts/update-web-updates.mjs",
+      purpose: "push内容を日本語要約して更新履歴へ反映する処理",
+    },
+  ];
+
+  const matched = knownPurposes.find((entry) => normalized.endsWith(entry.pattern));
+  if (matched) {
+    return matched.purpose;
+  }
+  return "関連機能";
+}
+
+function normalizeTitle(title) {
+  return String(title ?? "")
+    .trim()
+    .replace(/^更新[:：]\s*/u, "更新：")
+    .replace(/\s{2,}/g, " ");
+}
+
 function toDateTimeJst(value) {
   const date = value ? new Date(value) : new Date();
   const formatter = new Intl.DateTimeFormat("sv-SE", {
@@ -39,9 +82,11 @@ function collectPushContext(payload) {
 }
 
 function fallbackSummary(context) {
+  const primaryFile = context.changedFiles[0] ?? "";
+  const purpose = describeFilePurpose(primaryFile);
   const headline = context.headMessage.split("\n")[0]?.trim() || "機能改善";
   return {
-    title: `更新：${headline}の品質向上をしました`.slice(0, 54),
+    title: normalizeTitle(`更新：${headline}（${purpose}）の品質向上をしました`).slice(0, 64),
     summary: "",
   };
 }
@@ -60,6 +105,7 @@ async function summarizeInJapanese(context) {
     "- titleは必ず日本語で書く",
     "- titleは「更新：」で始める",
     "- titleには、何を更新したかと、なぜ更新したか(目的)を1文で含める",
+    "- ファイル名が含まれる場合は、日本語で用途を括弧補足する（例: SystemUpdatesCard.tsx（システム更新履歴に表示される内容））",
     "- titleは24〜56文字目安",
     "- summaryは空文字にする",
     "- 誇張しない。実際の変更だけを書く",
@@ -68,6 +114,11 @@ async function summarizeInJapanese(context) {
     "",
     `branch: ${context.branch}`,
     `compare: ${context.compareUrl}`,
+    "file purpose hints:",
+    context.changedFiles
+      .slice(0, 12)
+      .map((file) => `- ${file}: ${describeFilePurpose(file)}`)
+      .join("\n") || "- (なし)",
     "commit messages:",
     context.commitMessages.join("\n") || "- (なし)",
     "changed files:",
@@ -107,7 +158,7 @@ async function summarizeInJapanese(context) {
   try {
     const normalized = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/, "").trim();
     const parsed = JSON.parse(normalized);
-    const title = String(parsed.title ?? "").trim();
+    const title = normalizeTitle(String(parsed.title ?? ""));
     const summary = String(parsed.summary ?? "").trim();
     if (!title || !title.startsWith("更新：")) {
       return fallbackSummary(context);
