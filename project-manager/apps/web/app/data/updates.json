@@ -1,5 +1,12 @@
 [
   {
+    "id": "gh-72efd7f-mo3700ch",
+    "datetime": "2026-04-18 02:38:45",
+    "version": "push-72efd7f",
+    "title": "feat(project-manager): project registration UI, Redmine BFF, shadcn inputs and themed calendar（関連機能）の品質向上をしました",
+    "summary": ""
+  },
+  {
     "id": "gh-7605956-mo2ztb9s",
     "datetime": "2026-04-17 23:17:41",
     "version": "push-7605956",
