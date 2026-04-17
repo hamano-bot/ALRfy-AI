@@ -16,6 +16,21 @@ function portalResolveAppRoute(string $appKey, string $dbRoute): string
         }
     }
 
+    if ($appKey === 'project-manager') {
+        $override = getenv('PROJECT_MANAGER_PORTAL_URL');
+        if (is_string($override) && $override !== '') {
+            return $override;
+        }
+        // 案件管理アプリの公開パスは `/project-manager`。旧シードの `/projects` は 404 になるため寄せる。
+        if ($dbRoute === '/projects' || $dbRoute === '') {
+            return '/project-manager';
+        }
+        if (str_starts_with($dbRoute, '/project-manager')) {
+            return $dbRoute;
+        }
+        return '/project-manager' . $dbRoute;
+    }
+
     return $dbRoute;
 }
 

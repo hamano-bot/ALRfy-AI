@@ -51,7 +51,7 @@
     {
       "app_key": "project-manager",
       "title": "案件管理",
-      "route": "/projects",
+      "route": "/project-manager",
       "required_role": "editor",
       "visibility": "visible_disabled",
       "reason": "insufficient_role"

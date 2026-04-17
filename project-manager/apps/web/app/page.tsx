@@ -1,24 +1,23 @@
-export default function HomePage() {
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "ダッシュボード",
+  description: "アプリ一覧・ショートカット（Next.js）",
+};
+
+export default function DashboardPage() {
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center px-6 py-16">
-      <p className="text-sm font-medium text-blue-400">project-manager / apps/web</p>
-      <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-100">
-        案件管理
+    <main className="mx-auto max-w-3xl px-6 py-12">
+      <p className="text-sm font-medium text-blue-400">ダッシュボード</p>
+      <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-100">
+        ようこそ
       </h1>
-      <p className="mt-4 text-slate-400">
-        Next.js スキャフォールドが有効です。ここから一覧・詳細・ドキュメント編集へ拡張します。
+      <p className="mt-3 text-slate-400">
+        platform-common のダッシュボードとは別の、Next.js 内の入口です。上部ナビの「案件管理」からアプリ本体へ移動できます。
       </p>
-      <ul className="mt-8 list-inside list-disc space-y-2 text-sm text-slate-500">
+      <ul className="mt-8 space-y-3 text-sm text-slate-500">
         <li>
-          ドキュメント雛形: <code className="text-slate-400">docs/projects/_sample</code>
-        </li>
-        <li>
-          ローカル: <code className="text-slate-400">npm run dev</code> →{" "}
-          <code className="text-slate-400">/project-manager</code>（例: localhost:3000）
-        </li>
-        <li>
-          開発 URL: <code className="text-slate-400">npm run dev:lan</code> →{" "}
-          <code className="text-slate-400">http://dev-ALRfy-AI.com:8001/project-manager</code>
+          ここにカード一覧・権限に応じたアプリリンク（portal API 連携）を置けます。
         </li>
       </ul>
     </main>

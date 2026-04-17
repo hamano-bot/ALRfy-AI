@@ -1,12 +1,27 @@
 import type { NextConfig } from "next";
 
 /**
- * 開発・本番ともに `/project-manager` 配下で配信する（例: http://dev-ALRfy-AI.com:8001/project-manager）
- * ルート直下に出したいときは basePath を外し、リバースプロキシ側で調整する。
+ * ルート `/` がダッシュボード、`/project-manager` が案件管理アプリ。
+ * 本番ではリバースプロキシで同様に振り分けてもよい。
  */
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  basePath: "/project-manager",
+  /** hosts で別名を当てたときに /_next 静的アセット・HMR を許可する */
+  allowedDevOrigins: [
+    "dev-alrfy-ai.com",
+    "dev-ALRfy-AI.com",
+    "127.0.0.1",
+    "localhost",
+  ],
+  async redirects() {
+    return [
+      {
+        source: "/dashboard",
+        destination: "/",
+        permanent: false,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

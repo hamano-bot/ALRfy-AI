@@ -45,12 +45,17 @@ npm install
 npm run dev
 ```
 
-アプリは **`basePath: /project-manager`** のため、トップは次のいずれかです。
+URL の役割:
 
-- ローカル: http://localhost:3000/project-manager
-- LAN 用（下記）: http://dev-ALRfy-AI.com:8001/project-manager
+- **`/`** — ダッシュボード（Next）
+- **`/project-manager`** — 案件管理（Next）
 
-## 開発 URL（`dev-ALRfy-AI.com:8001/project-manager`）
+例:
+
+- ローカル: http://localhost:3000/ · http://localhost:3000/project-manager
+- LAN 用（下記）: http://dev-ALRfy-AI.com:8001/ · http://dev-ALRfy-AI.com:8001/project-manager
+
+## 開発 URL（`dev-ALRfy-AI.com:8001`）
 
 1. **hosts** に例: `127.0.0.1 dev-ALRfy-AI.com`（既存の誤記 `dev-alrfy-ai.com` や LAN 用 `192.168.x.x` 行と重複しないよう整理）
 2. ポート **8001** で Next を起動:
@@ -68,12 +73,13 @@ PowerShell で PATH が通らない場合は `.\dev-lan.ps1`。
 | コマンド | 説明 |
 |----------|------|
 | `npm run dev` | 開発サーバー（Turbopack、既定ポート 3000） |
-| `npm run dev:lan` | ポート **8001**、ホスト **0.0.0.0**（上記 URL 向け） |
+| `npm run dev:lan` | ポート **8001**、ホスト **0.0.0.0**（上記 URL 向け。Windows では Turbopack より安定なため webpack 開発サーバー） |
+| `npm run dev:lan:turbo` | 同上で **Turbopack**（速いが環境によっては `.next` 不整合で 500 になりやすい） |
 | `npm run build` | 本番ビルド |
 | `npm run start` | 本番サーバー（`build` 後。既定 3000） |
 | `npm run lint` | ESLint |
 
 ## ディレクトリ
 
-- `app/` — App Router（`layout.tsx`, `page.tsx`）
+- `app/` — App Router（`layout.tsx`, `page.tsx`＝`/`, `project-manager/page.tsx`＝`/project-manager`）
 - `docs/` — 案件ドキュメント用 Markdown（既存のまま）
