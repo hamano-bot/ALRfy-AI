@@ -8,7 +8,28 @@ Next.js（App Router）+ TypeScript + Tailwind のスキャフォールドです
 
 ## `npm` が認識されないとき（Windows）
 
-Node.js をインストールした直後は、**ターミナルを一度閉じて開き直す**か、Cursor を再起動すると PATH が反映されます。それでも出ない場合は PowerShell で次を実行してから `npm` を試してください。
+Node.js をインストールした直後は、**ターミナルを一度閉じて開き直す**か、**Cursor を再起動**すると PATH が反映されることが多いです。
+
+**すぐに開発サーバーだけ動かす**（PATH を触らない）:
+
+```powershell
+cd project-manager/apps/web
+.\dev.ps1
+```
+
+初回の `npm install` も同様に:
+
+```powershell
+.\install.ps1
+```
+
+`.\dev.ps1` が「スクリプトの実行がシステムで無効」と出る場合は、管理者でなくてよいので一度だけ:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+手動で PATH を直す場合:
 
 ```powershell
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
