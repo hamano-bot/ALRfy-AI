@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "案件管理",
-  description: "案件・ドキュメント管理（Next.js）",
+  description: "案件・ドキュメント管理（案件管理 Web）",
 };
 
 export default function ProjectManagerHomePage() {

@@ -35,14 +35,14 @@ export function PortalAppCards() {
       <section className="surface-card border border-amber-500/35 bg-[color:color-mix(in_srgb,var(--surface)_92%,amber_8%)] p-5" role="alert">
         <h2 className="text-lg font-semibold text-[var(--foreground)]">アプリ</h2>
         <p className="mt-2 text-sm text-[var(--foreground)]">{error}</p>
-        <p className="mt-3 text-xs text-[var(--muted)]">ポータルに繋がない間でも Meeting へ移動できます。</p>
+        <p className="mt-3 text-xs text-[var(--muted)]">ポータルに繋がない間でもミーティングへ移動できます。</p>
         <a
           href={MEETING_HREF}
           target="_blank"
           rel="noreferrer noopener"
           className="group mt-3 inline-flex max-w-full items-center gap-2 rounded-xl border border-[color:color-mix(in_srgb,var(--border)_88%,transparent)] bg-[color:color-mix(in_srgb,var(--surface)_94%,transparent)] px-3 py-2.5 text-sm text-[var(--foreground)] shadow-sm transition-colors hover:border-[color:color-mix(in_srgb,var(--accent)_45%,var(--border)_55%)] hover:bg-[color:color-mix(in_srgb,var(--surface)_88%,transparent)]"
-          title="Meeting — 外部サイトへ移動します（別タブ）"
-          aria-label="Meeting 外部リンク（新しいタブで開く）"
+          title="ミーティング — 外部サイトへ移動します（別タブ）"
+          aria-label="ミーティング外部リンク（新しいタブで開く）"
         >
           <span
             className={[
@@ -53,7 +53,7 @@ export function PortalAppCards() {
             <CalendarDays className="h-4 w-4" aria-hidden />
           </span>
           <span className="min-w-0 font-medium transition-colors group-hover:text-[color:color-mix(in_srgb,var(--accent)_88%,var(--foreground)_12%)]">
-            Meeting
+            ミーティング
           </span>
           <ExternalLink
             className="h-4 w-4 shrink-0 text-[var(--muted)] opacity-75 transition-opacity group-hover:opacity-100 group-hover:text-[var(--foreground)]"
@@ -84,7 +84,9 @@ export function PortalAppCards() {
 
           const cardBody = (
             <>
-              <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">{app.app_key}</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]" lang="en" translate="no">
+                {app.app_key}
+              </p>
               <h3 className="mt-1 text-base font-semibold text-[var(--foreground)]">{app.title}</h3>
               <p className="mt-2 text-xs text-[var(--muted)]">{visibilityLabel(app.visibility)}</p>
               {app.reason ? <p className="mt-1 text-xs text-[var(--muted)]">理由: {app.reason}</p> : null}

@@ -381,8 +381,8 @@ export function DashboardShell({ children }: DashboardShellProps) {
             >
               <SheetHeader>
                 <SheetTitle>AIチャット（実装までしばらくお待ちください）</SheetTitle>
-                <span className="text-[11px] text-[var(--muted)]" lang="en">
-                  切り替え: Ctrl / ⌘ + K
+                <span className="text-[11px] text-[var(--muted)]">
+                  切り替え: <span translate="no">Ctrl / ⌘ + K</span>
                 </span>
               </SheetHeader>
               <div className="modern-scrollbar flex-1 space-y-2 overflow-y-auto pr-1">
@@ -401,7 +401,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
                   className="w-full rounded-lg border border-[color:color-mix(in_srgb,var(--border)_90%,transparent)] bg-[color:color-mix(in_srgb,var(--background)_94%,black_6%)] px-3 py-2 text-sm text-[var(--muted)]"
                 />
                 <Button type="button" variant="default" className="mt-3 w-full text-sm" onClick={() => setIsAiOpen(false)}>
-                  閉じる（Ctrl / ⌘ + K）
+                  閉じる（<span translate="no">Ctrl / ⌘ + K</span>）
                 </Button>
               </div>
             </SheetContent>

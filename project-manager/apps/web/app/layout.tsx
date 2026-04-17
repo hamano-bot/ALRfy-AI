@@ -19,7 +19,7 @@ export const metadata: Metadata = {
     default: "ダッシュボード",
     template: "%s | ALRfy",
   },
-  description: "ALRfy-AI project-manager（スキャフォールド）",
+  description: "ALRfy-AI のダッシュボード（案件管理 Web）",
   /** ブラウザ・OGP にページの主言語を明示（翻訳バーの誤判定を減らす） */
   alternates: {
     languages: {
