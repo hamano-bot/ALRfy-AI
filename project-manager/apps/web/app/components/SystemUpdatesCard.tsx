@@ -11,6 +11,14 @@ type UpdateItem = {
 
 const updates = rawUpdates as readonly UpdateItem[];
 
+/** 自動生成タイトルに付いていた「更新：」前置きを表示から除く */
+function stripUpdateLabelPrefix(title: string): string {
+  return String(title ?? "")
+    .trim()
+    .replace(/^更新[:：]\s*/u, "")
+    .trim();
+}
+
 function formatMinutesLikeDateTime(value: string): string {
   // Keep display consistent with minutes-side PHP timestamps: Y-m-d H:i:s
   const date = new Date(value.replace(" ", "T"));
@@ -40,7 +48,9 @@ export function SystemUpdatesCard() {
               <p className="text-xs text-[var(--muted)]">
                 {formatMinutesLikeDateTime(item.datetime)} / {item.version}
               </p>
-              <p className="mt-1 text-sm font-medium text-[var(--foreground)]">{item.title}</p>
+              <p className="mt-1 text-sm font-medium text-[var(--foreground)]">
+                {stripUpdateLabelPrefix(item.title)}
+              </p>
               {item.summary ? (
                 <p className="mt-1 text-sm text-[color:color-mix(in_srgb,var(--foreground)_88%,transparent)]">
                   {item.summary}

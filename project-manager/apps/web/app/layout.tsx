@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Montserrat } from "next/font/google";
 import { DashboardShell } from "./components/DashboardShell";
+import { PortalAppsProvider } from "./components/PortalAppsProvider";
 import "./globals.css";
 
 const inter = Inter({
@@ -19,6 +20,20 @@ export const metadata: Metadata = {
     template: "%s | ALRfy",
   },
   description: "ALRfy-AI project-manager（スキャフォールド）",
+  /** ブラウザ・OGP にページの主言語を明示（翻訳バーの誤判定を減らす） */
+  alternates: {
+    languages: {
+      ja: "/",
+    },
+  },
+  openGraph: {
+    type: "website",
+    locale: "ja_JP",
+  },
+  robots: {
+    index: false,
+    follow: false,
+  },
   icons: {
     icon: "/icon.png",
     shortcut: "/icon.png",
@@ -32,9 +47,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ja">
+    <html lang="ja-JP">
       <body className={`${inter.className} ${montserrat.variable} min-h-screen antialiased`}>
-        <DashboardShell>{children}</DashboardShell>
+        <PortalAppsProvider>
+          <DashboardShell>{children}</DashboardShell>
+        </PortalAppsProvider>
       </body>
     </html>
   );

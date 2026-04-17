@@ -42,8 +42,9 @@ function describeFilePurpose(filePath) {
 function normalizeTitle(title) {
   return String(title ?? "")
     .trim()
-    .replace(/^更新[:：]\s*/u, "更新：")
-    .replace(/\s{2,}/g, " ");
+    .replace(/^更新[:：]\s*/u, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
 function toDateTimeJst(value) {
@@ -86,7 +87,7 @@ function fallbackSummary(context) {
   const purpose = describeFilePurpose(primaryFile);
   const headline = context.headMessage.split("\n")[0]?.trim() || "機能改善";
   return {
-    title: normalizeTitle(`更新：${headline}（${purpose}）の品質向上をしました`).slice(0, 64),
+    title: normalizeTitle(`${headline}（${purpose}）の品質向上をしました`).slice(0, 128),
     summary: "",
   };
 }
@@ -103,7 +104,7 @@ async function summarizeInJapanese(context) {
     "以下のpush情報から、日本語の更新履歴を作成してください。",
     "制約:",
     "- titleは必ず日本語で書く",
-    "- titleは「更新：」で始める",
+    "- titleに「更新：」「更新:」などのラベル前置きは付けない",
     "- titleには、何を更新したかと、なぜ更新したか(目的)を1文で含める",
     "- ファイル名が含まれる場合は、日本語で用途を括弧補足する（例: SystemUpdatesCard.tsx（システム更新履歴に表示される内容））",
     "- titleは24〜56文字目安",
@@ -161,7 +162,7 @@ async function summarizeInJapanese(context) {
     const parsed = JSON.parse(normalized);
     const title = normalizeTitle(String(parsed.title ?? ""));
     const summary = String(parsed.summary ?? "").trim();
-    if (!title || !title.startsWith("更新：")) {
+    if (!title) {
       return fallbackSummary(context);
     }
     return { title, summary };

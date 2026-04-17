@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
+    "clean": "node -e \"try { require('fs').rmSync('.next', { recursive: true, force: true }); } catch (e) { if (!e || e.code !== 'ENOENT') throw e; }\"",
+    "dev": "next dev",
+    "dev:turbo": "next dev --turbopack",
     "dev:lan": "next dev -p 8001 -H 0.0.0.0",
     "dev:lan:turbo": "next dev --turbopack -p 8001 -H 0.0.0.0",
     "build": "next build",

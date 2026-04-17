@@ -19,3 +19,6 @@ Desktop.ini
 # Logs
 *.log
 npm-debug.log*
+
+# Local-only docs (do not push to GitHub)
+project-manager/docs/directory-structure-and-files.md

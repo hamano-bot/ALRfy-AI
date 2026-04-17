@@ -3,7 +3,8 @@ declare(strict_types=1);
 
 /**
  * PHP 組み込みサーバー用ルーター（拡張子なしURL）。
- * 起動例: php -S 0.0.0.0:8001 router.php
+ * 起動例: php -S 127.0.0.1:8000 router.php
+ * Next とポートを分ける場合は dev-router.ps1 / dev-router.sh（既定 127.0.0.1:8000）を推奨。
  * （カレントディレクトリを platform-common にしたうえで実行）
  */
 if (PHP_SAPI !== 'cli-server') {

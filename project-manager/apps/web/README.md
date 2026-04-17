@@ -68,10 +68,57 @@ PowerShell で PATH が通らない場合は `.\dev-lan.ps1`。
 
 **注意:** 同じ PC で `platform-common` を `php -S ... 8001` している場合、**8001 はどちらか一方**しか使えません。案件管理を 8001 にするなら PHP 側は別ポート（例: 8002）にするか、一方を止めてください。
 
+**黒背景で `Internal Server Error` だけが出るとき:** いま動いている Next（8001 の `node`）を一度止め、`project-manager/apps/web` で `npm run clean`（`.next` 削除）のあと `npm run dev:lan` をやり直してください。`npm run dev`（Turbopack）と `dev:lan` / `build`（webpack）で同じ `.next` を行き来するとチャンク不整合でこの症状が出ることがあります。
+
+## PHP（platform-common）と Next の併用（推奨）
+
+**ポートを分ける:** Next（例: `3000` や LAN 用 `8001`）と `platform-common` の PHP（例: **`8000`**）は **別プロセス・別ポート**にしてください。`php -S ... 8001` と `npm run dev:lan` を同時に 8001 で動かすことはできません。
+
+### 手順（2 ターミナル）
+
+1. **ターミナル A — PHP**（リポジトリルートから `platform-common` へ）:
+
+   ```powershell
+   cd platform-common
+   .\dev-router.ps1
+   ```
+
+   別の待受にする場合（例）: `.\dev-router.ps1 -Listen "127.0.0.1:8002"`  
+   macOS / Linux: `./dev-router.sh` または `./dev-router.sh 127.0.0.1:8002`
+
+   これは `php -S 127.0.0.1:8000 router.php` と同等で、`router.php` により `/portal/api/apps` など拡張子なし URL が有効になります。
+
+2. **ターミナル B — Next**（本 README がある `project-manager/apps/web` で）:
+
+   ```powershell
+   npm run dev
+   ```
+
+   LAN 用ホスト名で試す場合は `npm run dev:lan`（ポート **8001**）。
+
+3. **`.env.local`**（git 管理外）に、ターミナル A の待受と一致する **`PORTAL_API_BASE_URL`** を **末尾スラッシュなし**で書き、Next を再起動します。
+
+   ```bash
+   PORTAL_API_BASE_URL=http://127.0.0.1:8000
+   ```
+
+   PHP を `8002` で動かしたなら `http://127.0.0.1:8002` に合わせます。
+
+4. Next のプロセスから `PORTAL_API_BASE_URL` に **HTTP で到達できる**こと（ファイアウォール・ループバック）を確認してください。
+
+## ポータル BFF（アプリ一覧）
+
+ダッシュボードの **アプリカード** と **左サイドメニュー**は、同一オリジンの `GET /api/portal/apps`（Next Route Handler）経由で `platform-common` の `GET /portal/api/apps` を参照します。上記のとおり PHP を別ポートで起動し、`.env.local` の `PORTAL_API_BASE_URL` をそのオリジンに合わせてください。
+
+**実効ロール（`?project_id=` または `NEXT_PUBLIC_DEFAULT_PROJECT_ID`）**の帯表示も、同じ **`PORTAL_API_BASE_URL`** 経由で `GET /api/portal/project-permission` → PHP の `/portal/api/project-permission` を呼びます。未設定のまま `project_id` だけ付けると、帯に設定手順のエラーが出ます。
+
+方針の詳細は [`bff-portal-integration-decisions.md`](../../docs/engineering/bff-portal-integration-decisions.md) を参照してください。
+
 ## スクリプト
 
 | コマンド | 説明 |
 |----------|------|
+| `npm run clean` | `.next` を削除（キャッシュ不整合・`Cannot find module './NNN.js'` 等の切り分け用） |
 | `npm run dev` | 開発サーバー（Turbopack、既定ポート 3000） |
 | `npm run dev:lan` | ポート **8001**、ホスト **0.0.0.0**（上記 URL 向け。Windows では Turbopack より安定なため webpack 開発サーバー） |
 | `npm run dev:lan:turbo` | 同上で **Turbopack**（速いが環境によっては `.next` 不整合で 500 になりやすい） |
