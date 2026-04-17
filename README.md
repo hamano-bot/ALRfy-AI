@@ -5,7 +5,7 @@
 ## レイアウト（概要）
 
 - `platform-common/` — 共通認証・ポータル API・ACL 用マイグレーション等（PHP）
-- `project-manager/` — 案件管理（Next.js 等・準備中）
+- `project-manager/apps/web/` — 案件管理フロント（Next.js App Router・スキャフォールド済み。`npm install` / `npm run dev` は [project-manager/apps/web/README.md](project-manager/apps/web/README.md) 参照）
 - `.cursor/rules/` — エディタ向けルール
 
 議事録アプリ本体は別管理の前提で、このリポには含めません。
