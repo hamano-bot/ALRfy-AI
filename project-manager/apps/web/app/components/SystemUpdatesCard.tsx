@@ -60,19 +60,24 @@ function formatMinutesLikeDateTime(value: string): string {
 
 export function SystemUpdatesCard() {
   return (
-    <section className="rounded-2xl border border-slate-700/70 bg-slate-900/30 p-4 backdrop-blur-sm">
+    <section className="rounded-2xl border border-[color:color-mix(in_srgb,var(--border)_86%,transparent)] bg-[color:color-mix(in_srgb,var(--surface)_82%,transparent)] p-4 backdrop-blur-sm">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-base font-semibold text-slate-100">システム更新履歴</h2>
+        <h2 className="text-base font-semibold text-[var(--foreground)]">システム更新履歴</h2>
       </div>
       <div className="modern-scrollbar mt-3 max-h-72 overflow-y-auto pr-1">
         <ul className="space-y-2">
           {updates.map((item) => (
-            <li key={item.id} className="rounded-md border border-slate-800 bg-slate-950/40 p-3">
-              <p className="text-xs text-slate-400">
+            <li
+              key={item.id}
+              className="rounded-md border border-[color:color-mix(in_srgb,var(--border)_90%,transparent)] bg-[color:color-mix(in_srgb,var(--surface-soft)_88%,black_12%)] p-3"
+            >
+              <p className="text-xs text-[var(--muted)]">
                 {formatMinutesLikeDateTime(item.datetime)} / {item.version}
               </p>
-              <p className="mt-1 text-sm font-medium text-slate-100">{item.title}</p>
-              <p className="mt-1 text-sm text-slate-300">{item.summary}</p>
+              <p className="mt-1 text-sm font-medium text-[var(--foreground)]">{item.title}</p>
+              <p className="mt-1 text-sm text-[color:color-mix(in_srgb,var(--foreground)_88%,transparent)]">
+                {item.summary}
+              </p>
             </li>
           ))}
         </ul>

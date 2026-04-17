@@ -10,9 +10,18 @@
   --foreground: #e7edf5;
   --muted: #8b9cb3;
   --accent: #3b82f6;
+  --overlay: rgba(2, 6, 23, 0.64);
+  --accent-contrast: #ffffff;
+  --brand-grad-from: #38bdf8;
+  --brand-grad-mid: #6366f1;
+  --brand-grad-to: #c084fc;
+  --brand-glow-a: rgba(96, 165, 250, 0.12);
+  --brand-glow-b: rgba(192, 132, 252, 0.1);
+  --brand-glow-a-strong: rgba(96, 165, 250, 0.2);
+  --brand-glow-b-strong: rgba(192, 132, 252, 0.16);
 }
 
-:root[data-theme="dark"] {
+:root[data-theme="midnight"] {
   --surface: #161d29;
   --surface-soft: #111723;
   --border: #273244;
@@ -20,6 +29,15 @@
   --foreground: #e4ebf7;
   --muted: #94a6bf;
   --accent: #60a5fa;
+  --overlay: rgba(2, 6, 23, 0.72);
+  --accent-contrast: #f8fbff;
+  --brand-grad-from: #67e8f9;
+  --brand-grad-mid: #818cf8;
+  --brand-grad-to: #c4b5fd;
+  --brand-glow-a: rgba(103, 232, 249, 0.14);
+  --brand-glow-b: rgba(129, 140, 248, 0.11);
+  --brand-glow-a-strong: rgba(103, 232, 249, 0.23);
+  --brand-glow-b-strong: rgba(129, 140, 248, 0.18);
 }
 
 :root[data-theme="default"] {
@@ -40,9 +58,18 @@
   --foreground: #dcf4ff;
   --muted: #82a4b8;
   --accent: #22d3ee;
+  --overlay: rgba(3, 12, 23, 0.68);
+  --accent-contrast: #ecfeff;
+  --brand-grad-from: #22d3ee;
+  --brand-grad-mid: #38bdf8;
+  --brand-grad-to: #67e8f9;
+  --brand-glow-a: rgba(34, 211, 238, 0.14);
+  --brand-glow-b: rgba(56, 189, 248, 0.12);
+  --brand-glow-a-strong: rgba(34, 211, 238, 0.23);
+  --brand-glow-b-strong: rgba(56, 189, 248, 0.19);
 }
 
-:root[data-theme="violet"] {
+:root[data-theme="cute"] {
   --surface: #221933;
   --surface-soft: #1a1229;
   --border: #41315b;
@@ -50,6 +77,15 @@
   --foreground: #ece6ff;
   --muted: #a79bbf;
   --accent: #a78bfa;
+  --overlay: rgba(12, 6, 26, 0.64);
+  --accent-contrast: #faf5ff;
+  --brand-grad-from: #f0abfc;
+  --brand-grad-mid: #c084fc;
+  --brand-grad-to: #a78bfa;
+  --brand-glow-a: rgba(240, 171, 252, 0.14);
+  --brand-glow-b: rgba(192, 132, 252, 0.12);
+  --brand-glow-a-strong: rgba(240, 171, 252, 0.22);
+  --brand-glow-b-strong: rgba(192, 132, 252, 0.18);
 }
 
 body {
@@ -108,11 +144,16 @@ body {
 .brand-led {
   font-family: var(--font-montserrat), "Montserrat", "Segoe UI", sans-serif;
   font-weight: 700;
-  background: linear-gradient(110deg, #38bdf8 0%, #6366f1 45%, #c084fc 100%);
+  background: linear-gradient(
+    110deg,
+    var(--brand-grad-from) 0%,
+    var(--brand-grad-mid) 45%,
+    var(--brand-grad-to) 100%
+  );
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  text-shadow: 0 0 10px rgba(129, 140, 248, 0.18);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--brand-grad-mid) 45%, transparent);
   animation: ledGlow 6s ease-in-out infinite;
 }
 
@@ -120,14 +161,14 @@ body {
   0%,
   100% {
     text-shadow:
-      0 0 8px rgba(96, 165, 250, 0.12),
-      0 0 14px rgba(192, 132, 252, 0.1);
+      0 0 8px var(--brand-glow-a),
+      0 0 14px var(--brand-glow-b);
     filter: brightness(1);
   }
   50% {
     text-shadow:
-      0 0 12px rgba(96, 165, 250, 0.2),
-      0 0 18px rgba(192, 132, 252, 0.16);
+      0 0 12px var(--brand-glow-a-strong),
+      0 0 18px var(--brand-glow-b-strong);
     filter: brightness(1.05);
   }
 }

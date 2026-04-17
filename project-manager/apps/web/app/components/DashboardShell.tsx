@@ -15,7 +15,7 @@ const navItems = [
 
 const AI_OPEN_STORAGE_KEY = "alrfy-ai-chat-open";
 const THEME_STORAGE_KEY = "alrfy-theme";
-const supportedThemes = new Set(["default", "dark", "ocean", "violet", "system"]);
+const supportedThemes = new Set(["default", "cute", "midnight", "ocean", "system", "dark", "violet"]);
 
 const dummyMessages = [
   { id: "m1", role: "AI", text: "こんにちは。何を整理しますか？（ダミー表示）" },
@@ -30,7 +30,7 @@ function clampLoginName(value: string): string {
   return `${value.slice(0, 16)}...`;
 }
 
-type ThemeName = "default" | "dark" | "ocean" | "violet";
+type ThemeName = "default" | "cute" | "midnight" | "ocean";
 
 function normalizeTheme(theme: string | null | undefined): ThemeName {
   if (!theme) {
@@ -38,6 +38,13 @@ function normalizeTheme(theme: string | null | undefined): ThemeName {
   }
   if (theme === "system") {
     return "default";
+  }
+  // Backward compatibility for old theme names.
+  if (theme === "dark") {
+    return "midnight";
+  }
+  if (theme === "violet") {
+    return "cute";
   }
   return supportedThemes.has(theme) ? (theme as ThemeName) : "default";
 }
@@ -135,7 +142,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
   return (
     <div className="relative min-h-screen bg-[var(--background)] text-[var(--foreground)]" data-theme={theme}>
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(59,130,246,0.14),_transparent_52%)]" />
-      <header className="sticky top-0 z-40 h-14 border-b border-slate-800/80 bg-[color:color-mix(in_srgb,var(--background)_92%,black)]/95 backdrop-blur md:h-16">
+      <header className="sticky top-0 z-40 h-14 border-b border-[color:color-mix(in_srgb,var(--border)_86%,transparent)] bg-[color:color-mix(in_srgb,var(--background)_92%,black)]/95 backdrop-blur md:h-16">
         <div
           className="mx-auto flex h-full w-full items-center justify-between gap-3"
           style={{ paddingInline: "clamp(12px, 2vw, 24px)" }}
@@ -143,7 +150,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
           <div className="flex min-w-0 items-center gap-2 md:gap-3">
             <button
               type="button"
-              className="inline-flex h-8 w-[72px] items-center justify-center rounded-lg border border-slate-600/90 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.01))] text-xs font-medium tracking-wide text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_6px_20px_rgba(15,23,42,0.45)] transition hover:border-slate-400/70 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_10px_28px_rgba(59,130,246,0.2)]"
+              className="inline-flex h-8 w-[72px] items-center justify-center rounded-lg border border-[color:color-mix(in_srgb,var(--border)_90%,white_10%)] bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.01))] text-xs font-medium tracking-wide text-[var(--foreground)] shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_6px_20px_rgba(15,23,42,0.45)] transition hover:border-[color:color-mix(in_srgb,var(--accent)_45%,white_55%)] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_10px_28px_rgba(59,130,246,0.2)]"
               onClick={() => setIsSidebarOpen((prev) => !prev)}
               aria-label="左サイドメニューを開閉"
             >
@@ -151,7 +158,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
             </button>
             <div className="min-w-0">
               <p className="brand-led text-lg font-bold tracking-tight md:text-2xl">ALRfy-AI</p>
-              <p className="hidden text-xs text-slate-400 md:block">
+              <p className="hidden text-xs text-[var(--muted)] md:block">
                 All-REC to Record: Link & Datafy by AI
               </p>
             </div>
@@ -159,14 +166,14 @@ export function DashboardShell({ children }: DashboardShellProps) {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-300 transition hover:bg-slate-800"
+              className="rounded-lg border border-[color:color-mix(in_srgb,var(--border)_92%,transparent)] px-2 py-1 text-xs text-[var(--muted)] transition hover:bg-[color:color-mix(in_srgb,var(--surface)_90%,black_10%)]"
               aria-label="設定"
               onClick={() => setIsThemeModalOpen(true)}
             >
               ⚙
             </button>
             <span
-              className="max-w-[10rem] truncate rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-300"
+              className="max-w-[10rem] truncate rounded-lg border border-[color:color-mix(in_srgb,var(--border)_92%,transparent)] px-2 py-1 text-xs text-[var(--muted)]"
               title={rawLoginName}
             >
               {loginDisplayName}
@@ -198,12 +205,12 @@ export function DashboardShell({ children }: DashboardShellProps) {
                   className={[
                     "flex h-10 w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors duration-200",
                     active
-                      ? "bg-slate-800/90 text-white shadow-sm"
-                      : "text-slate-400 hover:bg-slate-800/70 hover:text-slate-100",
+                      ? "bg-[color:color-mix(in_srgb,var(--accent)_22%,var(--surface)_78%)] text-[var(--foreground)] shadow-sm"
+                      : "text-[var(--muted)] hover:bg-[color:color-mix(in_srgb,var(--surface)_92%,black_8%)] hover:text-[var(--foreground)]",
                   ].join(" ")}
                   title={isSidebarOpen ? undefined : item.label}
                 >
-                  <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-slate-600 text-xs font-semibold">
+                  <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-[color:color-mix(in_srgb,var(--border)_90%,white_10%)] text-xs font-semibold">
                     {item.icon}
                   </span>
                   <span
@@ -230,17 +237,17 @@ export function DashboardShell({ children }: DashboardShellProps) {
 
       <button
         type="button"
-        className="fixed bottom-16 right-5 z-[70] rounded-full border border-blue-400/50 bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/40 transition hover:brightness-110"
+        className="fixed bottom-16 right-5 z-[70] rounded-full border border-[color:color-mix(in_srgb,var(--accent)_55%,white_45%)] bg-[linear-gradient(120deg,color-mix(in_srgb,var(--accent)_85%,#1d4ed8_15%),color-mix(in_srgb,var(--accent)_72%,#4338ca_28%))] px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-slate-900/40 transition hover:brightness-110"
         onClick={() => setIsAiOpen((prev) => !prev)}
         aria-label="AIチャットを開閉"
       >
         AI Chat
       </button>
-      <p className="fixed bottom-9 right-5 z-[70] text-[11px] text-slate-400">Ctrl/Cmd + K</p>
+      <p className="fixed bottom-9 right-5 z-[70] text-[11px] text-[var(--muted)]">Ctrl/Cmd + K</p>
 
       {isAiOpen && (
         <div
-          className="fixed inset-0 z-[80] bg-slate-950/45 backdrop-blur-[1px]"
+          className="fixed inset-0 z-[80] bg-[color:color-mix(in_srgb,var(--background)_65%,black_35%)]/70 backdrop-blur-[1px]"
           onClick={() => setIsAiOpen(false)}
           aria-hidden="true"
         />
@@ -248,31 +255,31 @@ export function DashboardShell({ children }: DashboardShellProps) {
 
       {isAiOpen && isDesktop && (
         <section
-          className="fixed right-0 top-16 z-[90] flex h-[calc(100vh-4rem)] w-[380px] flex-col border-l border-slate-700 bg-[color:color-mix(in_srgb,var(--surface-soft)_94%,black)] p-4 shadow-2xl shadow-slate-950/60"
+          className="fixed right-0 top-16 z-[90] flex h-[calc(100vh-4rem)] w-[380px] flex-col border-l border-[color:color-mix(in_srgb,var(--border)_92%,transparent)] bg-[color:color-mix(in_srgb,var(--surface-soft)_94%,black)] p-4 shadow-2xl shadow-slate-950/60"
           aria-label="AIチャットドロワー"
         >
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-100">AI Chat (Dummy)</h2>
-            <span className="text-[11px] text-slate-400">Toggle: Ctrl/Cmd + K</span>
+            <h2 className="text-sm font-semibold text-[var(--foreground)]">AI Chat (Dummy)</h2>
+            <span className="text-[11px] text-[var(--muted)]">Toggle: Ctrl/Cmd + K</span>
           </div>
           <div className="modern-scrollbar flex-1 space-y-2 overflow-y-auto pr-1">
             {dummyMessages.map((message) => (
-              <div key={message.id} className="rounded-md border border-slate-800 bg-slate-900/40 p-2">
-                <p className="text-[11px] text-slate-400">{message.role}</p>
-                <p className="text-sm text-slate-200">{message.text}</p>
+              <div key={message.id} className="rounded-md border border-[color:color-mix(in_srgb,var(--border)_92%,transparent)] bg-[color:color-mix(in_srgb,var(--surface)_84%,black_16%)] p-2">
+                <p className="text-[11px] text-[var(--muted)]">{message.role}</p>
+                <p className="text-sm text-[var(--foreground)]">{message.text}</p>
               </div>
             ))}
           </div>
-          <div className="mt-3 border-t border-slate-800 pt-3">
+          <div className="mt-3 border-t border-[color:color-mix(in_srgb,var(--border)_90%,transparent)] pt-3">
             <input
               type="text"
               disabled
               placeholder="入力欄（ダミー）"
-              className="w-full rounded-lg border border-slate-700 bg-[#0f1419] px-3 py-2 text-sm text-slate-500"
+              className="w-full rounded-lg border border-[color:color-mix(in_srgb,var(--border)_90%,transparent)] bg-[color:color-mix(in_srgb,var(--background)_94%,black_6%)] px-3 py-2 text-sm text-[var(--muted)]"
             />
             <button
               type="button"
-              className="mt-3 w-full rounded-lg border border-slate-600 px-3 py-2 text-sm text-slate-200 transition hover:bg-slate-800"
+              className="mt-3 w-full rounded-lg border border-[color:color-mix(in_srgb,var(--border)_90%,transparent)] px-3 py-2 text-sm text-[var(--foreground)] transition hover:bg-[color:color-mix(in_srgb,var(--surface)_90%,black_10%)]"
               onClick={() => setIsAiOpen(false)}
             >
               Close (Ctrl/Cmd + K)
@@ -283,24 +290,24 @@ export function DashboardShell({ children }: DashboardShellProps) {
 
       {isAiOpen && !isDesktop && (
         <section
-          className="fixed inset-x-0 bottom-0 z-[90] flex max-h-[75vh] flex-col rounded-t-2xl border-t border-slate-700 bg-[color:color-mix(in_srgb,var(--surface-soft)_94%,black)] p-4 shadow-2xl shadow-slate-950/70"
+          className="fixed inset-x-0 bottom-0 z-[90] flex max-h-[75vh] flex-col rounded-t-2xl border-t border-[color:color-mix(in_srgb,var(--border)_92%,transparent)] bg-[color:color-mix(in_srgb,var(--surface-soft)_94%,black)] p-4 shadow-2xl shadow-slate-950/70"
           aria-label="AIチャットBottomSheet"
         >
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-100">AI Chat (Dummy)</h2>
-            <span className="text-[11px] text-slate-400">Ctrl/Cmd + K</span>
+            <h2 className="text-sm font-semibold text-[var(--foreground)]">AI Chat (Dummy)</h2>
+            <span className="text-[11px] text-[var(--muted)]">Ctrl/Cmd + K</span>
           </div>
           <div className="modern-scrollbar flex-1 space-y-2 overflow-y-auto pr-1">
             {dummyMessages.map((message) => (
-              <div key={message.id} className="rounded-md border border-slate-800 bg-slate-900/40 p-2">
-                <p className="text-[11px] text-slate-400">{message.role}</p>
-                <p className="text-sm text-slate-200">{message.text}</p>
+              <div key={message.id} className="rounded-md border border-[color:color-mix(in_srgb,var(--border)_92%,transparent)] bg-[color:color-mix(in_srgb,var(--surface)_84%,black_16%)] p-2">
+                <p className="text-[11px] text-[var(--muted)]">{message.role}</p>
+                <p className="text-sm text-[var(--foreground)]">{message.text}</p>
               </div>
             ))}
           </div>
           <button
             type="button"
-            className="mt-3 w-full rounded-lg border border-slate-600 px-3 py-2 text-sm text-slate-200 transition hover:bg-slate-800"
+            className="mt-3 w-full rounded-lg border border-[color:color-mix(in_srgb,var(--border)_90%,transparent)] px-3 py-2 text-sm text-[var(--foreground)] transition hover:bg-[color:color-mix(in_srgb,var(--surface)_90%,black_10%)]"
             onClick={() => setIsAiOpen(false)}
           >
             Close (Ctrl/Cmd + K)
@@ -310,17 +317,17 @@ export function DashboardShell({ children }: DashboardShellProps) {
 
       {isThemeModalOpen && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-[color:color-mix(in_srgb,var(--background)_62%,black_38%)]/80 p-4"
           role="dialog"
           aria-modal="true"
           aria-label="テーマ設定"
         >
-          <div className="w-full max-w-sm rounded-2xl border border-slate-700 bg-[color:color-mix(in_srgb,var(--surface)_94%,black)] p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-[color:color-mix(in_srgb,var(--border)_92%,transparent)] bg-[color:color-mix(in_srgb,var(--surface)_94%,black)] p-4">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-slate-100">テーマ設定</h2>
+              <h2 className="text-sm font-semibold text-[var(--foreground)]">テーマ設定</h2>
               <button
                 type="button"
-                className="rounded border border-slate-600 px-2 py-1 text-xs text-slate-300"
+                className="rounded border border-[color:color-mix(in_srgb,var(--border)_90%,transparent)] px-2 py-1 text-xs text-[var(--muted)]"
                 onClick={() => setIsThemeModalOpen(false)}
               >
                 Close
@@ -331,7 +338,9 @@ export function DashboardShell({ children }: DashboardShellProps) {
                 type="button"
                 className={[
                   "w-full rounded px-3 py-2 text-left text-sm",
-                  theme === "default" ? "bg-slate-700 text-slate-100" : "text-slate-300 hover:bg-slate-800",
+                  theme === "default"
+                    ? "bg-[color:color-mix(in_srgb,var(--accent)_18%,var(--surface)_82%)] text-[var(--foreground)]"
+                    : "text-[var(--muted)] hover:bg-[color:color-mix(in_srgb,var(--surface)_92%,black_8%)]",
                 ].join(" ")}
                 onClick={() => {
                   setTheme("default");
@@ -344,20 +353,24 @@ export function DashboardShell({ children }: DashboardShellProps) {
                 type="button"
                 className={[
                   "w-full rounded px-3 py-2 text-left text-sm",
-                  theme === "dark" ? "bg-slate-700 text-slate-100" : "text-slate-300 hover:bg-slate-800",
+                  theme === "midnight"
+                    ? "bg-[color:color-mix(in_srgb,var(--accent)_18%,var(--surface)_82%)] text-[var(--foreground)]"
+                    : "text-[var(--muted)] hover:bg-[color:color-mix(in_srgb,var(--surface)_92%,black_8%)]",
                 ].join(" ")}
                 onClick={() => {
-                  setTheme("dark");
+                  setTheme("midnight");
                   setIsThemeModalOpen(false);
                 }}
               >
-                Dark
+                Midnight
               </button>
               <button
                 type="button"
                 className={[
                   "w-full rounded px-3 py-2 text-left text-sm",
-                  theme === "ocean" ? "bg-slate-700 text-slate-100" : "text-slate-300 hover:bg-slate-800",
+                  theme === "ocean"
+                    ? "bg-[color:color-mix(in_srgb,var(--accent)_18%,var(--surface)_82%)] text-[var(--foreground)]"
+                    : "text-[var(--muted)] hover:bg-[color:color-mix(in_srgb,var(--surface)_92%,black_8%)]",
                 ].join(" ")}
                 onClick={() => {
                   setTheme("ocean");
@@ -370,14 +383,16 @@ export function DashboardShell({ children }: DashboardShellProps) {
                 type="button"
                 className={[
                   "w-full rounded px-3 py-2 text-left text-sm",
-                  theme === "violet" ? "bg-slate-700 text-slate-100" : "text-slate-300 hover:bg-slate-800",
+                  theme === "cute"
+                    ? "bg-[color:color-mix(in_srgb,var(--accent)_18%,var(--surface)_82%)] text-[var(--foreground)]"
+                    : "text-[var(--muted)] hover:bg-[color:color-mix(in_srgb,var(--surface)_92%,black_8%)]",
                 ].join(" ")}
                 onClick={() => {
-                  setTheme("violet");
+                  setTheme("cute");
                   setIsThemeModalOpen(false);
                 }}
               >
-                Violet
+                Cute
               </button>
             </div>
           </div>
