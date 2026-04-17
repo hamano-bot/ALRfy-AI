@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { CalendarDays, ExternalLink } from "lucide-react";
+import { CalendarDays, ChevronLeft, ExternalLink } from "lucide-react";
 import { isExternalPortalRoute, isPortalAppInteractive } from "../lib/portal-app-helpers";
 import { Button, accentButtonSurfaceBaseClassName } from "./ui/button";
 import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
@@ -207,13 +207,22 @@ export function DashboardShell({ children }: DashboardShellProps) {
               type="button"
               variant="default"
               size="sm"
-              className="h-8 w-[72px] rounded-lg bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.01))] text-xs tracking-wide shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_6px_20px_rgba(15,23,42,0.45)] hover:border-[color:color-mix(in_srgb,var(--accent)_45%,white_55%)] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_10px_28px_rgba(59,130,246,0.2)]"
+              className="group h-8 min-w-[72px] gap-1.5 rounded-lg bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.01))] px-2 text-xs tracking-wide shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_6px_20px_rgba(15,23,42,0.45)] hover:border-[color:color-mix(in_srgb,var(--accent)_45%,white_55%)] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_10px_28px_rgba(59,130,246,0.2)]"
               onClick={() => setIsSidebarOpen((prev) => !prev)}
               aria-expanded={isSidebarOpen}
               aria-controls="dashboard-sidebar-nav"
-              aria-label="左サイドメニューを開閉"
+              aria-label="左サイドバーを開閉"
             >
-              メニュー
+              <ChevronLeft
+                className={[
+                  "h-3.5 w-3.5 shrink-0 text-[var(--foreground)] transition-[transform,color] duration-200 ease-out motion-reduce:transition-none",
+                  "group-hover:text-[color:color-mix(in_srgb,var(--accent)_78%,var(--foreground)_22%)] motion-safe:group-hover:scale-110",
+                  isSidebarOpen ? "rotate-0" : "rotate-180",
+                ].join(" ")}
+                aria-hidden
+                strokeWidth={2.25}
+              />
+              <span>Menu</span>
             </Button>
             <div className="min-w-0">
               <p className="brand-led text-lg font-bold tracking-tight md:text-2xl" lang="en" translate="no">
@@ -401,7 +410,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
                   className="w-full rounded-lg border border-[color:color-mix(in_srgb,var(--border)_90%,transparent)] bg-[color:color-mix(in_srgb,var(--background)_94%,black_6%)] px-3 py-2 text-sm text-[var(--muted)]"
                 />
                 <Button type="button" variant="default" className="mt-3 w-full text-sm" onClick={() => setIsAiOpen(false)}>
-                  閉じる（<span translate="no">Ctrl / ⌘ + K</span>）
+                  Close (<span translate="no">Ctrl / ⌘ + K</span>)
                 </Button>
               </div>
             </SheetContent>
@@ -422,7 +431,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
                 ))}
               </div>
               <Button type="button" variant="default" className="mt-3 w-full text-sm" onClick={() => setIsAiOpen(false)}>
-                閉じる（<span translate="no">Ctrl / ⌘ + K</span>）
+                Close (<span translate="no">Ctrl / ⌘ + K</span>)
               </Button>
             </SheetContent>
           )
@@ -435,7 +444,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
             <DialogTitle className="text-sm">テーマ設定</DialogTitle>
             <DialogClose asChild>
               <Button type="button" variant="default" size="sm" className="h-7 px-2 py-1 text-xs">
-                閉じる
+                Close
               </Button>
             </DialogClose>
           </DialogHeader>
@@ -449,7 +458,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
                 setIsThemeModalOpen(false);
               }}
             >
-              デフォルト（議事録）
+              デフォルト
             </Button>
             <Button
               type="button"
