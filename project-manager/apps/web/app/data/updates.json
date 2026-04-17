@@ -1,5 +1,12 @@
 [
   {
+    "id": "gh-d05c91a-mo2rg9j7",
+    "datetime": "2026-04-17 19:23:21",
+    "version": "push-d05c91a",
+    "title": "更新: Update dashboard history and UI comp",
+    "summary": "最新pushの変更内容を反映しました。詳細はコミット履歴をご確認ください。"
+  },
+  {
     "id": "u1",
     "datetime": "2026-04-17 10:30:00",
     "version": "v0.1.0",
