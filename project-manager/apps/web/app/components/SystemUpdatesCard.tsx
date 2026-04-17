@@ -1,5 +1,8 @@
 "use client";
 
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import rawUpdates from "../data/updates.json";
+
 type UpdateItem = {
   id: string;
   datetime: string;
@@ -8,43 +11,7 @@ type UpdateItem = {
   summary: string;
 };
 
-const updates = [
-  {
-    id: "u1",
-    datetime: "2026-04-17 10:30:00",
-    version: "v0.1.0",
-    title: "初期ダッシュボードUI",
-    summary: "共通ヘッダーと左サイドメニューの土台を追加しました。",
-  },
-  {
-    id: "u2",
-    datetime: "2026-04-16 18:15:00",
-    version: "v0.0.9",
-    title: "AIチャット導線",
-    summary: "フローティングボタンからダミーチャットを開けるようにしました。",
-  },
-  {
-    id: "u3",
-    datetime: "2026-04-15 14:00:00",
-    version: "v0.0.8",
-    title: "テーマ基盤調整",
-    summary: "themeフォールバックの下地を整理しました。",
-  },
-  {
-    id: "u4",
-    datetime: "2026-04-14 09:45:00",
-    version: "v0.0.7",
-    title: "レスポンシブ調整",
-    summary: "モバイル表示でサイドメニューの挙動を調整しました。",
-  },
-  {
-    id: "u5",
-    datetime: "2026-04-13 20:20:00",
-    version: "v0.0.6",
-    title: "ブランドテキスト導入",
-    summary: "ALRfy-AIのヘッダー文言と配色演出を追加しました。",
-  },
-] as const satisfies readonly UpdateItem[];
+const updates = rawUpdates as readonly UpdateItem[];
 
 function formatMinutesLikeDateTime(value: string): string {
   // Keep display consistent with minutes-side PHP timestamps: Y-m-d H:i:s
@@ -60,11 +27,12 @@ function formatMinutesLikeDateTime(value: string): string {
 
 export function SystemUpdatesCard() {
   return (
-    <section className="rounded-2xl border border-[color:color-mix(in_srgb,var(--border)_86%,transparent)] bg-[color:color-mix(in_srgb,var(--surface)_82%,transparent)] p-4 backdrop-blur-sm">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-base font-semibold text-[var(--foreground)]">システム更新履歴</h2>
-      </div>
-      <div className="modern-scrollbar mt-3 max-h-72 overflow-y-auto pr-1">
+    <Card className="backdrop-blur-sm">
+      <CardHeader className="pb-3">
+        <CardTitle>システム更新履歴</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="modern-scrollbar max-h-72 overflow-y-auto pr-1">
         <ul className="space-y-2">
           {updates.map((item) => (
             <li
@@ -81,7 +49,8 @@ export function SystemUpdatesCard() {
             </li>
           ))}
         </ul>
-      </div>
-    </section>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

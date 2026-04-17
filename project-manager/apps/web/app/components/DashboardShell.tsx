@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { Button } from "./ui/button";
+import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "./ui/sheet";
 
 type DashboardShellProps = {
   children: ReactNode;
@@ -148,14 +151,15 @@ export function DashboardShell({ children }: DashboardShellProps) {
           style={{ paddingInline: "clamp(12px, 2vw, 24px)" }}
         >
           <div className="flex min-w-0 items-center gap-2 md:gap-3">
-            <button
-              type="button"
-              className="inline-flex h-8 w-[72px] items-center justify-center rounded-lg border border-[color:color-mix(in_srgb,var(--border)_90%,white_10%)] bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.01))] text-xs font-medium tracking-wide text-[var(--foreground)] shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_6px_20px_rgba(15,23,42,0.45)] transition hover:border-[color:color-mix(in_srgb,var(--accent)_45%,white_55%)] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_10px_28px_rgba(59,130,246,0.2)]"
+            <Button
+              variant="default"
+              size="sm"
+              className="h-8 w-[72px] rounded-lg bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.01))] text-xs tracking-wide shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_6px_20px_rgba(15,23,42,0.45)] hover:border-[color:color-mix(in_srgb,var(--accent)_45%,white_55%)] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_10px_28px_rgba(59,130,246,0.2)]"
               onClick={() => setIsSidebarOpen((prev) => !prev)}
               aria-label="左サイドメニューを開閉"
             >
               Menu
-            </button>
+            </Button>
             <div className="min-w-0">
               <p className="brand-led text-lg font-bold tracking-tight md:text-2xl">ALRfy-AI</p>
               <p className="hidden text-xs text-[var(--muted)] md:block">
@@ -164,14 +168,15 @@ export function DashboardShell({ children }: DashboardShellProps) {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="rounded-lg border border-[color:color-mix(in_srgb,var(--border)_92%,transparent)] px-2 py-1 text-xs text-[var(--muted)] transition hover:bg-[color:color-mix(in_srgb,var(--surface)_90%,black_10%)]"
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 rounded-lg px-2 py-1 text-xs"
               aria-label="設定"
               onClick={() => setIsThemeModalOpen(true)}
             >
               ⚙
-            </button>
+            </Button>
             <span
               className="max-w-[10rem] truncate rounded-lg border border-[color:color-mix(in_srgb,var(--border)_92%,transparent)] px-2 py-1 text-xs text-[var(--muted)]"
               title={rawLoginName}
@@ -235,169 +240,122 @@ export function DashboardShell({ children }: DashboardShellProps) {
         </main>
       </div>
 
-      <button
-        type="button"
-        className="fixed bottom-16 right-5 z-[70] rounded-full border border-[color:color-mix(in_srgb,var(--accent)_55%,white_45%)] bg-[linear-gradient(120deg,color-mix(in_srgb,var(--accent)_85%,#1d4ed8_15%),color-mix(in_srgb,var(--accent)_72%,#4338ca_28%))] px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-slate-900/40 transition hover:brightness-110"
+      <Button
+        variant="accent"
+        className="fixed bottom-16 right-5 z-[70] rounded-full px-4 py-2 text-sm font-semibold shadow-lg shadow-slate-900/40"
         onClick={() => setIsAiOpen((prev) => !prev)}
         aria-label="AIチャットを開閉"
       >
         AI Chat
-      </button>
+      </Button>
       <p className="fixed bottom-9 right-5 z-[70] text-[11px] text-[var(--muted)]">Ctrl/Cmd + K</p>
 
-      {isAiOpen && (
-        <div
-          className="fixed inset-0 z-[80] bg-[color:color-mix(in_srgb,var(--background)_65%,black_35%)]/70 backdrop-blur-[1px]"
-          onClick={() => setIsAiOpen(false)}
-          aria-hidden="true"
-        />
-      )}
-
-      {isAiOpen && isDesktop && (
-        <section
-          className="fixed right-0 top-16 z-[90] flex h-[calc(100vh-4rem)] w-[380px] flex-col border-l border-[color:color-mix(in_srgb,var(--border)_92%,transparent)] bg-[color:color-mix(in_srgb,var(--surface-soft)_94%,black)] p-4 shadow-2xl shadow-slate-950/60"
-          aria-label="AIチャットドロワー"
-        >
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-[var(--foreground)]">AI Chat (Dummy)</h2>
-            <span className="text-[11px] text-[var(--muted)]">Toggle: Ctrl/Cmd + K</span>
-          </div>
-          <div className="modern-scrollbar flex-1 space-y-2 overflow-y-auto pr-1">
-            {dummyMessages.map((message) => (
-              <div key={message.id} className="rounded-md border border-[color:color-mix(in_srgb,var(--border)_92%,transparent)] bg-[color:color-mix(in_srgb,var(--surface)_84%,black_16%)] p-2">
-                <p className="text-[11px] text-[var(--muted)]">{message.role}</p>
-                <p className="text-sm text-[var(--foreground)]">{message.text}</p>
-              </div>
-            ))}
-          </div>
-          <div className="mt-3 border-t border-[color:color-mix(in_srgb,var(--border)_90%,transparent)] pt-3">
-            <input
-              type="text"
-              disabled
-              placeholder="入力欄（ダミー）"
-              className="w-full rounded-lg border border-[color:color-mix(in_srgb,var(--border)_90%,transparent)] bg-[color:color-mix(in_srgb,var(--background)_94%,black_6%)] px-3 py-2 text-sm text-[var(--muted)]"
-            />
-            <button
-              type="button"
-              className="mt-3 w-full rounded-lg border border-[color:color-mix(in_srgb,var(--border)_90%,transparent)] px-3 py-2 text-sm text-[var(--foreground)] transition hover:bg-[color:color-mix(in_srgb,var(--surface)_90%,black_10%)]"
-              onClick={() => setIsAiOpen(false)}
-            >
-              Close (Ctrl/Cmd + K)
-            </button>
-          </div>
-        </section>
-      )}
-
-      {isAiOpen && !isDesktop && (
-        <section
-          className="fixed inset-x-0 bottom-0 z-[90] flex max-h-[75vh] flex-col rounded-t-2xl border-t border-[color:color-mix(in_srgb,var(--border)_92%,transparent)] bg-[color:color-mix(in_srgb,var(--surface-soft)_94%,black)] p-4 shadow-2xl shadow-slate-950/70"
-          aria-label="AIチャットBottomSheet"
-        >
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-[var(--foreground)]">AI Chat (Dummy)</h2>
-            <span className="text-[11px] text-[var(--muted)]">Ctrl/Cmd + K</span>
-          </div>
-          <div className="modern-scrollbar flex-1 space-y-2 overflow-y-auto pr-1">
-            {dummyMessages.map((message) => (
-              <div key={message.id} className="rounded-md border border-[color:color-mix(in_srgb,var(--border)_92%,transparent)] bg-[color:color-mix(in_srgb,var(--surface)_84%,black_16%)] p-2">
-                <p className="text-[11px] text-[var(--muted)]">{message.role}</p>
-                <p className="text-sm text-[var(--foreground)]">{message.text}</p>
-              </div>
-            ))}
-          </div>
-          <button
-            type="button"
-            className="mt-3 w-full rounded-lg border border-[color:color-mix(in_srgb,var(--border)_90%,transparent)] px-3 py-2 text-sm text-[var(--foreground)] transition hover:bg-[color:color-mix(in_srgb,var(--surface)_90%,black_10%)]"
-            onClick={() => setIsAiOpen(false)}
+      <Sheet open={isAiOpen} onOpenChange={setIsAiOpen}>
+        {isDesktop ? (
+          <SheetContent
+            side="right"
+            className="top-16 h-[calc(100vh-4rem)]"
+            aria-label="AIチャットドロワー"
           >
-            Close (Ctrl/Cmd + K)
-          </button>
-        </section>
-      )}
+            <SheetHeader>
+              <SheetTitle>AI Chat (実装までしらばらくお待ちください)</SheetTitle>
+              <span className="text-[11px] text-[var(--muted)]">Toggle: Ctrl/Cmd + K</span>
+            </SheetHeader>
+            <div className="modern-scrollbar flex-1 space-y-2 overflow-y-auto pr-1">
+              {dummyMessages.map((message) => (
+                <div key={message.id} className="rounded-md border border-[color:color-mix(in_srgb,var(--border)_92%,transparent)] bg-[color:color-mix(in_srgb,var(--surface)_84%,black_16%)] p-2">
+                  <p className="text-[11px] text-[var(--muted)]">{message.role}</p>
+                  <p className="text-sm text-[var(--foreground)]">{message.text}</p>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 border-t border-[color:color-mix(in_srgb,var(--border)_90%,transparent)] pt-3">
+              <input
+                type="text"
+                disabled
+                placeholder="入力欄（ダミー）"
+                className="w-full rounded-lg border border-[color:color-mix(in_srgb,var(--border)_90%,transparent)] bg-[color:color-mix(in_srgb,var(--background)_94%,black_6%)] px-3 py-2 text-sm text-[var(--muted)]"
+              />
+              <Button variant="default" className="mt-3 w-full text-sm" onClick={() => setIsAiOpen(false)}>
+                Close (Ctrl/Cmd + K)
+              </Button>
+            </div>
+          </SheetContent>
+        ) : (
+          <SheetContent side="bottom" aria-label="AIチャットBottomSheet">
+            <SheetHeader>
+              <SheetTitle>AI Chat (実装までしらばらくお待ちください)</SheetTitle>
+              <span className="text-[11px] text-[var(--muted)]">Ctrl/Cmd + K</span>
+            </SheetHeader>
+            <div className="modern-scrollbar flex-1 space-y-2 overflow-y-auto pr-1">
+              {dummyMessages.map((message) => (
+                <div key={message.id} className="rounded-md border border-[color:color-mix(in_srgb,var(--border)_92%,transparent)] bg-[color:color-mix(in_srgb,var(--surface)_84%,black_16%)] p-2">
+                  <p className="text-[11px] text-[var(--muted)]">{message.role}</p>
+                  <p className="text-sm text-[var(--foreground)]">{message.text}</p>
+                </div>
+              ))}
+            </div>
+            <Button variant="default" className="mt-3 w-full text-sm" onClick={() => setIsAiOpen(false)}>
+              Close (Ctrl/Cmd + K)
+            </Button>
+          </SheetContent>
+        )}
+      </Sheet>
 
-      {isThemeModalOpen && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-[color:color-mix(in_srgb,var(--background)_62%,black_38%)]/80 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-label="テーマ設定"
-        >
-          <div className="w-full max-w-sm rounded-2xl border border-[color:color-mix(in_srgb,var(--border)_92%,transparent)] bg-[color:color-mix(in_srgb,var(--surface)_94%,black)] p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-[var(--foreground)]">テーマ設定</h2>
-              <button
-                type="button"
-                className="rounded border border-[color:color-mix(in_srgb,var(--border)_90%,transparent)] px-2 py-1 text-xs text-[var(--muted)]"
-                onClick={() => setIsThemeModalOpen(false)}
-              >
+      <Dialog open={isThemeModalOpen} onOpenChange={setIsThemeModalOpen}>
+        <DialogContent aria-label="テーマ設定" className="w-full max-w-sm p-4">
+          <DialogHeader className="mb-3 flex-row items-center justify-between space-y-0">
+            <DialogTitle className="text-sm">テーマ設定</DialogTitle>
+            <DialogClose asChild>
+              <Button variant="default" size="sm" className="h-7 px-2 py-1 text-xs">
                 Close
-              </button>
-            </div>
-            <div className="space-y-2">
-              <button
-                type="button"
-                className={[
-                  "w-full rounded px-3 py-2 text-left text-sm",
-                  theme === "default"
-                    ? "bg-[color:color-mix(in_srgb,var(--accent)_18%,var(--surface)_82%)] text-[var(--foreground)]"
-                    : "text-[var(--muted)] hover:bg-[color:color-mix(in_srgb,var(--surface)_92%,black_8%)]",
-                ].join(" ")}
-                onClick={() => {
-                  setTheme("default");
-                  setIsThemeModalOpen(false);
-                }}
-              >
-                Default (Minutes)
-              </button>
-              <button
-                type="button"
-                className={[
-                  "w-full rounded px-3 py-2 text-left text-sm",
-                  theme === "midnight"
-                    ? "bg-[color:color-mix(in_srgb,var(--accent)_18%,var(--surface)_82%)] text-[var(--foreground)]"
-                    : "text-[var(--muted)] hover:bg-[color:color-mix(in_srgb,var(--surface)_92%,black_8%)]",
-                ].join(" ")}
-                onClick={() => {
-                  setTheme("midnight");
-                  setIsThemeModalOpen(false);
-                }}
-              >
-                Midnight
-              </button>
-              <button
-                type="button"
-                className={[
-                  "w-full rounded px-3 py-2 text-left text-sm",
-                  theme === "ocean"
-                    ? "bg-[color:color-mix(in_srgb,var(--accent)_18%,var(--surface)_82%)] text-[var(--foreground)]"
-                    : "text-[var(--muted)] hover:bg-[color:color-mix(in_srgb,var(--surface)_92%,black_8%)]",
-                ].join(" ")}
-                onClick={() => {
-                  setTheme("ocean");
-                  setIsThemeModalOpen(false);
-                }}
-              >
-                Ocean
-              </button>
-              <button
-                type="button"
-                className={[
-                  "w-full rounded px-3 py-2 text-left text-sm",
-                  theme === "cute"
-                    ? "bg-[color:color-mix(in_srgb,var(--accent)_18%,var(--surface)_82%)] text-[var(--foreground)]"
-                    : "text-[var(--muted)] hover:bg-[color:color-mix(in_srgb,var(--surface)_92%,black_8%)]",
-                ].join(" ")}
-                onClick={() => {
-                  setTheme("cute");
-                  setIsThemeModalOpen(false);
-                }}
-              >
-                Cute
-              </button>
-            </div>
+              </Button>
+            </DialogClose>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Button
+              variant={theme === "default" ? "accent" : "default"}
+              className="w-full justify-start text-sm"
+              onClick={() => {
+                setTheme("default");
+                setIsThemeModalOpen(false);
+              }}
+            >
+              Default (Minutes)
+            </Button>
+            <Button
+              variant={theme === "midnight" ? "accent" : "default"}
+              className="w-full justify-start text-sm"
+              onClick={() => {
+                setTheme("midnight");
+                setIsThemeModalOpen(false);
+              }}
+            >
+              Midnight
+            </Button>
+            <Button
+              variant={theme === "ocean" ? "accent" : "default"}
+              className="w-full justify-start text-sm"
+              onClick={() => {
+                setTheme("ocean");
+                setIsThemeModalOpen(false);
+              }}
+            >
+              Ocean
+            </Button>
+            <Button
+              variant={theme === "cute" ? "accent" : "default"}
+              className="w-full justify-start text-sm"
+              onClick={() => {
+                setTheme("cute");
+                setIsThemeModalOpen(false);
+              }}
+            >
+              Cute
+            </Button>
           </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
