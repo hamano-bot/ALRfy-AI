@@ -6,6 +6,16 @@ Next.js（App Router）+ TypeScript + Tailwind のスキャフォールドです
 
 - Node.js 20 LTS 以上（`node` / `npm` が PATH に通っていること）
 
+## `npm` が認識されないとき（Windows）
+
+Node.js をインストールした直後は、**ターミナルを一度閉じて開き直す**か、Cursor を再起動すると PATH が反映されます。それでも出ない場合は PowerShell で次を実行してから `npm` を試してください。
+
+```powershell
+$env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+```
+
+または `C:\Program Files\nodejs\` が PATH に含まれているか確認。
+
 ## セットアップ
 
 ```bash
