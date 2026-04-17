@@ -6,10 +6,12 @@
     "clean": "node -e \"try { require('fs').rmSync('.next', { recursive: true, force: true }); } catch (e) { if (!e || e.code !== 'ENOENT') throw e; }\"",
     "dev": "next dev",
     "dev:turbo": "next dev --turbopack",
-    "dev:lan": "next dev -p 8001 -H 0.0.0.0",
-    "dev:lan:turbo": "next dev --turbopack -p 8001 -H 0.0.0.0",
+    "dev:lan": "kill-port 8001 && next dev -p 8001 -H 0.0.0.0",
+    "dev:lan:turbo": "kill-port 8001 && next dev --turbopack -p 8001 -H 0.0.0.0",
+    "dev:lan:reset": "kill-port 8001 && npm run clean && next dev -p 8001 -H 0.0.0.0",
     "build": "next build",
     "start": "next start",
+    "start:lan": "next start -p 8001 -H 0.0.0.0",
     "lint": "next lint"
   },
   "dependencies": {
@@ -31,6 +33,7 @@
     "autoprefixer": "^10.4.20",
     "eslint": "^9.0.0",
     "eslint-config-next": "^15.2.0",
+    "kill-port": "^2.0.1",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.0"

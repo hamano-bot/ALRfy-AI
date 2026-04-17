@@ -68,7 +68,7 @@ PowerShell で PATH が通らない場合は `.\dev-lan.ps1`。
 
 **注意:** 同じ PC で `platform-common` を `php -S ... 8001` している場合、**8001 はどちらか一方**しか使えません。案件管理を 8001 にするなら PHP 側は別ポート（例: 8002）にするか、一方を止めてください。
 
-**黒背景で `Internal Server Error` だけが出るとき:** いま動いている Next（8001 の `node`）を一度止め、`project-manager/apps/web` で `npm run clean`（`.next` 削除）のあと `npm run dev:lan` をやり直してください。`npm run dev`（Turbopack）と `dev:lan` / `build`（webpack）で同じ `.next` を行き来するとチャンク不整合でこの症状が出ることがあります。
+**スタイルが消えた／真っ黒で `Internal Server Error` だけ:** 多くは **8001 に古い Next が残っている**か、**`npm run clean` したあと dev を再起動していない**ためです。`npm run dev:lan` は起動前に **8001 を解放**します（`kill-port`）。それでも直らないときは **`npm run dev:lan:reset`**（解放 → `.next` 削除 → dev）。**HMR なしで安定**させたいときは `npm run build` のあと **`npm run start:lan`**（同じ 8001）。`dev:lan:turbo`（Turbopack）と webpack の `build` / `dev:lan` で同じ `.next` を行き来するとチャンク不整合で CSS が落ちることがあります。
 
 ## PHP（platform-common）と Next の併用（推奨）
 
