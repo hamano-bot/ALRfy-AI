@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { hearingSheetBodyJsonSchema } from "@/lib/hearing-sheet-body-schema";
 
 const hearingStatusEnum = z.enum(["draft", "finalized", "archived"]);
 
@@ -7,8 +8,7 @@ export const portalProjectHearingSheetPatchBodySchema = z
   .object({
     project_id: z.number().int().positive(),
     status: hearingStatusEnum.optional(),
-    /** 表行の配列やネストを許容 */
-    body_json: z.union([z.record(z.string(), z.unknown()), z.array(z.unknown())]).optional(),
+    body_json: hearingSheetBodyJsonSchema.optional(),
   })
   .superRefine((data, ctx) => {
     if (data.status === undefined && data.body_json === undefined) {

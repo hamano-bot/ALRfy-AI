@@ -126,6 +126,16 @@
 | `POST /portal/api/projects` | `POST /api/portal/projects`（JSON ボディを Zod で検証のうえ転送） |
 | `GET /portal/api/project-hearing-sheet?project_id=` | `GET /api/portal/project-hearing-sheet?project_id=`（Cookie 転送） |
 | `PATCH /portal/api/project-hearing-sheet` | `PATCH /api/portal/project-hearing-sheet`（JSON を Zod で検証のうえ転送） |
+| `GET /portal/api/hearing-insight-batch-state` | **Cron 専用**（`X-Cron-Secret`）。最終 insight バッチ時刻 |
+| `PATCH /portal/api/hearing-insight-batch-state` | **Cron 専用**。`{ "last_run_at": "Y-m-d H:i:s" }` |
+| `GET /portal/api/hearing-insight-export?template_id=&since=` | **Cron 専用**。解析行デルタ（シート更新が `since` より後の案件のみ） |
+| `GET /portal/api/hearing-template-definition?template_id=` | **Cron 専用**。DB の公開テンプレ `items_json` |
+| `PATCH /portal/api/patch-hearing-template-definition` | **Cron 専用**。テンプレ定義更新 + `system_update_events` へ記録 |
+| `GET /portal/api/system-update-events` | ログイン必須。テンプレ自動更新などのイベント一覧 |
+| （Next のみ）`GET /api/system-updates` | 静的 `updates.json` とポータル `system-update-events` をマージ |
+| （Next のみ）`POST /api/cron/hearing-template-insight` | **Cron 専用**。全 `template_id` に対し Gemini マージ→ポータル PATCH→`last_run_at` 更新 |
+
+詳細は [`project-manager/docs/hearing-insight-guardrails.md`](../../project-manager/docs/hearing-insight-guardrails.md)。
 
 ## GET /project-hearing-sheet（案件のヒアリングシート）
 
@@ -155,9 +165,9 @@
 ### request
 - 公開URL: `PATCH /portal/api/project-hearing-sheet`
 - 実装ファイル: `portal/api/get_patch_project_hearing_sheet.php`（PATCH）
-- Next BFF: `PATCH /api/portal/project-hearing-sheet`（`portalProjectHearingSheetPatchBodySchema`）
+- Next BFF: `PATCH /api/portal/project-hearing-sheet`（`portalProjectHearingSheetPatchBodySchema`）。**`body_json` 指定時は** `template_id`（`corporate_new` / `corporate_renewal` / `ec_new` / `ec_renewal` / `generic_new` / `generic_renewal`）と `items`（行配列・最大 500 行）を **Zod** で検証してから PHP に転送する。
 - **認可:** `owner` または `editor`。`viewer` は `403`。
-- **body:** `project_id`（必須）。**`body_json` と `status` の少なくとも一方**（両方可）。`body_json` は JSON オブジェクトまたは配列（最大約 2 MiB）。
+- **body:** `project_id`（必須）。**`body_json` と `status` の少なくとも一方**（両方可）。PHP 直叩き時は従来どおり緩いが、**案件管理 Web 経由では**上記スキーマに合わせる。
 
 初回は行が無ければ `INSERT`、あれば `UPDATE`。
 
@@ -299,3 +309,22 @@ GET と同形の `success` + `project`。
   "code": "unassigned_user"
 }
 ```
+
+## 補足: project-manager（Next.js のみ・PHP 外）
+
+### POST /api/hearing-sheet/import-excel
+
+- **実装:** `project-manager/apps/web/app/api/hearing-sheet/import-excel/route.ts`
+- **用途:** `.xlsx` / `.xls` の**先頭シート**をテキスト化し、**Gemini** で `template_id` + `items` にマッピング（環境変数 `GEMINI_API_KEY`）。取り込み対象は **Excel のみ**（PDF アップロードは行わない）。
+- **multipart:** `file`（必須）、`template_id`（`corporate_new` 等の列挙値）
+- **response (200):** `{ "success": true, "body_json": { "template_id", "items" }, "meta": { "sheetName", "text_truncated" } }`
+- マージ（置換 / 空欄のみ / 追加のみ）は **クライアント**で実施し、その後 `PATCH /api/portal/project-hearing-sheet` で保存する。
+
+### POST /api/hearing-sheet/advice
+
+- **実装:** `project-manager/apps/web/app/api/hearing-sheet/advice/route.ts`
+- **用途:** 現在の **案件マスタ**（`project`）とヒアリング **`items`（行）** を渡し、**Gemini** で「未入力の必須っぽい行」「マスタと矛盾しそうな記述」などの指摘を返す（環境変数 `GEMINI_API_KEY`、任意 `GEMINI_MODEL`。未指定時は `gemini-3-flash-preview` など実装の既定値）。
+- **JSON:** `project`（`name`, `client_name`, `site_type`, `site_type_other`, `is_renewal`, `kickoff_date`, `release_due_date`, `renewal_urls`）、`template_id`（`corporate_new` 等）、`items`（行オブジェクトの配列・最大 500）
+- **response (200):** `{ "success": true, "suggestions": [ { "kind", "message", "row_id?", "heading?" }, ... ] }`（最大 30 件）
+- **response (502):** モデル失敗など `{ "success": false, "message": "..." }`
+- UI では `row_id` または **見出し**で行をハイライト・スクロールしやすくする想定。

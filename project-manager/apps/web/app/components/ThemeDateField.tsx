@@ -33,9 +33,18 @@ type ThemeDateFieldProps = {
   onChange: (next: string) => void;
   required?: boolean;
   className?: string;
+  /** `iso`: `yyyy-MM-dd` 1行表示（曜日なし）。既定は日本語表記。 */
+  displayVariant?: "default" | "iso";
 };
 
-export function ThemeDateField({ label, value, onChange, required, className }: ThemeDateFieldProps) {
+export function ThemeDateField({
+  label,
+  value,
+  onChange,
+  required,
+  className,
+  displayVariant = "default",
+}: ThemeDateFieldProps) {
   const id = useId();
   const [open, setOpen] = useState(false);
   const selected = parseYmd(value);
@@ -43,7 +52,9 @@ export function ThemeDateField({ label, value, onChange, required, className }: 
   const hasDate = Boolean(selected && !Number.isNaN(selected.getTime()));
   const display =
     hasDate && selected
-      ? format(selected, THEME_DATE_DISPLAY_FORMAT, { locale: ja })
+      ? displayVariant === "iso"
+        ? format(selected, "yyyy-MM-dd")
+        : format(selected, THEME_DATE_DISPLAY_FORMAT, { locale: ja })
       : "日付を選択";
 
   return (
@@ -55,14 +66,17 @@ export function ThemeDateField({ label, value, onChange, required, className }: 
             type="button"
             variant="default"
             id={id}
+            draggable={false}
             className={cn(
               inputBaseClassName,
               "mt-1 h-auto min-h-9 w-full justify-between gap-2 text-left font-normal hover:bg-[color:color-mix(in_srgb,var(--background)_88%,black_12%)]",
+              displayVariant === "iso" && "min-h-8 py-1.5",
             )}
           >
             <span
               className={cn(
-                "min-w-0 flex-1 whitespace-normal text-left leading-snug",
+                "min-w-0 flex-1 text-left leading-snug",
+                displayVariant === "iso" ? "truncate whitespace-nowrap" : "whitespace-normal",
                 !hasDate && "text-[var(--muted)]",
                 hasDate && "text-[var(--foreground)]",
               )}

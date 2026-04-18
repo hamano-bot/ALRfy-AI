@@ -9,6 +9,7 @@ import { PortalAppIcon } from "../lib/portal-app-icons";
 import { Button, accentButtonSurfaceBaseClassName } from "./ui/button";
 import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "./ui/sheet";
+import { DashboardSidebarOpenProvider } from "./DashboardSidebarContext";
 import { EffectiveProjectRoleBanner } from "./EffectiveProjectRoleBanner";
 import { usePortalApps } from "./PortalAppsProvider";
 import { THEME_STORAGE_KEY } from "../theme-init";
@@ -316,19 +317,20 @@ export function DashboardShell({ children }: DashboardShellProps) {
 
       <EffectiveProjectRoleBanner />
 
-      <div
-        className="mx-auto flex min-h-0 w-full flex-1 items-stretch gap-3 overflow-hidden py-4"
-        style={{ paddingInline: "clamp(12px, 2vw, 24px)" }}
-      >
-        <aside
-          id="dashboard-sidebar-nav"
-          className={[
-            "relative z-0 shrink-0 overflow-x-hidden overflow-y-auto rounded-2xl border border-slate-800/80 bg-[color:color-mix(in_srgb,var(--surface)_88%,transparent)] p-2 modern-scrollbar",
-            "min-h-0 min-w-0 self-stretch transition-[width] duration-200 ease-out motion-reduce:transition-none",
-            isSidebarOpen ? "w-[240px]" : "w-[72px]",
-          ].join(" ")}
-          aria-label="左サイドメニュー"
+      <DashboardSidebarOpenProvider value={isSidebarOpen}>
+        <div
+          className="mx-auto flex min-h-0 w-full flex-1 items-stretch gap-3 overflow-hidden py-4"
+          style={{ paddingInline: "clamp(12px, 2vw, 24px)" }}
         >
+          <aside
+            id="dashboard-sidebar-nav"
+            className={[
+              "relative z-0 shrink-0 overflow-x-hidden overflow-y-auto rounded-2xl border border-slate-800/80 bg-[color:color-mix(in_srgb,var(--surface)_88%,transparent)] p-2 modern-scrollbar",
+              "min-h-0 min-w-0 self-stretch transition-[width] duration-200 ease-out motion-reduce:transition-none",
+              isSidebarOpen ? "w-[168px]" : "w-[72px]",
+            ].join(" ")}
+            aria-label="左サイドメニュー"
+          >
           <nav className="min-w-0 space-y-1">
             {sidebarNavItems.map((item) => {
               const active = !item.external && !item.disabled && isActivePath(pathname, item.href);
@@ -365,7 +367,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
                     className={[
                       "origin-left whitespace-nowrap text-sm motion-safe:transition-all motion-safe:duration-200 motion-safe:ease-out",
                       isSidebarOpen
-                        ? "max-w-[156px] translate-x-0 opacity-100"
+                        ? "max-w-[109px] translate-x-0 opacity-100"
                         : "max-w-0 -translate-x-1 opacity-0",
                     ].join(" ")}
                     aria-hidden={!isSidebarOpen}
@@ -420,12 +422,13 @@ export function DashboardShell({ children }: DashboardShellProps) {
               );
             })}
           </nav>
-        </aside>
+          </aside>
 
-        <main className="surface-card flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-4 md:p-6">
-          {children}
-        </main>
-      </div>
+          <main className="surface-card flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-4 md:p-6">
+            {children}
+          </main>
+        </div>
+      </DashboardSidebarOpenProvider>
 
       <Button
         type="button"

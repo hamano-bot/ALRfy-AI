@@ -8,6 +8,8 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__, 2) . '/auth/bootstrap.php';
 require_once dirname(__DIR__) . '/includes/project_registration_schema.php';
+require_once dirname(__DIR__) . '/includes/hearing_insight_schema.php';
+require_once dirname(__DIR__) . '/includes/hearing_analytics_ingest.php';
 
 header('Content-Type: application/json; charset=UTF-8');
 
@@ -39,6 +41,7 @@ try {
 
 try {
     ensureProjectRegistrationSchema($pdo);
+    ensureHearingInsightSchema($pdo);
 } catch (Throwable $e) {
     error_log('[platform-common/get_patch_project_hearing_sheet ensure schema] ' . $e->getMessage());
     http_response_code(500);
@@ -275,6 +278,14 @@ if ($method === 'PATCH') {
         http_response_code(500);
         echo json_encode(['success' => false, 'message' => 'ヒアリングシートの更新に失敗しました。'], JSON_UNESCAPED_UNICODE);
         exit;
+    }
+
+    if ($hasBody) {
+        try {
+            hearingAnalyticsIngestFromBody($pdo, $projectId, $nextBody);
+        } catch (Throwable $e) {
+            error_log('[platform-common/hearing_analytics_ingest] ' . $e->getMessage());
+        }
     }
 
     $out = fetchHearingSheetRow($pdo, $projectId);

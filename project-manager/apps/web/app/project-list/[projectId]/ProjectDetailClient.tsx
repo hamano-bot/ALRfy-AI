@@ -9,6 +9,7 @@ import { PROJECT_DOCUMENT_TEMPLATES } from "@/lib/project-document-templates";
 import { formatSiteTypeLabel } from "@/lib/portal-my-projects";
 import { buildRedmineProjectUrl } from "@/lib/redmine-url";
 import { getParticipantViewLine, type PortalProjectDetail } from "@/lib/portal-project";
+import { projectPageLgMainSidebarGridClassName } from "@/lib/project-page-layout";
 import { PROJECT_ROLE_LABEL_JA } from "@/lib/project-role-labels";
 import { cn } from "@/lib/utils";
 import { ArrowUpRight } from "lucide-react";
@@ -319,7 +320,7 @@ export function ProjectDetailClient({ projectId, initialProject, canEdit }: Proj
     <div className="flex min-h-0 flex-1 flex-col gap-5">
       {pageHeading}
 
-      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(320px,400px)] lg:items-start lg:gap-8">
+      <div className={projectPageLgMainSidebarGridClassName}>
         <div className="min-w-0 space-y-4">
           <Card className="overflow-hidden shadow-sm">
             <CardContent className="space-y-10 pt-6">{metaSections}</CardContent>

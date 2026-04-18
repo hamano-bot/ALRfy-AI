@@ -4,8 +4,9 @@ import { useRouter } from "next/navigation";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { ThemeDateField } from "@/app/components/ThemeDateField";
 import { Button } from "@/app/components/ui/button";
-import { Input, inputBaseClassName } from "@/app/components/ui/input";
+import { Input } from "@/app/components/ui/input";
 import { Label } from "@/app/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select";
 import {
   portalProjectCreateBodySchema,
   portalProjectPatchBodySchema,
@@ -995,20 +996,23 @@ export function ProjectCreateForm({
           <Label htmlFor={`${idPrefix}-site-type`}>
             サイト種別 <span className="text-red-500">*</span>
           </Label>
-          <select
-            id={`${idPrefix}-site-type`}
+          <Select
             required
-            className={cn(inputBaseClassName, "mt-1 w-1/6 max-w-full cursor-pointer")}
-            value={siteType}
-            onChange={(e) => setSiteType(e.target.value as typeof siteType)}
+            value={siteType === "" ? "__none__" : siteType}
+            onValueChange={(v) => setSiteType(v === "__none__" ? "" : (v as typeof siteType))}
           >
-            <option value="">選択してください</option>
-            {SITE_TYPES.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger id={`${idPrefix}-site-type`} className="mt-1 w-1/6 max-w-full">
+              <SelectValue placeholder="選択してください" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">選択してください</SelectItem>
+              {SITE_TYPES.map((s) => (
+                <SelectItem key={s.value} value={s.value}>
+                  {s.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         {siteType === "other" ? (
           <div className="space-y-1">
