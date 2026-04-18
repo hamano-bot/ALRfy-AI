@@ -1,30 +1,12 @@
 import { headers } from "next/headers";
 import { ProjectListTable } from "./ProjectListTable";
-import { DUMMY_PROJECT_LIST_ROWS } from "@/lib/project-list-dummy";
 import {
   fetchPortalMyProjectsRaw,
   parseMyProjectsSuccess,
   parsePortalJsonMessage,
 } from "@/lib/portal-my-projects";
 
-function isDemoMode(): boolean {
-  const v = process.env.NEXT_PUBLIC_PROJECT_LIST_DEMO;
-  return v === "1" || v === "true";
-}
-
 export default async function ProjectManagerList() {
-  if (isDemoMode()) {
-    return (
-      <section
-        id="project-list"
-        className="surface-card flex min-h-0 flex-1 flex-col overflow-hidden p-0"
-        aria-label="案件一覧"
-      >
-        <ProjectListTable initialProjects={DUMMY_PROJECT_LIST_ROWS} />
-      </section>
-    );
-  }
-
   const cookie = (await headers()).get("cookie");
   const raw = await fetchPortalMyProjectsRaw(cookie);
 

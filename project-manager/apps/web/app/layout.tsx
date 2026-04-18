@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { Inter, Montserrat } from "next/font/google";
+import Script from "next/script";
 import { DashboardShell } from "./components/DashboardShell";
 import { PortalAppsProvider } from "./components/PortalAppsProvider";
+import { THEME_INIT_INLINE_SCRIPT } from "./theme-init";
 import "./globals.css";
 
 const inter = Inter({
@@ -47,8 +49,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ja-JP" className="h-full">
+    <html lang="ja-JP" className="h-full" suppressHydrationWarning>
       <body className={`${inter.className} ${montserrat.variable} h-full min-h-0 overflow-hidden antialiased`}>
+        <Script id="alrfy-theme-init" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: THEME_INIT_INLINE_SCRIPT }} />
         <PortalAppsProvider>
           <DashboardShell>{children}</DashboardShell>
         </PortalAppsProvider>

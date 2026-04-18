@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__, 2) . '/auth/bootstrap.php';
+require_once dirname(__DIR__) . '/includes/user_display_name_schema.php';
 
 header('Content-Type: application/json; charset=UTF-8');
 
@@ -46,6 +47,15 @@ try {
     exit;
 }
 
+try {
+    ensureUserDisplayNameColumn($pdo);
+} catch (Throwable $e) {
+    error_log('[platform-common/get_user_suggest schema] ' . $e->getMessage());
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => 'スキーマを確認してください。'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 $seen = [];
 $users = [];
 
@@ -55,16 +65,19 @@ $push = static function (array $row) use (&$seen, &$users): void {
         return;
     }
     $seen[$id] = true;
+    $dnRaw = $row['display_name'] ?? null;
+    $dn = is_string($dnRaw) ? trim($dnRaw) : '';
     $users[] = [
         'id' => $id,
         'email' => (string)$row['email'],
+        'display_name' => $dn !== '' ? $dn : null,
     ];
 };
 
 if (ctype_digit($q)) {
     $id = (int)$q;
     if ($id > 0) {
-        $stmt = $pdo->prepare('SELECT id, email FROM users WHERE id = :id LIMIT 1');
+        $stmt = $pdo->prepare('SELECT id, email, display_name FROM users WHERE id = :id LIMIT 1');
         $stmt->execute([':id' => $id]);
         $row = $stmt->fetch();
         if (is_array($row)) {
@@ -76,9 +89,11 @@ if (ctype_digit($q)) {
 if (mb_strlen($q) >= 2) {
     $like = '%' . escapeMysqlLike($q) . '%';
     $stmt = $pdo->prepare(
-        'SELECT id, email FROM users WHERE email LIKE :like ORDER BY id ASC LIMIT 16'
+        'SELECT id, email, display_name FROM users
+         WHERE email LIKE :like OR display_name LIKE :like2
+         ORDER BY id ASC LIMIT 16'
     );
-    $stmt->execute([':like' => $like]);
+    $stmt->execute([':like' => $like, ':like2' => $like]);
     $rows = $stmt->fetchAll();
     if (is_array($rows)) {
         foreach ($rows as $row) {

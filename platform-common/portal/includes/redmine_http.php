@@ -109,3 +109,51 @@ function platformRedmineProjectMatchesTokens(array $project, array $tokens): boo
     }
     return true;
 }
+
+/**
+ * プロジェクト配下のチケット一覧（issues.json）
+ *
+ * @return array{ok: bool, http_code: int, issues: list<array<string,mixed>>, total_count: ?int, error: ?string}
+ */
+function platformRedmineFetchIssuesForProject(
+    string $baseUrl,
+    string $apiKey,
+    int $redmineNumericProjectId,
+    int $limit,
+): array {
+    if ($redmineNumericProjectId <= 0 || $limit <= 0) {
+        return ['ok' => false, 'http_code' => 0, 'issues' => [], 'total_count' => null, 'error' => 'パラメータが不正です。'];
+    }
+    $q = http_build_query([
+        'project_id' => $redmineNumericProjectId,
+        'limit' => $limit,
+        'sort' => 'updated_on:desc',
+    ]);
+    $path = '/issues.json?' . $q;
+    $res = platformRedmineGetJson($baseUrl, $apiKey, $path);
+    if (!$res['ok'] || !is_array($res['data'])) {
+        $err = 'Redmine のチケット取得に失敗しました（HTTP ' . $res['http_code'] . '）。';
+        return ['ok' => false, 'http_code' => $res['http_code'], 'issues' => [], 'total_count' => null, 'error' => $err];
+    }
+    $data = $res['data'];
+    $issues = $data['issues'] ?? null;
+    if (!is_array($issues)) {
+        return ['ok' => false, 'http_code' => $res['http_code'], 'issues' => [], 'total_count' => null, 'error' => 'Redmine の応答形式が不正です。'];
+    }
+    $out = [];
+    foreach ($issues as $row) {
+        if (is_array($row)) {
+            $out[] = $row;
+        }
+    }
+    $total = $data['total_count'] ?? null;
+    $totalCount = is_int($total) ? $total : (is_numeric($total) ? (int)$total : null);
+
+    return [
+        'ok' => true,
+        'http_code' => $res['http_code'],
+        'issues' => $out,
+        'total_count' => $totalCount,
+        'error' => null,
+    ];
+}

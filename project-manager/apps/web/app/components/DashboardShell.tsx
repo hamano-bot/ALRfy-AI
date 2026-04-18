@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ExternalLink } from "lucide-react";
 import { isExternalPortalRoute, isPortalAppInteractive } from "../lib/portal-app-helpers";
 import { PortalAppIcon } from "../lib/portal-app-icons";
@@ -11,6 +11,7 @@ import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from ".
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "./ui/sheet";
 import { EffectiveProjectRoleBanner } from "./EffectiveProjectRoleBanner";
 import { usePortalApps } from "./PortalAppsProvider";
+import { THEME_STORAGE_KEY } from "../theme-init";
 
 type DashboardShellProps = {
   children: ReactNode;
@@ -27,7 +28,6 @@ type SidebarNavItem = {
 };
 
 const AI_OPEN_STORAGE_KEY = "alrfy-ai-chat-open";
-const THEME_STORAGE_KEY = "alrfy-theme";
 /** 同一オリジン BFF → PHP `GET /portal/api/me`（`PORTAL_API_BASE_URL` はサーバー専用） */
 const PROFILE_BFF_PATH = "/api/portal/me";
 const supportedThemes = new Set(["default", "cute", "midnight", "ocean", "system", "dark", "violet"]);
@@ -78,6 +78,8 @@ export function DashboardShell({ children }: DashboardShellProps) {
   const [isAiOpen, setIsAiOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
   const [theme, setTheme] = useState<ThemeName>("default");
+  /** 初回の useEffect([theme]) が default で data-theme を上書きしない（theme-init スクリプト／初回ロードと整合） */
+  const skipNextThemeDomSync = useRef(true);
   const [rawLoginName, setRawLoginName] = useState("minutes-user-demo-account@example.com");
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<"theme" | "redmine">("theme");
@@ -133,8 +135,14 @@ export function DashboardShell({ children }: DashboardShellProps) {
   }, []);
 
   useEffect(() => {
-    const savedTheme = normalizeTheme(window.localStorage.getItem(THEME_STORAGE_KEY));
+    const raw = window.localStorage.getItem(THEME_STORAGE_KEY);
+    const savedTheme = normalizeTheme(raw);
+    document.documentElement.dataset.theme = savedTheme;
     setTheme(savedTheme);
+    if (raw !== null && raw !== "") {
+      window.localStorage.setItem(THEME_STORAGE_KEY, savedTheme);
+    }
+    skipNextThemeDomSync.current = true;
 
     const controller = new AbortController();
     const fetchProfile = async () => {
@@ -158,7 +166,10 @@ export function DashboardShell({ children }: DashboardShellProps) {
           return;
         }
         if (!window.localStorage.getItem(THEME_STORAGE_KEY)) {
-          setTheme(normalizeTheme(payload.user.theme));
+          const fromApi = normalizeTheme(payload.user.theme);
+          setTheme(fromApi);
+          document.documentElement.dataset.theme = fromApi;
+          window.localStorage.setItem(THEME_STORAGE_KEY, fromApi);
         }
         setRawLoginName(payload.user.display_name || payload.user.email || "minutes-user-demo-account@example.com");
       } catch {
@@ -170,6 +181,10 @@ export function DashboardShell({ children }: DashboardShellProps) {
   }, []);
 
   useEffect(() => {
+    if (skipNextThemeDomSync.current) {
+      skipNextThemeDomSync.current = false;
+      return;
+    }
     document.documentElement.dataset.theme = theme;
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
   }, [theme]);

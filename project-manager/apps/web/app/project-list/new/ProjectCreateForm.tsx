@@ -6,12 +6,12 @@ import { ThemeDateField } from "@/app/components/ThemeDateField";
 import { Button } from "@/app/components/ui/button";
 import { Input, inputBaseClassName } from "@/app/components/ui/input";
 import { Label } from "@/app/components/ui/label";
-import { DUMMY_PARTICIPANT_USERS } from "@/lib/participant-dummy";
 import {
   portalProjectCreateBodySchema,
   portalProjectPatchBodySchema,
 } from "@/lib/portal-project-create-body";
 import type { PortalProjectDetail } from "@/lib/portal-project";
+import { PROJECT_ROLE_LABEL_JA } from "@/lib/project-role-labels";
 import { cn } from "@/lib/utils";
 import { GripVertical } from "lucide-react";
 
@@ -20,15 +20,10 @@ const SITE_TYPES = [
   { value: "ec", label: "EC" },
   { value: "member_portal", label: "会員ポータル" },
   { value: "internal_portal", label: "社内ポータル" },
-  { value: "owned_media", label: "オウンドメディア" },
   { value: "product_portal", label: "製品ポータル" },
+  { value: "owned_media", label: "オウンドメディア" },
   { value: "other", label: "その他" },
 ] as const;
-
-function isProjectListDemo(): boolean {
-  const v = process.env.NEXT_PUBLIC_PROJECT_LIST_DEMO;
-  return v === "1" || v === "true";
-}
 
 function norm(s: string): string {
   return s.trim().toLowerCase();
@@ -114,6 +109,133 @@ function ParticipantDragRow({
 /**
  * 空リストのヒント: 参加者名行と同じ min-h-10・px-2・shadow-sm。2行テキストは py-1・leading-none で min-h-10 内に収める。
  */
+type UserSuggestApiRow = { id: number; email: string; display_name?: string | null };
+
+function labelFromSuggestRow(row: UserSuggestApiRow): string {
+  const dn = typeof row.display_name === "string" ? row.display_name.trim() : "";
+  if (dn !== "") {
+    return dn;
+  }
+  return row.email.trim() !== "" ? row.email.trim() : `user ${row.id}`;
+}
+
+function ParticipantAddInput({
+  value,
+  onChange,
+  onConfirm,
+  onPickUser,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onConfirm: () => void;
+  onPickUser: (userId: number, label: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<UserSuggestApiRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+
+  useEffect(() => {
+    const t = value.trim();
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+    if (t === "") {
+      setItems([]);
+      return;
+    }
+    debounceRef.current = setTimeout(() => {
+      void (async () => {
+        setLoading(true);
+        try {
+          const u = new URL("/api/portal/user-suggest", window.location.origin);
+          u.searchParams.set("q", t);
+          const res = await fetch(u.toString(), { credentials: "include", cache: "no-store" });
+          const data = (await res.json()) as { success?: boolean; users?: UserSuggestApiRow[] };
+          if (res.ok && data.success && Array.isArray(data.users)) {
+            setItems(data.users);
+          } else {
+            setItems([]);
+          }
+        } catch {
+          setItems([]);
+        } finally {
+          setLoading(false);
+        }
+      })();
+    }, 280);
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+  }, [value]);
+
+  return (
+    <div ref={wrapRef} className="relative min-w-0 flex-1">
+      <Input
+        className="h-8 min-w-0 flex-1 px-2 py-1 text-xs"
+        placeholder="名前・メール・ID"
+        autoComplete="off"
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            onConfirm();
+          }
+        }}
+      />
+      {open && value.trim() !== "" ? (
+        <div className="absolute left-0 right-0 top-full z-[80] mt-1 max-h-56 overflow-y-auto rounded-lg border border-[color:color-mix(in_srgb,var(--border)_90%,transparent)] bg-[var(--surface)] shadow-lg">
+          {loading ? (
+            <p className="px-3 py-2 text-xs text-[var(--muted)]">読み込み中…</p>
+          ) : items.length === 0 ? (
+            <p className="px-3 py-2 text-xs text-[var(--muted)]">候補がありません</p>
+          ) : (
+            items.map((row) => {
+              const primary = labelFromSuggestRow(row);
+              const em = row.email.trim();
+              return (
+                <button
+                  key={row.id}
+                  type="button"
+                  className="block w-full px-3 py-2 text-left hover:bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    onPickUser(row.id, primary);
+                    setOpen(false);
+                  }}
+                >
+                  <span className="block text-sm font-medium text-[var(--foreground)]">{primary}</span>
+                  {primary !== em ? (
+                    <span className="block truncate text-xs text-[var(--muted)]">{em}</span>
+                  ) : null}
+                </button>
+              );
+            })
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function ParticipantEmptyListHint({ activeDrop }: { activeDrop: boolean }) {
   const lineClass =
     "block w-full text-[10px] leading-none tracking-tight [word-break:keep-all]";
@@ -163,6 +285,8 @@ function newRedmineRowId(): string {
 type RedminePick = {
   redmine_project_id: number;
   redmine_base_url: string | null;
+  /** Redmine API の name（詳細画面のリンク表示に使用） */
+  redmine_project_name: string;
   label: string;
 };
 
@@ -292,6 +416,7 @@ function RedmineSuggestRow({
                     onChange({
                       redmine_project_id: p.id,
                       redmine_base_url: p.redmine_base_url,
+                      redmine_project_name: p.name,
                       label: `${p.name} (${p.identifier})`,
                     });
                     setQ("");
@@ -359,7 +484,6 @@ export function ProjectCreateForm({
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const demoSeedDone = useRef(false);
   const participantsRef = useRef({ owners: [] as number[], editors: [] as number[], viewers: [] as number[] });
   participantsRef.current = { owners, editors, viewers };
 
@@ -374,17 +498,6 @@ export function ProjectCreateForm({
   useEffect(() => {
     if (isEditMode) {
       return;
-    }
-    if (isProjectListDemo() && !demoSeedDone.current) {
-      demoSeedDone.current = true;
-      const labels: Record<number, string> = {};
-      for (const u of DUMMY_PARTICIPANT_USERS) {
-        labels[u.user_id] = u.display_name;
-      }
-      setUserLabels((prev) => ({ ...labels, ...prev }));
-      setOwners([DUMMY_PARTICIPANT_USERS[0]?.user_id ?? 9201]);
-      setEditors([DUMMY_PARTICIPANT_USERS[1]?.user_id ?? 9202, DUMMY_PARTICIPANT_USERS[2]?.user_id ?? 9203].filter(Boolean));
-      setViewers([DUMMY_PARTICIPANT_USERS[3]?.user_id ?? 9204].filter(Boolean));
     }
 
     const load = async () => {
@@ -404,11 +517,7 @@ export function ProjectCreateForm({
           setMyEmail(em);
           const label = dn || em || `user ${uid}`;
           setUserLabels((prev) => ({ ...prev, [uid]: label }));
-          if (!isProjectListDemo()) {
-            setOwners([uid]);
-          } else {
-            setOwners((prev) => (prev.includes(uid) ? prev : [...prev, uid]));
-          }
+          setOwners([uid]);
         }
         if (data.redmine?.configured) {
           setRedmineConfigured(true);
@@ -440,7 +549,11 @@ export function ProjectCreateForm({
             pick: {
               redmine_project_id: r.redmine_project_id,
               redmine_base_url: r.redmine_base_url,
-              label: `Redmine #${r.redmine_project_id}`,
+              redmine_project_name: r.redmine_project_name?.trim() ?? "",
+              label:
+                r.redmine_project_name && r.redmine_project_name.trim() !== ""
+                  ? `${r.redmine_project_name.trim()} (${r.redmine_project_id})`
+                  : `Redmine #${r.redmine_project_id}`,
             },
           }))
         : [],
@@ -634,21 +747,13 @@ export function ProjectCreateForm({
         }
       }
 
-      if (isProjectListDemo()) {
-        for (const u of DUMMY_PARTICIPANT_USERS) {
-          if (n === norm(u.display_name) || n === norm(u.email) || t === String(u.user_id)) {
-            return { ok: true, userId: u.user_id, label: u.display_name };
-          }
-        }
-      }
-
       try {
         const u = new URL("/api/portal/user-suggest", window.location.origin);
         u.searchParams.set("q", t);
         const res = await fetch(u.toString(), { credentials: "include", cache: "no-store" });
         const data = (await res.json()) as {
           success?: boolean;
-          users?: { id: number; email: string }[];
+          users?: UserSuggestApiRow[];
           message?: string;
         };
         if (!res.ok || !data.success) {
@@ -657,19 +762,16 @@ export function ProjectCreateForm({
         const list = Array.isArray(data.users) ? data.users : [];
         if (list.length === 1) {
           const row = list[0];
-          return { ok: true, userId: row.id, label: row.email };
+          return { ok: true, userId: row.id, label: labelFromSuggestRow(row) };
         }
         if (list.length === 0) {
           return {
             ok: false,
-            message: "該当するユーザーがいません。メール・ユーザーID（数字）で検索してください。",
+            message: "該当するユーザーがいません。名前・メール・ユーザーID（数字）で検索してください。",
           };
         }
-        return { ok: false, message: "候補が複数あります。メールまたはユーザーIDで絞り込んでください。" };
+        return { ok: false, message: "候補が複数あります。一覧から選ぶか、名前・メール・IDで絞り込んでください。" };
       } catch {
-        if (isProjectListDemo()) {
-          return { ok: false, message: "該当するユーザーがいません（デモ用の名前・メールを試してください）。" };
-        }
         return { ok: false, message: "ユーザー検索に接続できませんでした。" };
       }
     },
@@ -698,6 +800,22 @@ export function ProjectCreateForm({
       }
     },
     [addEditorInput, addOwnerInput, addViewerInput, moveBetween, resolveParticipantInput],
+  );
+
+  const handlePickParticipant = useCallback(
+    (zone: "owner" | "editor" | "viewer", userId: number, label: string) => {
+      setFormError(null);
+      moveBetween(userId, zone);
+      setUserLabels((prev) => ({ ...prev, [userId]: label }));
+      if (zone === "owner") {
+        setAddOwnerInput("");
+      } else if (zone === "editor") {
+        setAddEditorInput("");
+      } else {
+        setAddViewerInput("");
+      }
+    },
+    [moveBetween],
   );
 
   useEffect(() => {
@@ -749,6 +867,9 @@ export function ProjectCreateForm({
           .map((p) => ({
             redmine_project_id: p.redmine_project_id,
             redmine_base_url: p.redmine_base_url,
+            ...(p.redmine_project_name.trim() !== ""
+              ? { redmine_project_name: p.redmine_project_name.trim() }
+              : {}),
           })) ?? [],
       misc_links: miscLinks
         .map((m) => ({ label: m.label.trim(), url: m.url.trim() }))
@@ -853,7 +974,7 @@ export function ProjectCreateForm({
   return (
     <form className="space-y-8" onSubmit={onSubmit} noValidate>
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-[var(--foreground)]">基本情報</h2>
+        <h2 className="pm-section-heading">基本情報</h2>
         <div className="space-y-1">
           <Label htmlFor={`${idPrefix}-name`}>
             プロジェクト名 <span className="text-red-500">*</span>
@@ -906,7 +1027,7 @@ export function ProjectCreateForm({
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-[var(--foreground)]">リニューアル</h2>
+        <h2 className="pm-section-heading">区分</h2>
         <div className="flex gap-4 text-sm">
           <Label className="flex cursor-pointer items-center gap-2 text-[var(--foreground)]">
             <input type="radio" className="accent-[var(--accent)]" checked={!isRenewal} onChange={() => setIsRenewal(false)} />
@@ -949,7 +1070,7 @@ export function ProjectCreateForm({
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-[var(--foreground)]">Redmine</h2>
+        <h2 className="pm-section-heading">Redmine</h2>
         {redmineConfigured ? (
           <div className="w-1/2 max-w-full space-y-2">
             {redmineRows.map((row) => (
@@ -978,7 +1099,7 @@ export function ProjectCreateForm({
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-[var(--foreground)]">各種リンク</h2>
+        <h2 className="pm-section-heading">各種リンク</h2>
         <div className="w-1/2 max-w-full space-y-2">
           {miscLinks.map((m, i) => (
             <div key={i} className="flex gap-2">
@@ -1014,10 +1135,9 @@ export function ProjectCreateForm({
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-[var(--foreground)]">参加者</h2>
+        <h2 className="pm-section-heading">参加者</h2>
         <p className="text-xs text-[var(--muted)]">
-          表示名・メール・ユーザーID（数字）で追加（Enter または「追加」）。オーナーは少なくとも1名、かつ案件を登録する本人はオーナー・編集・参照のいずれかに含めてください。取っ手（⋮⋮）をドラッグすると、列ごとにハイライトされ、挿入位置にアクセントの線が表示されます。
-          {isProjectListDemo() ? " デモではダミーがプリセットされています。" : null}
+          名前・メール・ユーザーID（数字）で検索し、候補から選ぶか Enter /「追加」で確定します。オーナーは少なくとも1名、かつ案件を登録する本人はオーナー・編集・参照のいずれかに含めてください。取っ手（⋮⋮）をドラッグすると列間で移動できます。
         </p>
         <div className="grid w-full max-w-4xl gap-4 md:grid-cols-3">
           <div
@@ -1030,19 +1150,13 @@ export function ProjectCreateForm({
             onDragOver={(e) => onColumnDragOver(e, "owner")}
             onDrop={(e) => onDropZone(e, "owner")}
           >
-            <p className="mb-2 text-xs font-medium text-[var(--muted)]">オーナー</p>
+            <p className="mb-2 text-xs font-medium text-[var(--muted)]">{PROJECT_ROLE_LABEL_JA.owner}</p>
             <div className="mb-2 flex gap-2">
-              <Input
-                className="h-8 min-w-0 flex-1 px-2 py-1 text-xs"
-                placeholder="名前・メール・ID"
+              <ParticipantAddInput
                 value={addOwnerInput}
-                onChange={(e) => setAddOwnerInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    void handleAddParticipant("owner");
-                  }
-                }}
+                onChange={setAddOwnerInput}
+                onConfirm={() => void handleAddParticipant("owner")}
+                onPickUser={(userId, label) => handlePickParticipant("owner", userId, label)}
               />
               <Button type="button" size="sm" variant="default" onClick={() => void handleAddParticipant("owner")}>
                 追加
@@ -1077,19 +1191,13 @@ export function ProjectCreateForm({
             onDragOver={(e) => onColumnDragOver(e, "editor")}
             onDrop={(e) => onDropZone(e, "editor")}
           >
-            <p className="mb-2 text-xs font-medium text-[var(--muted)]">編集権限</p>
+            <p className="mb-2 text-xs font-medium text-[var(--muted)]">{PROJECT_ROLE_LABEL_JA.editor}</p>
             <div className="mb-2 flex gap-2">
-              <Input
-                className="h-8 min-w-0 flex-1 px-2 py-1 text-xs"
-                placeholder="名前・メール・ID"
+              <ParticipantAddInput
                 value={addEditorInput}
-                onChange={(e) => setAddEditorInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    void handleAddParticipant("editor");
-                  }
-                }}
+                onChange={setAddEditorInput}
+                onConfirm={() => void handleAddParticipant("editor")}
+                onPickUser={(userId, label) => handlePickParticipant("editor", userId, label)}
               />
               <Button type="button" size="sm" variant="default" onClick={() => void handleAddParticipant("editor")}>
                 追加
@@ -1124,19 +1232,13 @@ export function ProjectCreateForm({
             onDragOver={(e) => onColumnDragOver(e, "viewer")}
             onDrop={(e) => onDropZone(e, "viewer")}
           >
-            <p className="mb-2 text-xs font-medium text-[var(--muted)]">参照権限</p>
+            <p className="mb-2 text-xs font-medium text-[var(--muted)]">{PROJECT_ROLE_LABEL_JA.viewer}</p>
             <div className="mb-2 flex gap-2">
-              <Input
-                className="h-8 min-w-0 flex-1 px-2 py-1 text-xs"
-                placeholder="名前・メール・ID"
+              <ParticipantAddInput
                 value={addViewerInput}
-                onChange={(e) => setAddViewerInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    void handleAddParticipant("viewer");
-                  }
-                }}
+                onChange={setAddViewerInput}
+                onConfirm={() => void handleAddParticipant("viewer")}
+                onPickUser={(userId, label) => handlePickParticipant("viewer", userId, label)}
               />
               <Button type="button" size="sm" variant="default" onClick={() => void handleAddParticipant("viewer")}>
                 追加

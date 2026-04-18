@@ -10,6 +10,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/permission_helper.php';
 require_once __DIR__ . '/platform_google_client.php';
+require_once dirname(__DIR__) . '/portal/includes/user_display_name_schema.php';
 
 final class UnassignedUserException extends RuntimeException
 {
@@ -19,9 +20,12 @@ final class UnassignedUserException extends RuntimeException
  * Google userinfo を議事録互換の users に同期し user_id を返します。
  * （minutes_record_dev/public/callback.php の syncUserLoginByEmail と同等）
  */
-function syncPlatformUserFromGoogle(PDO $pdo, string $email): int
+function syncPlatformUserFromGoogle(PDO $pdo, string $email, string $displayName = ''): int
 {
     $now = (new DateTimeImmutable())->format('Y-m-d H:i:s');
+    ensureUserDisplayNameColumn($pdo);
+    $dn = trim($displayName);
+    $dnOrNull = $dn !== '' ? $dn : null;
 
     $pdo->beginTransaction();
     try {
@@ -31,11 +35,12 @@ function syncPlatformUserFromGoogle(PDO $pdo, string $email): int
 
         if ($user === false) {
             $insertStmt = $pdo->prepare(
-                'INSERT INTO users (email, first_login_at, last_login_at, login_count)
-                 VALUES (:email, :first_login_at, :last_login_at, :login_count)'
+                'INSERT INTO users (email, display_name, first_login_at, last_login_at, login_count)
+                 VALUES (:email, :display_name, :first_login_at, :last_login_at, :login_count)'
             );
             $insertStmt->execute([
                 ':email' => $email,
+                ':display_name' => $dnOrNull,
                 ':first_login_at' => $now,
                 ':last_login_at' => $now,
                 ':login_count' => 1,
@@ -43,16 +48,31 @@ function syncPlatformUserFromGoogle(PDO $pdo, string $email): int
             $userId = (int)$pdo->lastInsertId();
         } else {
             $userId = (int)$user['id'];
-            $updateStmt = $pdo->prepare(
-                'UPDATE users
-                 SET last_login_at = :last_login_at,
-                     login_count = login_count + 1
-                 WHERE id = :id'
-            );
-            $updateStmt->execute([
-                ':last_login_at' => $now,
-                ':id' => $userId,
-            ]);
+            if ($dnOrNull !== null) {
+                $updateStmt = $pdo->prepare(
+                    'UPDATE users
+                     SET last_login_at = :last_login_at,
+                         login_count = login_count + 1,
+                         display_name = :display_name
+                     WHERE id = :id'
+                );
+                $updateStmt->execute([
+                    ':last_login_at' => $now,
+                    ':display_name' => $dnOrNull,
+                    ':id' => $userId,
+                ]);
+            } else {
+                $updateStmt = $pdo->prepare(
+                    'UPDATE users
+                     SET last_login_at = :last_login_at,
+                         login_count = login_count + 1
+                     WHERE id = :id'
+                );
+                $updateStmt->execute([
+                    ':last_login_at' => $now,
+                    ':id' => $userId,
+                ]);
+            }
         }
 
         $pdo->commit();
@@ -127,7 +147,7 @@ try {
     }
 
     $pdo = createPdoFromApplicationEnv();
-    $userId = syncPlatformUserFromGoogle($pdo, $email);
+    $userId = syncPlatformUserFromGoogle($pdo, $email, $displayName);
 
     session_regenerate_id(true);
     $_SESSION['user_id'] = $userId;

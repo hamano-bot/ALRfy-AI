@@ -197,6 +197,7 @@ if (isset($payload['redmine_links'])) {
     foreach ($payload['redmine_links'] as $idx => $item) {
         $rid = null;
         $baseUrl = null;
+        $redmineProjectName = null;
         if (is_int($item) || (is_string($item) && ctype_digit($item))) {
             $rid = (int)$item;
         } elseif (is_array($item)) {
@@ -221,6 +222,22 @@ if (isset($payload['redmine_links'])) {
                     $baseUrl = $bu;
                 }
             }
+            if (isset($item['redmine_project_name']) && $item['redmine_project_name'] !== null) {
+                if (!is_string($item['redmine_project_name'])) {
+                    http_response_code(400);
+                    echo json_encode(['success' => false, 'message' => 'redmine_project_name は文字列または null にしてください。'], JSON_UNESCAPED_UNICODE);
+                    exit;
+                }
+                $pn = trim($item['redmine_project_name']);
+                if ($pn !== '') {
+                    if (mb_strlen($pn) > 255) {
+                        http_response_code(400);
+                        echo json_encode(['success' => false, 'message' => 'redmine_project_name が長すぎます。'], JSON_UNESCAPED_UNICODE);
+                        exit;
+                    }
+                    $redmineProjectName = $pn;
+                }
+            }
         } else {
             http_response_code(400);
             echo json_encode(['success' => false, 'message' => 'redmine_links の要素が不正です。'], JSON_UNESCAPED_UNICODE);
@@ -239,6 +256,7 @@ if (isset($payload['redmine_links'])) {
         $redmineRows[] = [
             'redmine_project_id' => $rid,
             'redmine_base_url' => $baseUrl,
+            'redmine_project_name' => $redmineProjectName,
             'sort_order' => (int)$idx,
         ];
     }
@@ -460,14 +478,15 @@ try {
 
     if ($redmineRows !== []) {
         $insRm = $pdo->prepare(
-            'INSERT INTO project_redmine_links (project_id, redmine_project_id, redmine_base_url, sort_order)
-             VALUES (:pid, :rid, :base, :sort_order)'
+            'INSERT INTO project_redmine_links (project_id, redmine_project_id, redmine_base_url, redmine_project_name, sort_order)
+             VALUES (:pid, :rid, :base, :rname, :sort_order)'
         );
         foreach ($redmineRows as $rr) {
             $insRm->execute([
                 ':pid' => $projectId,
                 ':rid' => $rr['redmine_project_id'],
                 ':base' => $rr['redmine_base_url'],
+                ':rname' => $rr['redmine_project_name'],
                 ':sort_order' => $rr['sort_order'],
             ]);
         }

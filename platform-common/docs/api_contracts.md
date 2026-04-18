@@ -124,6 +124,42 @@
 | `GET /portal/api/project?project_id=` | `GET /api/portal/project?project_id=`（Cookie 転送） |
 | `PATCH /portal/api/project` | `PATCH /api/portal/project`（JSON を Zod で検証のうえ転送） |
 | `POST /portal/api/projects` | `POST /api/portal/projects`（JSON ボディを Zod で検証のうえ転送） |
+| `GET /portal/api/project-hearing-sheet?project_id=` | `GET /api/portal/project-hearing-sheet?project_id=`（Cookie 転送） |
+| `PATCH /portal/api/project-hearing-sheet` | `PATCH /api/portal/project-hearing-sheet`（JSON を Zod で検証のうえ転送） |
+
+## GET /project-hearing-sheet（案件のヒアリングシート）
+
+`project_hearing_sheets` に 1:1 で保存する **ヒアリングシート**（`body_json` + `status`）。行が無い場合は `draft` と空の `body_json` を返す（DB には挿入しない）。
+
+### request
+- 公開URL: `GET /portal/api/project-hearing-sheet?project_id=<int>`
+- 実装ファイル: `portal/api/get_patch_project_hearing_sheet.php`（GET）
+- **認可:** ログイン必須。**当該 `project_id` の `project_members` に行があること**（なければ `403`）。
+
+### response (200)
+```json
+{
+  "success": true,
+  "hearing_sheet": {
+    "project_id": 4,
+    "status": "draft",
+    "body_json": []
+  }
+}
+```
+
+`body_json` は空のとき JSON 配列 `[]` になる場合があります（PHP のデコード結果）。
+
+## PATCH /project-hearing-sheet（ヒアリングシートの作成・更新）
+
+### request
+- 公開URL: `PATCH /portal/api/project-hearing-sheet`
+- 実装ファイル: `portal/api/get_patch_project_hearing_sheet.php`（PATCH）
+- Next BFF: `PATCH /api/portal/project-hearing-sheet`（`portalProjectHearingSheetPatchBodySchema`）
+- **認可:** `owner` または `editor`。`viewer` は `403`。
+- **body:** `project_id`（必須）。**`body_json` と `status` の少なくとも一方**（両方可）。`body_json` は JSON オブジェクトまたは配列（最大約 2 MiB）。
+
+初回は行が無ければ `INSERT`、あれば `UPDATE`。
 
 ## GET /project（単一案件の登録内容）
 

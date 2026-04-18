@@ -37,6 +37,7 @@ import {
   SITE_TYPE_LABEL_JA,
   type PortalMyProjectRow,
 } from "@/lib/portal-my-projects";
+import { displayText } from "@/lib/empty-display";
 import { cn } from "@/lib/utils";
 
 const SITE_TYPE_OPTIONS = Object.entries(SITE_TYPE_LABEL_JA) as [string, string][];
@@ -50,6 +51,9 @@ const ROLE_FILTER_OPTIONS: { value: ProjectListRoleFilter; label: string }[] = [
 /** outline はブラウザ既定で白っぽくフラッシュしやすいので ring のみにする */
 const checkboxClass =
   "h-4 w-4 shrink-0 rounded border border-[color:color-mix(in_srgb,var(--border)_90%,transparent)] bg-[color:color-mix(in_srgb,var(--background)_94%,black_6%)] accent-[var(--accent)] outline-none ring-offset-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)]";
+
+const radioClass =
+  "h-4 w-4 shrink-0 rounded-full border border-[color:color-mix(in_srgb,var(--border)_90%,transparent)] bg-[color:color-mix(in_srgb,var(--background)_94%,black_6%)] accent-[var(--accent)] outline-none ring-offset-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)]";
 
 type Props = {
   initialProjects: PortalMyProjectRow[];
@@ -210,7 +214,7 @@ export function ProjectListTable({ initialProjects }: Props) {
   );
 
   const headerBtnClass =
-    "inline-flex h-8 w-full min-w-0 items-center justify-start gap-0.5 whitespace-nowrap px-3 py-1 text-left font-medium tracking-normal hover:bg-[color:color-mix(in_srgb,var(--surface)_88%,var(--accent)_12%)]";
+    "inline-flex h-8 w-full min-w-0 items-center justify-start gap-0.5 whitespace-nowrap px-3 py-1 text-left text-sm font-semibold text-[var(--foreground)] tracking-normal hover:bg-[color:color-mix(in_srgb,var(--surface)_88%,var(--accent)_12%)]";
 
   const siteTypeTriggerLabel =
     draftFilters.siteTypes.length === 0 ? "すべて" : `${draftFilters.siteTypes.length}件選択`;
@@ -337,7 +341,7 @@ export function ProjectListTable({ initialProjects }: Props) {
                             }}
                           >
                             <span className="font-mono text-xs text-[var(--muted)]">#{p.id}</span> {p.name}
-                            <span className="block truncate text-xs text-[var(--muted)]">{p.client_name ?? "—"}</span>
+                            <span className="block truncate text-xs text-[var(--muted)]">{displayText(p.client_name)}</span>
                           </button>
                         ))
                       )}
@@ -420,17 +424,44 @@ export function ProjectListTable({ initialProjects }: Props) {
                   </PopoverContent>
                 </Popover>
               </div>
-              <div className="space-y-1.5">
-                <span className="block text-sm font-medium leading-none text-[var(--foreground)]">リニューアル</span>
-                <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--foreground)]">
-                  <input
-                    type="checkbox"
-                    className={checkboxClass}
-                    checked={draftFilters.renewalYesOnly}
-                    onChange={(e) => setDraftFilters((f) => ({ ...f, renewalYesOnly: e.target.checked }))}
-                  />
-                  はい
-                </label>
+              <div className="min-w-0 space-y-1.5">
+                <span className="block text-sm font-medium leading-none text-[var(--foreground)]">区分</span>
+                <div
+                  className="flex min-w-0 flex-row flex-wrap items-center gap-x-4 gap-y-2 text-sm text-[var(--foreground)]"
+                  role="radiogroup"
+                  aria-label="区分"
+                >
+                  <label className="flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap">
+                    <input
+                      type="radio"
+                      name="pm-project-list-renewal-filter"
+                      className={radioClass}
+                      checked={draftFilters.renewalFilter === "all"}
+                      onChange={() => setDraftFilters((f) => ({ ...f, renewalFilter: "all" }))}
+                    />
+                    すべて
+                  </label>
+                  <label className="flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap">
+                    <input
+                      type="radio"
+                      name="pm-project-list-renewal-filter"
+                      className={radioClass}
+                      checked={draftFilters.renewalFilter === "renewal"}
+                      onChange={() => setDraftFilters((f) => ({ ...f, renewalFilter: "renewal" }))}
+                    />
+                    リニューアル
+                  </label>
+                  <label className="flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap">
+                    <input
+                      type="radio"
+                      name="pm-project-list-renewal-filter"
+                      className={radioClass}
+                      checked={draftFilters.renewalFilter === "new"}
+                      onChange={() => setDraftFilters((f) => ({ ...f, renewalFilter: "new" }))}
+                    />
+                    新規
+                  </label>
+                </div>
               </div>
               <div className="space-y-1.5">
                 <span className="block text-xs font-medium text-[var(--muted)]">キックオフ</span>
@@ -518,7 +549,7 @@ export function ProjectListTable({ initialProjects }: Props) {
 
       <div className="modern-scrollbar min-h-0 flex-1 overflow-x-auto overflow-y-auto">
         <table className="w-full min-w-[1024px] table-auto text-left text-sm">
-            <thead className="sticky top-0 z-10 border-b border-[color:color-mix(in_srgb,var(--border)_88%,transparent)] bg-[color:color-mix(in_srgb,var(--surface)_96%,var(--accent)_4%)] text-xs font-medium normal-case tracking-normal text-[var(--muted)]">
+            <thead className="pm-table-head sticky top-0 z-10 text-sm font-semibold normal-case tracking-normal text-[var(--foreground)]">
               <tr>
                 <th className="px-5 py-3 text-left align-bottom">
                   <button type="button" className={headerBtnClass} onClick={() => onHeaderClick("id")}>
@@ -546,7 +577,7 @@ export function ProjectListTable({ initialProjects }: Props) {
                 </th>
                 <th className="px-3 py-3 text-left align-bottom">
                   <button type="button" className={headerBtnClass} onClick={() => onHeaderClick("is_renewal")}>
-                    リニューアル
+                    区分
                     <SortGlyph active={sortColumn === "is_renewal"} dir={sortDir} />
                   </button>
                 </th>
@@ -569,7 +600,7 @@ export function ProjectListTable({ initialProjects }: Props) {
                   </button>
                 </th>
                 <th scope="col" className="w-px whitespace-nowrap px-2 py-3 text-left align-bottom">
-                  <span className="text-[11px] font-medium text-[var(--muted)]">詳細</span>
+                  <span className="text-sm font-semibold text-[var(--foreground)]">詳細</span>
                 </th>
               </tr>
             </thead>
@@ -617,14 +648,14 @@ export function ProjectListTable({ initialProjects }: Props) {
                         className="min-w-[18rem] max-w-[min(28rem,44vw)] truncate px-3 py-3 text-[var(--muted)]"
                         title={p.client_name ?? undefined}
                       >
-                        {p.client_name ?? "—"}
+                        {displayText(p.client_name)}
                       </td>
                       <td className="max-w-[12rem] truncate px-3 py-3 text-[var(--muted)]" title={formatSiteTypeLabel(p.site_type, p.site_type_other)}>
                         {formatSiteTypeLabel(p.site_type, p.site_type_other)}
                       </td>
-                      <td className="px-3 py-3 text-[var(--muted)]">{p.is_renewal ? "はい" : "—"}</td>
-                      <td className="whitespace-nowrap px-3 py-3 font-mono text-xs text-[var(--muted)]">{p.kickoff_date ?? "—"}</td>
-                      <td className="whitespace-nowrap px-3 py-3 font-mono text-xs text-[var(--muted)]">{p.release_due_date ?? "—"}</td>
+                      <td className="px-3 py-3 text-[var(--muted)]">{p.is_renewal ? "リニューアル" : "新規"}</td>
+                      <td className="whitespace-nowrap px-3 py-3 font-mono text-xs text-[var(--muted)]">{displayText(p.kickoff_date)}</td>
+                      <td className="whitespace-nowrap px-3 py-3 font-mono text-xs text-[var(--muted)]">{displayText(p.release_due_date)}</td>
                       <td className="w-[4.5rem] min-w-[4.5rem] max-w-[4.5rem] px-2 py-3 align-middle">
                         <span
                           className="inline-block max-w-full truncate rounded-full bg-[color:color-mix(in_srgb,var(--accent)_18%,transparent)] px-1.5 py-0.5 text-center text-[11px] font-medium leading-tight text-[var(--accent)]"

@@ -11,6 +11,21 @@ export type PortalProjectParticipant = {
   display_name: string | null;
 };
 
+const LOOKS_LIKE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** 閲覧 UI 用: 名前のみ（メールは表示しない）。未設定は「ユーザー #id」。 */
+export function getParticipantViewLine(p: PortalProjectParticipant): {
+  primary: string;
+  /** 名前表示時のみ右に #{id} を付ける（フォールバック時は primary に含むので false） */
+  showUserIdSuffix: boolean;
+} {
+  const raw = p.display_name?.trim() ?? "";
+  if (raw !== "" && !LOOKS_LIKE_EMAIL.test(raw)) {
+    return { primary: raw, showUserIdSuffix: true };
+  }
+  return { primary: `ユーザー #${p.user_id}`, showUserIdSuffix: false };
+}
+
 export type PortalProjectDetail = {
   id: number;
   name: string;
@@ -22,7 +37,11 @@ export type PortalProjectDetail = {
   kickoff_date: string | null;
   release_due_date: string | null;
   renewal_urls: string[];
-  redmine_links: { redmine_project_id: number; redmine_base_url: string | null }[];
+  redmine_links: {
+    redmine_project_id: number;
+    redmine_base_url: string | null;
+    redmine_project_name: string | null;
+  }[];
   misc_links: { label: string; url: string }[];
   participants: PortalProjectParticipant[];
 };
@@ -122,7 +141,13 @@ export function parsePortalProjectSuccess(text: string): PortalProjectDetail | n
             bu = o.redmine_base_url.trim();
           }
         }
-        redmine_links.push({ redmine_project_id: rid, redmine_base_url: bu });
+        let rpn: string | null = null;
+        if (o.redmine_project_name !== null && o.redmine_project_name !== undefined) {
+          if (typeof o.redmine_project_name === "string" && o.redmine_project_name.trim() !== "") {
+            rpn = o.redmine_project_name.trim();
+          }
+        }
+        redmine_links.push({ redmine_project_id: rid, redmine_base_url: bu, redmine_project_name: rpn });
       }
     }
 

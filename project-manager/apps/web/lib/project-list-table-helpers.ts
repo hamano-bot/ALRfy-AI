@@ -15,6 +15,9 @@ export type ProjectListSortDir = "asc" | "desc";
 
 export type ProjectListRoleFilter = "owner" | "editor" | "viewer";
 
+/** 詳細検索「区分」: すべて / リニューアル案件のみ / 新規案件のみ */
+export type ProjectListRenewalFilter = "all" | "renewal" | "new";
+
 export type ProjectListAppliedFilters = {
   /** 数値の完全一致（空なら無視） */
   idQuery: string;
@@ -22,8 +25,8 @@ export type ProjectListAppliedFilters = {
   clientQuery: string;
   /** 空 = すべて選択 */
   siteTypes: string[];
-  /** ON のときリニューアル「はい」のみ */
-  renewalYesOnly: boolean;
+  /** リニューアル（区分）の絞り込み */
+  renewalFilter: ProjectListRenewalFilter;
   kickoffFrom: string;
   kickoffTo: string;
   releaseFrom: string;
@@ -37,7 +40,7 @@ export const EMPTY_PROJECT_LIST_FILTERS: ProjectListAppliedFilters = {
   nameQuery: "",
   clientQuery: "",
   siteTypes: [],
-  renewalYesOnly: false,
+  renewalFilter: "all",
   kickoffFrom: "",
   kickoffTo: "",
   releaseFrom: "",
@@ -56,12 +59,19 @@ export function ensureProjectListFilters(f: Partial<ProjectListAppliedFilters> |
     (r): r is ProjectListRoleFilter => r === "owner" || r === "editor" || r === "viewer",
   );
   const siteTypes = Array.isArray(f.siteTypes) ? f.siteTypes.filter((s): s is string => typeof s === "string") : [];
+  const legacy = f as Partial<ProjectListAppliedFilters> & { renewalYesOnly?: boolean };
+  let renewalFilter: ProjectListRenewalFilter = "all";
+  if (legacy.renewalFilter === "all" || legacy.renewalFilter === "renewal" || legacy.renewalFilter === "new") {
+    renewalFilter = legacy.renewalFilter;
+  } else if (legacy.renewalYesOnly === true) {
+    renewalFilter = "renewal";
+  }
   return {
     idQuery: typeof f.idQuery === "string" ? f.idQuery : "",
     nameQuery: typeof f.nameQuery === "string" ? f.nameQuery : "",
     clientQuery: typeof f.clientQuery === "string" ? f.clientQuery : "",
     siteTypes,
-    renewalYesOnly: Boolean(f.renewalYesOnly),
+    renewalFilter,
     kickoffFrom: typeof f.kickoffFrom === "string" ? f.kickoffFrom : "",
     kickoffTo: typeof f.kickoffTo === "string" ? f.kickoffTo : "",
     releaseFrom: typeof f.releaseFrom === "string" ? f.releaseFrom : "",
@@ -206,7 +216,10 @@ export function filterProjectRows(
       }
     }
 
-    if (filtersSafe.renewalYesOnly && !p.is_renewal) {
+    if (filtersSafe.renewalFilter === "renewal" && !p.is_renewal) {
+      return false;
+    }
+    if (filtersSafe.renewalFilter === "new" && p.is_renewal) {
       return false;
     }
 

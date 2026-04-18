@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import ProjectDetailView from "./ProjectDetailView";
+import ProjectHearingView from "./ProjectHearingView";
 
 type PageProps = {
   params: Promise<{ projectId: string }>;
@@ -9,12 +9,12 @@ type PageProps = {
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { projectId } = await params;
   if (!/^\d+$/.test(projectId)) {
-    return { title: "案件" };
+    return { title: "ヒアリングシート" };
   }
-  return { title: `案件 #${projectId}` };
+  return { title: `ヒアリングシート #${projectId}` };
 }
 
-export default async function ProjectManagerDetailPage({ params }: PageProps) {
+export default async function ProjectHearingPage({ params }: PageProps) {
   const { projectId } = await params;
   if (!/^\d+$/.test(projectId)) {
     notFound();
@@ -22,7 +22,7 @@ export default async function ProjectManagerDetailPage({ params }: PageProps) {
 
   return (
     <div className="modern-scrollbar min-h-0 flex-1 overflow-y-auto">
-      <ProjectDetailView projectId={projectId} />
+      <ProjectHearingView projectId={projectId} />
     </div>
   );
 }

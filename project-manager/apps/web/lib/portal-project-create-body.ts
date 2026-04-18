@@ -20,10 +20,12 @@ const redmineLinkItem = z.union([
   z.object({
     redmine_project_id: z.number().int().positive(),
     redmine_base_url: z.union([z.string().max(512), z.null()]).optional(),
+    redmine_project_name: z.union([z.string().max(255), z.null()]).optional(),
   }),
   z.object({
     id: z.number().int().positive(),
     redmine_base_url: z.union([z.string().max(512), z.null()]).optional(),
+    redmine_project_name: z.union([z.string().max(255), z.null()]).optional(),
   }),
 ]);
 

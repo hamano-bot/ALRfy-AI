@@ -19,6 +19,8 @@
   --brand-glow-b: rgba(192, 132, 252, 0.1);
   --brand-glow-a-strong: rgba(96, 165, 250, 0.2);
   --brand-glow-b-strong: rgba(192, 132, 252, 0.16);
+  --edit-mode-surface: color-mix(in srgb, var(--accent) 8%, var(--background) 92%);
+  --edit-mode-banner: color-mix(in srgb, var(--accent) 14%, var(--surface) 86%);
 }
 
 /* ミッドナイト: デフォルト（青スレート）と差別化した「夜 × ランプ灯り」黄色・ゴールド基調 */
@@ -93,6 +95,8 @@
 /* ダッシュボードの全テーマはダーク系。date / time / select のネイティブ UI をライトにしない。 */
 :root[data-theme] {
   color-scheme: dark;
+  --edit-mode-surface: color-mix(in srgb, var(--accent) 8%, var(--background) 92%);
+  --edit-mode-banner: color-mix(in srgb, var(--accent) 14%, var(--surface) 86%);
 }
 
 body {
@@ -105,6 +109,43 @@ body {
   border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
   background: color-mix(in srgb, var(--surface) 78%, transparent);
   backdrop-filter: blur(8px);
+}
+
+/**
+ * Project 一覧・新規・詳細・モックの共通ヒーロー帯（高さを揃える・コンパクト側に合わせる）
+ */
+.pm-page-hero {
+  box-sizing: border-box;
+  height: 6.5rem;
+}
+@media (min-width: 640px) {
+  .pm-page-hero {
+    height: 7rem;
+  }
+}
+
+/**
+ * 案件詳細・案件登録フォームのブロック見出し、案件一覧テーブルヘッダと共用する「区分」
+ * （左アクセント + セミボールド。見出し階層は h2/h3 どちらでも可）
+ */
+.pm-section-heading {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  letter-spacing: 0.01em;
+  color: var(--foreground);
+  padding-left: 0.75rem;
+  border-left: 3px solid color-mix(in srgb, var(--accent) 72%, var(--border) 28%);
+}
+
+/**
+ * 案件一覧テーブル thead：上記区分と同じアクセントバー・トーンのヘッダ帯
+ */
+.pm-table-head {
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  background: color-mix(in srgb, var(--surface) 94%, var(--accent) 6%);
+  box-shadow: inset 3px 0 0 0 color-mix(in srgb, var(--accent) 72%, var(--border) 28%);
 }
 
 /* Modern scrollbar kit (Tailwind-friendly utility class). */

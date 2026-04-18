@@ -1,4 +1,4 @@
-import { FileText, LayoutList, Server, ShieldCheck, ClipboardList } from "lucide-react";
+import { FileText, Server, ShieldCheck, ClipboardList } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export type ProjectDocumentTemplateItem = {
@@ -6,9 +6,11 @@ export type ProjectDocumentTemplateItem = {
   title: string;
   description: string;
   icon: LucideIcon;
+  /** 連携先 URL（未設定時は UI で「準備中」） */
+  href?: string;
 };
 
-/** 案件詳細のテンプレ5種の表示（子画面は未実装。将来 href を足す） */
+/** 案件詳細のテンプレ一覧（href を足すと「開く」が有効化） */
 export const PROJECT_DOCUMENT_TEMPLATES: ProjectDocumentTemplateItem[] = [
   {
     key: "hearing",
@@ -33,11 +35,5 @@ export const PROJECT_DOCUMENT_TEMPLATES: ProjectDocumentTemplateItem[] = [
     title: "インフラシート",
     description: "ホスティング・DNS・証明書などの情報をまとめる枠です。",
     icon: Server,
-  },
-  {
-    key: "design_spec",
-    title: "デザイン・画面仕様",
-    description: "UI 方針・画面構成・コンポーネント単位の仕様を記述します。",
-    icon: LayoutList,
   },
 ];

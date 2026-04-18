@@ -97,6 +97,7 @@ function ensureProjectRegistrationSchema(PDO $pdo): void
               `project_id` INT UNSIGNED NOT NULL,
               `redmine_project_id` INT UNSIGNED NOT NULL COMMENT \'Redmine 側のプロジェクト ID\',
               `redmine_base_url` VARCHAR(512) NULL DEFAULT NULL COMMENT \'別インスタンス用（未設定時はアプリ既定 URL）\',
+              `redmine_project_name` VARCHAR(255) NULL DEFAULT NULL COMMENT \'Redmine API のプロジェクト表示名\',
               `sort_order` SMALLINT NOT NULL DEFAULT 0,
               `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
               PRIMARY KEY (`id`),
@@ -107,6 +108,10 @@ function ensureProjectRegistrationSchema(PDO $pdo): void
                 ON UPDATE CASCADE ON DELETE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
               COMMENT=\'プロジェクトに紐づく Redmine プロジェクト（複数行）\''
+        );
+    } elseif (!$hasColumn('project_redmine_links', 'redmine_project_name')) {
+        $pdo->exec(
+            "ALTER TABLE `project_redmine_links` ADD COLUMN `redmine_project_name` VARCHAR(255) NULL DEFAULT NULL COMMENT 'Redmine API のプロジェクト表示名' AFTER `redmine_base_url`"
         );
     }
 
@@ -148,6 +153,24 @@ function ensureProjectRegistrationSchema(PDO $pdo): void
                 FOREIGN KEY (`user_id`) REFERENCES `users` (`id`)
                 ON UPDATE CASCADE ON DELETE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+        );
+    }
+
+    if (!$tableExists('project_hearing_sheets')) {
+        $pdo->exec(
+            'CREATE TABLE `project_hearing_sheets` (
+              `project_id` INT UNSIGNED NOT NULL,
+              `status` ENUM(\'draft\',\'finalized\',\'archived\') NOT NULL DEFAULT \'draft\'
+                COMMENT \'ヒアリングシートのライフサイクル\',
+              `body_json` LONGTEXT NOT NULL COMMENT \'JSON オブジェクト（確認事項表など）\',
+              `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+              PRIMARY KEY (`project_id`),
+              CONSTRAINT `fk_project_hearing_sheets_project`
+                FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`)
+                ON UPDATE CASCADE ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+              COMMENT=\'案件に 1:1 のヒアリングシート（常に最新1枚）\''
         );
     }
 }

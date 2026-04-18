@@ -26,9 +26,11 @@ $routes = [
     '/portal/api/my-projects' => __DIR__ . '/portal/api/get_my_projects.php',
     '/portal/api/projects' => __DIR__ . '/portal/api/post_projects.php',
     '/portal/api/project' => __DIR__ . '/portal/api/get_patch_project.php',
+    '/portal/api/project-hearing-sheet' => __DIR__ . '/portal/api/get_patch_project_hearing_sheet.php',
     '/portal/api/user/redmine' => __DIR__ . '/portal/api/patch_user_redmine.php',
     '/portal/api/user/redmine/test' => __DIR__ . '/portal/api/post_user_redmine_test.php',
     '/portal/api/redmine-project-suggest' => __DIR__ . '/portal/api/get_redmine_project_suggest.php',
+    '/portal/api/project-redmine-issues' => __DIR__ . '/portal/api/get_project_redmine_issues.php',
     '/portal/api/user-suggest' => __DIR__ . '/portal/api/get_user_suggest.php',
 ];
 

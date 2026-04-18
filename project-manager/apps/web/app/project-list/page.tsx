@@ -21,7 +21,7 @@ function ProjectListFallback() {
 export default function ProjectManagerHomePage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-hidden">
-      <section className="surface-card relative h-[120px] shrink-0 overflow-hidden px-5 py-3">
+      <section className="surface-card pm-page-hero relative shrink-0 overflow-hidden px-5">
         <div className="pointer-events-none absolute -top-10 right-0 h-36 w-36 rounded-full bg-[color:color-mix(in_srgb,var(--accent)_22%,transparent)] blur-3xl" />
         <div className="relative flex h-full min-h-0 flex-row items-center justify-between gap-3">
           <div className="flex min-h-0 min-w-0 flex-1 flex-col justify-center gap-0.5">

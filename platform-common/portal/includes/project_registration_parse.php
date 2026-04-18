@@ -28,7 +28,7 @@ function projectRegistrationParseOptionalDate(mixed $v): string|false|null
 /**
  * POST / PATCH 共通: 案件登録 JSON を検証し正規化する。
  *
- * @return array{ok:true, name:string, client_name:?string, site_type:?string, site_type_other:?string, is_renewal:bool, renewal_urls:list<array{url:string,sort_order:int}>, kickoff_date:?string, release_due_date:?string, redmine_rows:list<array{redmine_project_id:int,redmine_base_url:?string,sort_order:int}>, misc_links:list<array{label:string,url:string,sort_order:int}>, participant_map:array<int,string>}|array{ok:false, status:int, message:string}
+ * @return array{ok:true, name:string, client_name:?string, site_type:?string, site_type_other:?string, is_renewal:bool, renewal_urls:list<array{url:string,sort_order:int}>, kickoff_date:?string, release_due_date:?string, redmine_rows:list<array{redmine_project_id:int,redmine_base_url:?string,redmine_project_name:?string,sort_order:int}>, misc_links:list<array{label:string,url:string,sort_order:int}>, participant_map:array<int,string>}|array{ok:false, status:int, message:string}
  */
 function projectRegistrationParsePayload(array $payload): array
 {
@@ -145,6 +145,7 @@ function projectRegistrationParsePayload(array $payload): array
         foreach ($payload['redmine_links'] as $idx => $item) {
             $rid = null;
             $baseUrl = null;
+            $redmineProjectName = null;
             if (is_int($item) || (is_string($item) && ctype_digit($item))) {
                 $rid = (int)$item;
             } elseif (is_array($item)) {
@@ -165,6 +166,18 @@ function projectRegistrationParsePayload(array $payload): array
                         $baseUrl = $bu;
                     }
                 }
+                if (isset($item['redmine_project_name']) && $item['redmine_project_name'] !== null) {
+                    if (!is_string($item['redmine_project_name'])) {
+                        return ['ok' => false, 'status' => 400, 'message' => 'redmine_project_name は文字列または null にしてください。'];
+                    }
+                    $pn = trim($item['redmine_project_name']);
+                    if ($pn !== '') {
+                        if (mb_strlen($pn) > 255) {
+                            return ['ok' => false, 'status' => 400, 'message' => 'redmine_project_name が長すぎます。'];
+                        }
+                        $redmineProjectName = $pn;
+                    }
+                }
             } else {
                 return ['ok' => false, 'status' => 400, 'message' => 'redmine_links の要素が不正です。'];
             }
@@ -179,6 +192,7 @@ function projectRegistrationParsePayload(array $payload): array
             $redmineRows[] = [
                 'redmine_project_id' => $rid,
                 'redmine_base_url' => $baseUrl,
+                'redmine_project_name' => $redmineProjectName,
                 'sort_order' => (int)$idx,
             ];
         }

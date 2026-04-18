@@ -5,6 +5,7 @@ require_once dirname(__DIR__, 2) . '/auth/bootstrap.php';
 require_once dirname(__DIR__, 2) . '/auth/permission_helper.php';
 require_once dirname(__DIR__) . '/includes/project_registration_schema.php';
 require_once dirname(__DIR__) . '/includes/project_registration_parse.php';
+require_once dirname(__DIR__) . '/includes/user_display_name_schema.php';
 
 header('Content-Type: application/json; charset=UTF-8');
 
@@ -34,6 +35,7 @@ try {
 
 try {
     ensureProjectRegistrationSchema($pdo);
+    ensureUserDisplayNameColumn($pdo);
 } catch (Throwable $e) {
     error_log('[platform-common/get_patch_project ensure schema] ' . $e->getMessage());
     http_response_code(500);
@@ -82,7 +84,7 @@ function buildProjectAggregate(PDO $pdo, int $projectId): ?array
 
     $redmineLinks = [];
     $rStmt = $pdo->prepare(
-        'SELECT redmine_project_id, redmine_base_url FROM project_redmine_links
+        'SELECT redmine_project_id, redmine_base_url, redmine_project_name FROM project_redmine_links
          WHERE project_id = :pid ORDER BY sort_order ASC, id ASC'
     );
     $rStmt->execute([':pid' => $projectId]);
@@ -97,9 +99,11 @@ function buildProjectAggregate(PDO $pdo, int $projectId): ?array
                 continue;
             }
             $bu = $rr['redmine_base_url'] ?? null;
+            $rpn = $rr['redmine_project_name'] ?? null;
             $redmineLinks[] = [
                 'redmine_project_id' => $rid,
                 'redmine_base_url' => is_string($bu) && $bu !== '' ? $bu : null,
+                'redmine_project_name' => is_string($rpn) && $rpn !== '' ? $rpn : null,
             ];
         }
     }
@@ -126,7 +130,7 @@ function buildProjectAggregate(PDO $pdo, int $projectId): ?array
 
     $participants = [];
     $pStmt = $pdo->prepare(
-        'SELECT pm.user_id, pm.role, u.email
+        'SELECT pm.user_id, pm.role, u.email, u.display_name AS user_display_name
          FROM project_members pm
          INNER JOIN users u ON u.id = pm.user_id
          WHERE pm.project_id = :pid
@@ -144,11 +148,13 @@ function buildProjectAggregate(PDO $pdo, int $projectId): ?array
                 continue;
             }
             $role = isset($pr['role']) && is_string($pr['role']) ? $pr['role'] : 'viewer';
-            $email = isset($pr['email']) && is_string($pr['email']) ? $pr['email'] : '';
+            $rawDn = $pr['user_display_name'] ?? null;
+            $dn = is_string($rawDn) ? trim($rawDn) : '';
+            /** 閲覧 UI では名前のみ。未設定時は null（メールは出さない） */
             $participants[] = [
                 'user_id' => $uid,
                 'role' => $role,
-                'display_name' => $email !== '' ? $email : null,
+                'display_name' => $dn !== '' ? $dn : null,
             ];
         }
     }
@@ -351,14 +357,15 @@ if ($method === 'PATCH') {
 
         if ($redmineRows !== []) {
             $insRm = $pdo->prepare(
-                'INSERT INTO project_redmine_links (project_id, redmine_project_id, redmine_base_url, sort_order)
-                 VALUES (:pid, :rid, :base, :sort_order)'
+                'INSERT INTO project_redmine_links (project_id, redmine_project_id, redmine_base_url, redmine_project_name, sort_order)
+                 VALUES (:pid, :rid, :base, :rname, :sort_order)'
             );
             foreach ($redmineRows as $rr) {
                 $insRm->execute([
                     ':pid' => $projectId,
                     ':rid' => $rr['redmine_project_id'],
                     ':base' => $rr['redmine_base_url'],
+                    ':rname' => $rr['redmine_project_name'] ?? null,
                     ':sort_order' => $rr['sort_order'],
                 ]);
             }
