@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/forwarded_request.php';
+
 /**
  * platform-common 専用の Google OAuth クライアント。
  * minutes_record の getGoogleClient() は resolveGoogleRedirectUri() が常に /callback.php になるため、
@@ -8,13 +10,11 @@ declare(strict_types=1);
  */
 function resolvePlatformOAuthRedirectUri(): string
 {
-    $host = isset($_SERVER['HTTP_HOST']) ? trim((string)$_SERVER['HTTP_HOST']) : '';
+    $host = platformResolvePublicHost();
     if ($host === '') {
-        throw new RuntimeException('HTTP_HOST が取得できません。');
+        throw new RuntimeException('公開ホストが取得できません（HTTP_HOST または X-Forwarded-Host）。');
     }
-    // ホスト表記の大文字小文字差で redirect_uri_mismatch になりやすいため統一する
-    $host = strtolower($host);
-    $scheme = isHttpsRequest() ? 'https' : 'http';
+    $scheme = platformResolvePublicScheme();
 
     return $scheme . '://' . $host . '/callback';
 }

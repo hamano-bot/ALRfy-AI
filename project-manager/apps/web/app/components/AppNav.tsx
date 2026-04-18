@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 
 const items = [
   { href: "/", label: "ダッシュボード" },
-  { href: "/project-manager", label: "Project" },
+  { href: "/project-list", label: "Project" },
 ] as const;
 
 export function AppNav() {

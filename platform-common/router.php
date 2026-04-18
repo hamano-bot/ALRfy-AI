@@ -25,9 +25,11 @@ $routes = [
     '/portal/api/project-permission' => __DIR__ . '/portal/api/get_project_permission.php',
     '/portal/api/my-projects' => __DIR__ . '/portal/api/get_my_projects.php',
     '/portal/api/projects' => __DIR__ . '/portal/api/post_projects.php',
+    '/portal/api/project' => __DIR__ . '/portal/api/get_patch_project.php',
     '/portal/api/user/redmine' => __DIR__ . '/portal/api/patch_user_redmine.php',
     '/portal/api/user/redmine/test' => __DIR__ . '/portal/api/post_user_redmine_test.php',
     '/portal/api/redmine-project-suggest' => __DIR__ . '/portal/api/get_redmine_project_suggest.php',
+    '/portal/api/user-suggest' => __DIR__ . '/portal/api/get_user_suggest.php',
 ];
 
 if (isset($routes[$path])) {
@@ -49,13 +51,14 @@ if (isset($legacy[$path]) && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
     exit;
 }
 
-// /project-manager は Next.js（project-manager/apps/web）が別プロセスで待ち受ける。PHP だけ起動していると 404 になるため案内する。
-if ($path === '/project-manager' || str_starts_with($path, '/project-manager/')) {
+// /project-list（旧 /project-manager）は Next.js（project-manager/apps/web）が別プロセスで待ち受ける。PHP だけ起動していると 404 になるため案内する。
+if ($path === '/project-list' || str_starts_with($path, '/project-list/')
+    || $path === '/project-manager' || str_starts_with($path, '/project-manager/')) {
     http_response_code(503);
     header('Content-Type: text/html; charset=UTF-8');
     echo '<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>案件管理 — Next.js が必要</title></head><body style="font-family:system-ui,sans-serif;max-width:40rem;margin:2rem auto;padding:0 1rem;">';
     echo '<h1>この URL は Next.js が応答します</h1>';
-    echo '<p>いま <strong>platform-common（PHP）</strong> がポート 8001 で動いています。Next 起動時は <code>/</code> がダッシュボード、<code>/project-manager</code> が<strong>案件管理</strong>です。</p>';
+    echo '<p>いま <strong>platform-common（PHP）</strong> がポート 8001 で動いています。Next 起動時は <code>/</code> がダッシュボード、<code>/project-list</code> が<strong>案件管理</strong>です。</p>';
     echo '<h2>動かし方</h2><ol>';
     echo '<li><code>project-manager/apps/web</code> で <code>npm run dev:lan</code> を実行（ポート 8001 で Next を起動）。</li>';
     echo '<li>そのとき <strong>同じポートで php -S は止める</strong>（どちらか一方のみ）。</li>';

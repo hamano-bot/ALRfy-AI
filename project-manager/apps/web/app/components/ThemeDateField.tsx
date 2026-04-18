@@ -8,9 +8,13 @@ import { type ReactNode, useId, useState } from "react";
 
 import { Button } from "@/app/components/ui/button";
 import { Calendar } from "@/app/components/ui/calendar";
+import { inputBaseClassName } from "@/app/components/ui/input";
 import { Label } from "@/app/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/app/components/ui/popover";
 import { cn } from "@/lib/utils";
+
+/** 画面上の日付表記（内部値・API は `yyyy-MM-dd` のまま） */
+export const THEME_DATE_DISPLAY_FORMAT = "yyyy年M月d日（E）" as const;
 
 function parseYmd(s: string): Date | undefined {
   if (!s.trim()) {
@@ -36,13 +40,14 @@ export function ThemeDateField({ label, value, onChange, required, className }: 
   const [open, setOpen] = useState(false);
   const selected = parseYmd(value);
 
+  const hasDate = Boolean(selected && !Number.isNaN(selected.getTime()));
   const display =
-    selected && !Number.isNaN(selected.getTime())
-      ? format(selected, "yyyy年M月d日（E）", { locale: ja })
+    hasDate && selected
+      ? format(selected, THEME_DATE_DISPLAY_FORMAT, { locale: ja })
       : "日付を選択";
 
   return (
-    <div className={cn("w-full max-w-[12rem]", className)}>
+    <div className={cn("w-full min-w-0", className)}>
       <Label htmlFor={id}>{label}</Label>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
@@ -50,9 +55,20 @@ export function ThemeDateField({ label, value, onChange, required, className }: 
             type="button"
             variant="default"
             id={id}
-            className="mt-1 h-auto min-h-9 w-full justify-between gap-2 px-3 py-2 text-left font-normal text-[var(--foreground)]"
+            className={cn(
+              inputBaseClassName,
+              "mt-1 h-auto min-h-9 w-full justify-between gap-2 text-left font-normal hover:bg-[color:color-mix(in_srgb,var(--background)_88%,black_12%)]",
+            )}
           >
-            <span className="min-w-0 truncate">{display}</span>
+            <span
+              className={cn(
+                "min-w-0 flex-1 whitespace-normal text-left leading-snug",
+                !hasDate && "text-[var(--muted)]",
+                hasDate && "text-[var(--foreground)]",
+              )}
+            >
+              {display}
+            </span>
             <CalendarIcon className="h-4 w-4 shrink-0 text-[var(--muted)]" aria-hidden />
           </Button>
         </PopoverTrigger>

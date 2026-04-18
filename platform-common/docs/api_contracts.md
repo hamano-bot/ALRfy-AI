@@ -77,7 +77,7 @@
     {
       "app_key": "project-manager",
       "title": "案件管理",
-      "route": "/project-manager",
+      "route": "/project-list",
       "required_role": "editor",
       "visibility": "visible_disabled",
       "reason": "insufficient_role"
@@ -121,7 +121,57 @@
 | ポータル（PHP） | Next（プロキシ） |
 |-----------------|------------------|
 | `GET /portal/api/my-projects` | `GET /api/portal/my-projects`（Cookie 転送） |
+| `GET /portal/api/project?project_id=` | `GET /api/portal/project?project_id=`（Cookie 転送） |
+| `PATCH /portal/api/project` | `PATCH /api/portal/project`（JSON を Zod で検証のうえ転送） |
 | `POST /portal/api/projects` | `POST /api/portal/projects`（JSON ボディを Zod で検証のうえ転送） |
+
+## GET /project（単一案件の登録内容）
+
+所属メンバー向けに、`projects` と関連テーブル（リニューアル URL・Redmine・任意リンク・参加者）を集約して返す。
+
+### request
+- 公開URL: `GET /portal/api/project?project_id=<int>`
+- 実装ファイル: `portal/api/get_patch_project.php`（GET）
+- **認可:** ログイン必須。**当該 `project_id` の `project_members` に行があること**（なければ `403`）。
+
+### response (200)
+```json
+{
+  "success": true,
+  "project": {
+    "id": 4,
+    "name": "案件名",
+    "slug": "project-slug",
+    "client_name": null,
+    "site_type": "corporate",
+    "site_type_other": null,
+    "is_renewal": false,
+    "kickoff_date": "2026-04-01",
+    "release_due_date": null,
+    "renewal_urls": ["https://example.com/old"],
+    "redmine_links": [{ "redmine_project_id": 1, "redmine_base_url": null }],
+    "misc_links": [{ "label": "Wiki", "url": "https://..." }],
+    "participants": [{ "user_id": 10, "role": "owner", "display_name": "user@example.com" }]
+  }
+}
+```
+
+`display_name` は現状 `users.email` を用いる場合がある。
+
+## PATCH /project（単一案件の更新）
+
+### request
+- 公開URL: `PATCH /portal/api/project`
+- 実装ファイル: `portal/api/get_patch_project.php`（PATCH）
+- `Content-Type: application/json`
+- **認可:** ログイン必須。**当該案件の `project_members.role` が `owner` または `editor`**。`viewer` は `403`。
+- **body:** `project_id`（必須）に加え、POST `/portal/api/projects` と**同じフィールド**（`name` … `participants`）を送る。**`slug` はサーバーが更新しない**（名前変更時も据え置き）。
+
+### response (200)
+GET と同形の `success` + `project`。
+
+### エラー
+- `400` / `401` / `403` / `404` / `500` — バリデーション・権限・未検出・DB
 
 ## POST /projects（案件の新規作成）
 

@@ -118,7 +118,7 @@
 | [project-manager/apps/web/app/api/portal/my-projects/route.ts](../../apps/web/app/api/portal/my-projects/route.ts) | 所属案件一覧 BFF（上流 `/portal/api/my-projects`）。 |
 | [project-manager/apps/web/app/components/EffectiveProjectRoleBanner.tsx](../../apps/web/app/components/EffectiveProjectRoleBanner.tsx) | `project_id` 解決（`window.location.search` + `usePathname`）+ BFF 取得 + ヘッダー直下1行表示。 |
 | [project-manager/apps/web/lib/portal-project-permission.ts](../../apps/web/lib/portal-project-permission.ts) | 詳細 RSC 用: 上流 `GET /portal/api/project-permission` を Cookie 付きで取得（帯と同一契約）。 |
-| [project-manager/apps/web/app/project-manager/[projectId]/ProjectDetailView.tsx](../../apps/web/app/project-manager/[projectId]/ProjectDetailView.tsx) | 案件メタ（`my-projects` 行）+ 実効ロール（`project-permission`）+ ドキュメントルート案。 |
+| [project-manager/apps/web/app/project-list/[projectId]/ProjectDetailView.tsx](../../apps/web/app/project-list/[projectId]/ProjectDetailView.tsx) | 案件メタ（`my-projects` 行）+ 実効ロール（`project-permission`）+ ドキュメントルート案。 |
 
 ---
 
@@ -130,5 +130,5 @@
 - 追記: §9 **`project_id` 出所の初期実装決定**（クエリ優先 → 任意 `NEXT_PUBLIC_DEFAULT_PROJECT_ID` → なければ非表示）。
 - 追記: **`GET /api/portal/me` BFF**（`NEXT_PUBLIC_PROFILE_API_ENDPOINT` 廃止、クライアントは同一オリジンのみ）。
 - 追記: **`dashboard.php`** — アプリ用ロールと案件単位の **ラベル分け** + 任意 **`?project_id=`** で `project-permission` 同基準の2つ目ピル。
-- 追記: **`GET /portal/api/my-projects`** + BFF **`/api/portal/my-projects`** + **`/project-manager`** 一覧（Server Component）。
-- 追記: **`/project-manager/[projectId]`** — RSC で **`my-projects` + `project-permission`** 並列取得、ドキュメント用ルート案をページ内に記載。
+- 追記: **`GET /portal/api/my-projects`** + BFF **`/api/portal/my-projects`** + **`/project-list`** 一覧（Server Component）。
+- 追記: **`/project-list/[projectId]`** — RSC で **`my-projects` + `project-permission`** 並列取得、ドキュメント用ルート案をページ内に記載。

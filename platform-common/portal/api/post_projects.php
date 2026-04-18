@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__, 2) . '/auth/bootstrap.php';
 require_once dirname(__DIR__, 2) . '/auth/permission_helper.php';
+require_once dirname(__DIR__) . '/includes/project_registration_schema.php';
 
 header('Content-Type: application/json; charset=UTF-8');
 
@@ -305,9 +306,9 @@ if (isset($payload['participants'])) {
             exit;
         }
         $role = $row['role'] ?? '';
-        if ($role !== 'editor' && $role !== 'viewer') {
+        if ($role !== 'editor' && $role !== 'viewer' && $role !== 'owner') {
             http_response_code(400);
-            echo json_encode(['success' => false, 'message' => 'participants.role は editor または viewer にしてください。'], JSON_UNESCAPED_UNICODE);
+            echo json_encode(['success' => false, 'message' => 'participants.role は owner / editor / viewer にしてください。'], JSON_UNESCAPED_UNICODE);
             exit;
         }
         if (!isset($participantMap[$uid]) || rolePriority($role) > rolePriority($participantMap[$uid])) {
@@ -361,6 +362,19 @@ try {
     exit;
 }
 
+try {
+    ensureProjectRegistrationSchema($pdo);
+} catch (Throwable $e) {
+    error_log('[platform-common/post_projects ensure schema] ' . $e->getMessage());
+    http_response_code(500);
+    $msg = 'プロジェクトの登録に失敗しました。スキーマ（マイグレーション）を確認してください。';
+    if ($e instanceof RuntimeException && str_contains($e->getMessage(), '20260417')) {
+        $msg = $e->getMessage();
+    }
+    echo json_encode(['success' => false, 'message' => $msg], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 if (!userIdExists($pdo, $creatorUserId)) {
     http_response_code(403);
     echo json_encode(['success' => false, 'message' => 'ユーザーが見つかりません。'], JSON_UNESCAPED_UNICODE);
@@ -373,6 +387,24 @@ foreach (array_keys($participantMap) as $pid) {
         echo json_encode(['success' => false, 'message' => '存在しない user_id が participants に含まれています。'], JSON_UNESCAPED_UNICODE);
         exit;
     }
+}
+
+$ownerCount = 0;
+foreach ($participantMap as $uid => $role) {
+    if ($role === 'owner') {
+        $ownerCount++;
+    }
+}
+if ($ownerCount < 1) {
+    http_response_code(400);
+    echo json_encode(['success' => false, 'message' => 'オーナーは少なくとも1名必要です。'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+if (!isset($participantMap[$creatorUserId])) {
+    http_response_code(400);
+    echo json_encode(['success' => false, 'message' => '作成者を参加者（オーナー・編集・参照のいずれか）に含めてください。'], JSON_UNESCAPED_UNICODE);
+    exit;
 }
 
 try {
@@ -459,16 +491,7 @@ try {
     $insMember = $pdo->prepare(
         'INSERT INTO project_members (project_id, user_id, role) VALUES (:pid, :uid, :role)'
     );
-    $insMember->execute([
-        ':pid' => $projectId,
-        ':uid' => $creatorUserId,
-        ':role' => 'owner',
-    ]);
-
     foreach ($participantMap as $uid => $role) {
-        if ($uid === $creatorUserId) {
-            continue;
-        }
         $insMember->execute([
             ':pid' => $projectId,
             ':uid' => $uid,
@@ -490,18 +513,41 @@ try {
     exit;
 }
 
+$verifyStmt = $pdo->prepare(
+    'SELECT id, name, slug, client_name, site_type, site_type_other, is_renewal, kickoff_date, release_due_date
+     FROM projects WHERE id = :id LIMIT 1'
+);
+$verifyStmt->execute([':id' => $projectId]);
+$verified = $verifyStmt->fetch(PDO::FETCH_ASSOC);
+if ($verified === false || !is_array($verified)) {
+    error_log('[platform-common/post_projects verify] row missing after commit for id=' . $projectId);
+    http_response_code(500);
+    echo json_encode([
+        'success' => false,
+        'message' => '登録後の確認に失敗しました。データベースを確認してください。',
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+$vSlug = $verified['slug'] ?? null;
+$vCn = $verified['client_name'] ?? null;
+$vSt = $verified['site_type'] ?? null;
+$vSto = $verified['site_type_other'] ?? null;
+$vKick = $verified['kickoff_date'] ?? null;
+$vRel = $verified['release_due_date'] ?? null;
+
 http_response_code(201);
 echo json_encode([
     'success' => true,
     'project' => [
-        'id' => $projectId,
-        'name' => $name,
-        'slug' => $slug,
-        'client_name' => $clientName,
-        'site_type' => $siteType,
-        'site_type_other' => $siteTypeOther,
-        'is_renewal' => $isRenewal,
-        'kickoff_date' => $kickoffDate,
-        'release_due_date' => $releaseDueDate,
+        'id' => (int)($verified['id'] ?? 0),
+        'name' => (string)($verified['name'] ?? ''),
+        'slug' => is_string($vSlug) && $vSlug !== '' ? $vSlug : null,
+        'client_name' => is_string($vCn) && $vCn !== '' ? $vCn : null,
+        'site_type' => is_string($vSt) && $vSt !== '' ? $vSt : null,
+        'site_type_other' => is_string($vSto) && $vSto !== '' ? $vSto : null,
+        'is_renewal' => (int)($verified['is_renewal'] ?? 0) === 1,
+        'kickoff_date' => is_string($vKick) && $vKick !== '' ? $vKick : null,
+        'release_due_date' => is_string($vRel) && $vRel !== '' ? $vRel : null,
     ],
 ], JSON_UNESCAPED_UNICODE);

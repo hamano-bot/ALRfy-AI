@@ -47,8 +47,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ja-JP">
-      <body className={`${inter.className} ${montserrat.variable} min-h-screen antialiased`}>
+    <html lang="ja-JP" className="h-full">
+      <body className={`${inter.className} ${montserrat.variable} h-full min-h-0 overflow-hidden antialiased`}>
         <PortalAppsProvider>
           <DashboardShell>{children}</DashboardShell>
         </PortalAppsProvider>

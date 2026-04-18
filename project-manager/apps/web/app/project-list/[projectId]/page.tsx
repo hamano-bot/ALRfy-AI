@@ -22,9 +22,10 @@ export default async function ProjectManagerDetailPage({ params }: PageProps) {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="modern-scrollbar min-h-0 flex-1 overflow-y-auto">
+      <div className="space-y-5">
       <nav className="text-xs text-[var(--muted)]">
-        <Link href="/project-manager" className="text-[color:color-mix(in_srgb,var(--accent)_82%,var(--foreground)_18%)] hover:underline">
+        <Link href="/project-list" className="text-[color:color-mix(in_srgb,var(--accent)_82%,var(--foreground)_18%)] hover:underline">
           案件一覧
         </Link>
         <span className="mx-1.5">/</span>
@@ -32,6 +33,7 @@ export default async function ProjectManagerDetailPage({ params }: PageProps) {
       </nav>
 
       <ProjectDetailView projectId={projectId} />
+      </div>
     </div>
   );
 }

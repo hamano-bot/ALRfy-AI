@@ -21,14 +21,20 @@ function portalResolveAppRoute(string $appKey, string $dbRoute): string
         if (is_string($override) && $override !== '') {
             return $override;
         }
-        // 案件管理アプリの公開パスは `/project-manager`。旧シードの `/projects` は 404 になるため寄せる。
-        if ($dbRoute === '/projects' || $dbRoute === '') {
-            return '/project-manager';
+        // 案件管理アプリの公開パスは `/project-list`。旧 `/project-manager`・`/projects` は Next 側で `/project-list` へ寄せる。
+        if ($dbRoute === '/projects' || $dbRoute === '' || $dbRoute === '/project-manager') {
+            return '/project-list';
+        }
+        if (str_starts_with($dbRoute, '/project-manager/')) {
+            return '/project-list' . substr($dbRoute, strlen('/project-manager'));
         }
         if (str_starts_with($dbRoute, '/project-manager')) {
+            return '/project-list';
+        }
+        if (str_starts_with($dbRoute, '/project-list')) {
             return $dbRoute;
         }
-        return '/project-manager' . $dbRoute;
+        return '/project-list' . $dbRoute;
     }
 
     return $dbRoute;

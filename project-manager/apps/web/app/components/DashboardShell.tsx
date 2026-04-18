@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { Briefcase, CalendarDays, ChevronLeft, ExternalLink } from "lucide-react";
+import { ChevronLeft, ExternalLink } from "lucide-react";
 import { isExternalPortalRoute, isPortalAppInteractive } from "../lib/portal-app-helpers";
+import { PortalAppIcon } from "../lib/portal-app-icons";
 import { Button, accentButtonSurfaceBaseClassName } from "./ui/button";
 import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "./ui/sheet";
@@ -24,20 +25,6 @@ type SidebarNavItem = {
   disabled?: boolean;
   disabledReason?: string | null;
 };
-
-/** Meeting 導線は常に議事録（:8080）。`NEXT_PUBLIC_MEETING_URL` は参照しない。 */
-const MEETING_HREF = "http://minutes-record.com:8080/";
-
-function iconForPortalApp(appKey: string): ReactNode {
-  if (appKey === "project-manager") {
-    return <Briefcase className="h-3.5 w-3.5" aria-hidden />;
-  }
-  if (appKey === "minutes-record") {
-    return "▷";
-  }
-  const letter = appKey.trim().slice(0, 1);
-  return letter ? letter.toUpperCase() : "?";
-}
 
 const AI_OPEN_STORAGE_KEY = "alrfy-ai-chat-open";
 const THEME_STORAGE_KEY = "alrfy-theme";
@@ -113,25 +100,18 @@ export function DashboardShell({ children }: DashboardShellProps) {
         key: `portal-${app.app_key}`,
         href: app.route || "#",
         label: app.title,
-        icon: iconForPortalApp(app.app_key),
+        icon: <PortalAppIcon appKey={app.app_key} className="h-3.5 w-3.5" />,
         external,
         disabled: !interactive,
         disabledReason: app.reason,
       });
     }
-    items.push({
-      key: "meeting",
-      href: MEETING_HREF,
-      label: "Meeting",
-      icon: <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />,
-      external: true,
-    });
     const pmInteractive = pmApp ? isPortalAppInteractive(pmApp.visibility) : true;
     items.push({
       key: "project-manager-fixed",
-      href: "/project-manager",
+      href: "/project-list",
       label: pmApp?.title ?? "Project",
-      icon: iconForPortalApp("project-manager"),
+      icon: <PortalAppIcon appKey="project-manager" className="h-3.5 w-3.5" />,
       external: false,
       disabled: !pmInteractive,
       disabledReason: pmApp?.reason ?? null,
@@ -241,7 +221,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
   }, []);
 
   return (
-    <div className="relative min-h-screen bg-[var(--background)] text-[var(--foreground)]" data-theme={theme}>
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-[var(--background)] text-[var(--foreground)]" data-theme={theme}>
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(59,130,246,0.14),_transparent_52%)]" />
       <header className="sticky top-0 z-40 h-14 border-b border-[color:color-mix(in_srgb,var(--border)_86%,transparent)] bg-[color:color-mix(in_srgb,var(--background)_92%,black)]/95 backdrop-blur md:h-16">
         <div
@@ -270,14 +250,30 @@ export function DashboardShell({ children }: DashboardShellProps) {
               />
               <span>Menu</span>
             </Button>
-            <div className="min-w-0">
-              <p className="brand-led text-lg font-bold tracking-tight md:text-2xl" lang="en" translate="no">
-                ALRfy-AI
-              </p>
-              <p className="hidden text-xs text-[var(--muted)] md:block" lang="en">
-                All-REC to Record: Link & Datafy by AI
-              </p>
-            </div>
+            <Link
+              href="/"
+              className="group/brand flex min-w-0 items-center gap-2.5 md:gap-3"
+              aria-label="ALRfy-AI ホームへ"
+            >
+              <span className="relative flex shrink-0 items-center justify-center" aria-hidden="true">
+                <img
+                  src="/brand/alrfy-ai-logo.svg"
+                  alt=""
+                  width={34}
+                  height={40}
+                  className="h-8 w-auto object-contain [filter:drop-shadow(0_1px_2px_rgba(0,0,0,0.35))] md:h-9"
+                  decoding="async"
+                />
+              </span>
+              <div className="min-w-0">
+                <p className="brand-led text-lg font-bold tracking-tight md:text-2xl" lang="en" translate="no">
+                  ALRfy-AI
+                </p>
+                <p className="hidden text-xs text-[var(--muted)] md:block" lang="en">
+                  All-REC to Record: Link & Datafy by AI
+                </p>
+              </div>
+            </Link>
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -306,14 +302,14 @@ export function DashboardShell({ children }: DashboardShellProps) {
       <EffectiveProjectRoleBanner />
 
       <div
-        className="mx-auto flex w-full gap-3 py-4"
+        className="mx-auto flex min-h-0 w-full flex-1 items-stretch gap-3 overflow-hidden py-4"
         style={{ paddingInline: "clamp(12px, 2vw, 24px)" }}
       >
         <aside
           id="dashboard-sidebar-nav"
           className={[
             "relative z-0 shrink-0 overflow-x-hidden overflow-y-auto rounded-2xl border border-slate-800/80 bg-[color:color-mix(in_srgb,var(--surface)_88%,transparent)] p-2 modern-scrollbar",
-            "h-[calc(100vh-6rem)] min-h-0 min-w-0 transition-[width] duration-200 ease-out motion-reduce:transition-none",
+            "min-h-0 min-w-0 self-stretch transition-[width] duration-200 ease-out motion-reduce:transition-none",
             isSidebarOpen ? "w-[240px]" : "w-[72px]",
           ].join(" ")}
           aria-label="左サイドメニュー"
@@ -411,7 +407,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
           </nav>
         </aside>
 
-        <main className="surface-card min-h-[calc(100vh-7rem)] min-w-0 flex-1 p-4 md:p-6">
+        <main className="surface-card flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-4 md:p-6">
           {children}
         </main>
       </div>
@@ -433,6 +429,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
         {isAiOpen ? (
           isDesktop ? (
             <SheetContent
+              key="ai-chat-sheet-desktop"
               side="right"
               className="top-16 h-[calc(100vh-4rem)]"
               aria-label="AIチャットドロワー"
@@ -464,7 +461,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
               </div>
             </SheetContent>
           ) : (
-            <SheetContent side="bottom" aria-label="AIチャットBottomSheet">
+            <SheetContent key="ai-chat-sheet-mobile" side="bottom" aria-label="AIチャットBottomSheet">
               <SheetHeader>
                 <SheetTitle>AIチャット（実装までしばらくお待ちください）</SheetTitle>
                 <span className="text-[11px] text-[var(--muted)]">

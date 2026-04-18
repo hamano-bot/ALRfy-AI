@@ -39,6 +39,19 @@ export function formatSiteTypeLabel(siteType: string | null, siteTypeOther: stri
   return SITE_TYPE_LABEL_JA[siteType] ?? siteType;
 }
 
+/** 一覧の `project_members.role` 表示用（API は英字のまま） */
+const PROJECT_ROLE_LABEL_JA: Record<string, string> = {
+  owner: "オーナー",
+  editor: "編集",
+  viewer: "参照",
+};
+
+export function formatProjectRoleLabelJa(role: string): string {
+  const raw = typeof role === "string" ? role : String(role ?? "");
+  const key = raw.trim().toLowerCase();
+  return PROJECT_ROLE_LABEL_JA[key] ?? raw;
+}
+
 export type MyProjectsFetchResult =
   | { ok: true; status: number; text: string; contentType: string }
   | { ok: false; reason: "missing_config" }

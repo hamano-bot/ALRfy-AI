@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__, 2) . '/auth/bootstrap.php';
+require_once dirname(__DIR__) . '/includes/user_redmine_schema.php';
 
 header('Content-Type: application/json; charset=UTF-8');
 
@@ -82,6 +83,18 @@ try {
     error_log('[platform-common/patch_user_redmine pdo] ' . $e->getMessage());
     http_response_code(500);
     echo json_encode(['success' => false, 'message' => 'データベース接続に失敗しました。'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+try {
+    ensureUserRedmineColumns($pdo);
+} catch (Throwable $e) {
+    error_log('[platform-common/patch_user_redmine ensure columns] ' . $e->getMessage());
+    http_response_code(500);
+    echo json_encode([
+        'success' => false,
+        'message' => '保存に失敗しました。users に redmine 列があるかマイグレーションを確認してください。',
+    ], JSON_UNESCAPED_UNICODE);
     exit;
 }
 

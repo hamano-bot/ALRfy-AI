@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/forwarded_request.php';
+
 /**
  * platform-common 用の共通ブートストラップ。
  * 既存の minutes_record 系 config.php を優先的に再利用しつつ、
@@ -56,10 +58,10 @@ function requirePlatformConfig(): void
     // platform-common 側の公開オリジンと OAuth リダイレクト先を現在ホスト基準へ固定する。
     // minutes_record_dev の config.php は resolveGoogleRedirectUri() で APP_PUBLIC_BASE_URL を最優先するため、
     // ここを上書きしないと .env の minutes-record.com へ戻ってしまう。
-    $httpHost = isset($_SERVER['HTTP_HOST']) && is_string($_SERVER['HTTP_HOST']) ? trim($_SERVER['HTTP_HOST']) : '';
+    // Next.js 等のプロキシ経由では X-Forwarded-Host を優先する。
+    $httpHost = platformResolvePublicHost();
     if ($httpHost !== '') {
-        $https = isset($_SERVER['HTTPS']) && is_string($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) !== 'off';
-        $scheme = $https ? 'https' : 'http';
+        $scheme = platformResolvePublicScheme();
         $publicBase = $scheme . '://' . $httpHost;
         putenv('APP_PUBLIC_BASE_URL=' . $publicBase);
         $_ENV['APP_PUBLIC_BASE_URL'] = $publicBase;

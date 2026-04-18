@@ -46,7 +46,7 @@ export const portalProjectCreateBodySchema = z
       .array(
         z.object({
           user_id: z.number().int().positive(),
-          role: z.enum(["editor", "viewer"]),
+          role: z.enum(["owner", "editor", "viewer"]),
         }),
       )
       .optional(),
@@ -73,3 +73,12 @@ export const portalProjectCreateBodySchema = z
   });
 
 export type PortalProjectCreateBody = z.infer<typeof portalProjectCreateBodySchema>;
+
+/** BFF が PHP `PATCH /portal/api/project` に転送する前に検証するボディ。 */
+export const portalProjectPatchBodySchema = portalProjectCreateBodySchema.and(
+  z.object({
+    project_id: z.number().int().positive(),
+  }),
+);
+
+export type PortalProjectPatchBody = z.infer<typeof portalProjectPatchBodySchema>;

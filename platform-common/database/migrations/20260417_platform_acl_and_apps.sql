@@ -126,8 +126,8 @@ ON DUPLICATE KEY UPDATE
 -- ------------------------------------------------------------
 INSERT INTO `apps` (`app_key`, `name`, `route`, `is_active`, `display_order`)
 VALUES
-  ('minutes-record', '議事録アプリ', '/minutes', 1, 10),
-  ('project-manager', '案件管理', '/project-manager', 1, 20)
+  ('minutes-record', 'Meeting', '/minutes', 1, 10),
+  ('project-manager', 'Project', '/project-manager', 1, 20)
 ON DUPLICATE KEY UPDATE
   `name` = VALUES(`name`),
   `route` = VALUES(`route`),

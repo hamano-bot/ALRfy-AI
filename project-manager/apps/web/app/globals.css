@@ -21,23 +21,24 @@
   --brand-glow-b-strong: rgba(192, 132, 252, 0.16);
 }
 
+/* ミッドナイト: デフォルト（青スレート）と差別化した「夜 × ランプ灯り」黄色・ゴールド基調 */
 :root[data-theme="midnight"] {
-  --surface: #161d29;
-  --surface-soft: #111723;
-  --border: #273244;
-  --background: #090d14;
-  --foreground: #e4ebf7;
-  --muted: #94a6bf;
-  --accent: #60a5fa;
-  --overlay: rgba(2, 6, 23, 0.72);
-  --accent-contrast: #f8fbff;
-  --brand-grad-from: #67e8f9;
-  --brand-grad-mid: #818cf8;
-  --brand-grad-to: #c4b5fd;
-  --brand-glow-a: rgba(103, 232, 249, 0.14);
-  --brand-glow-b: rgba(129, 140, 248, 0.11);
-  --brand-glow-a-strong: rgba(103, 232, 249, 0.23);
-  --brand-glow-b-strong: rgba(129, 140, 248, 0.18);
+  --surface: #1c1810;
+  --surface-soft: #14110a;
+  --border: #4a3f2a;
+  --background: #0c0a06;
+  --foreground: #f4ecd8;
+  --muted: #a89472;
+  --accent: #e5b012;
+  --overlay: rgba(10, 8, 4, 0.78);
+  --accent-contrast: #140f06;
+  --brand-grad-from: #fef08a;
+  --brand-grad-mid: #facc15;
+  --brand-grad-to: #ca8a04;
+  --brand-glow-a: rgba(250, 204, 21, 0.22);
+  --brand-glow-b: rgba(234, 179, 8, 0.16);
+  --brand-glow-a-strong: rgba(254, 240, 138, 0.38);
+  --brand-glow-b-strong: rgba(202, 138, 4, 0.28);
 }
 
 :root[data-theme="default"] {
@@ -69,23 +70,24 @@
   --brand-glow-b-strong: rgba(56, 189, 248, 0.19);
 }
 
+/* キュート: ピンク・ローズ基調（ダーク背景のまま） */
 :root[data-theme="cute"] {
-  --surface: #221933;
-  --surface-soft: #1a1229;
-  --border: #41315b;
-  --background: #100d19;
-  --foreground: #ece6ff;
-  --muted: #a79bbf;
-  --accent: #a78bfa;
-  --overlay: rgba(12, 6, 26, 0.64);
-  --accent-contrast: #faf5ff;
-  --brand-grad-from: #f0abfc;
-  --brand-grad-mid: #c084fc;
-  --brand-grad-to: #a78bfa;
-  --brand-glow-a: rgba(240, 171, 252, 0.14);
-  --brand-glow-b: rgba(192, 132, 252, 0.12);
-  --brand-glow-a-strong: rgba(240, 171, 252, 0.22);
-  --brand-glow-b-strong: rgba(192, 132, 252, 0.18);
+  --surface: #1f1018;
+  --surface-soft: #150c11;
+  --border: #4d3042;
+  --background: #0e080c;
+  --foreground: #fce7f3;
+  --muted: #c49aad;
+  --accent: #f472b6;
+  --overlay: rgba(14, 6, 10, 0.72);
+  --accent-contrast: #140208;
+  --brand-grad-from: #fbcfe8;
+  --brand-grad-mid: #f472b6;
+  --brand-grad-to: #db2777;
+  --brand-glow-a: rgba(251, 207, 232, 0.2);
+  --brand-glow-b: rgba(244, 114, 182, 0.14);
+  --brand-glow-a-strong: rgba(252, 231, 243, 0.32);
+  --brand-glow-b-strong: rgba(219, 39, 119, 0.24);
 }
 
 /* ダッシュボードの全テーマはダーク系。date / time / select のネイティブ UI をライトにしない。 */

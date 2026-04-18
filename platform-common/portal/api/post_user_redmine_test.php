@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__, 2) . '/auth/bootstrap.php';
 require_once dirname(__DIR__) . '/includes/redmine_http.php';
+require_once dirname(__DIR__) . '/includes/user_redmine_schema.php';
 
 header('Content-Type: application/json; charset=UTF-8');
 
@@ -43,6 +44,15 @@ try {
     error_log('[platform-common/post_user_redmine_test pdo] ' . $e->getMessage());
     http_response_code(500);
     echo json_encode(['success' => false, 'message' => 'データベース接続に失敗しました。'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+try {
+    ensureUserRedmineColumns($pdo);
+} catch (Throwable $e) {
+    error_log('[platform-common/post_user_redmine_test ensure columns] ' . $e->getMessage());
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => 'データベースのスキーマ更新に失敗しました。'], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
