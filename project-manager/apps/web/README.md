@@ -48,7 +48,7 @@ npm run dev
 URL の役割:
 
 - **`/`** — ダッシュボード（Next）
-- **`/project-list`** — Project（案件一覧・Next）
+- **`/project-list`** — Project一覧（Next）
 
 例:
 
@@ -132,7 +132,7 @@ PowerShell で PATH が通らない場合は `.\dev-lan.ps1`。
 
 ヘッダーの **表示名・テーマ初期値**は `GET /api/portal/me`（→ PHP `GET /portal/api/me`）です。`PORTAL_API_BASE_URL` が無い、または未ログインのときはデモ表示のままです。
 
-**`/project-list`** の **所属案件一覧**は、サーバー側で `GET /portal/api/my-projects` を呼びます（同一オリジンの BFF は `GET /api/portal/my-projects`）。**`/project-list/[projectId]`** は同じくサーバー側で **`my-projects`（メタ）と `project-permission`（実効ロール）** を並列取得します（ダッシュボード帯と同一上流）。PHP にログイン済み Cookie が届くよう、`.env.local` の `PORTAL_API_BASE_URL` と PHP 起動を揃えてください。旧パス **`/project-manager`** は **`/project-list` へ 301 リダイレクト**します。
+**`/project-list`** の **所属 Project 一覧**は、サーバー側で `GET /portal/api/my-projects` を呼びます（同一オリジンの BFF は `GET /api/portal/my-projects`）。**`/project-list/[projectId]`** は同じくサーバー側で **`my-projects`（メタ）と `project-permission`（実効ロール）** を並列取得します（ダッシュボード帯と同一上流）。PHP にログイン済み Cookie が届くよう、`.env.local` の `PORTAL_API_BASE_URL` と PHP 起動を揃えてください。旧パス **`/project-manager`** は **`/project-list` へ 301 リダイレクト**します。
 
 方針の詳細は [`bff-portal-integration-decisions.md`](../../docs/engineering/bff-portal-integration-decisions.md) を参照してください。
 

@@ -12,10 +12,27 @@ alwaysApply: true
 - 実装は `*.php` でもよいが、**リライト／フロントコントローラ／Next の rewrites** で論理パスにマッピングする。
 - Google OAuth 等の **承認済みリダイレクト URI** は、ブラウザが実際に開くURLと **完全一致**（拡張子なしに統一するなら Console も同じ形で登録）。
 
+## 本リポジトリでの実装メモ
+
+- **Next.js（`project-manager/apps/web`）**  
+  - ブラウザ・クライアントが触るのは原則 **`/api/...` の Route Handler** や **App Router のページパス**に限定する。  
+  - `fetch("/api/portal/...")` のように **拡張子なし**を維持する。BFF がバックエンドの PHP を呼ぶときも、**環境変数に書くベースURL・パスは論理パス（拡張子なし）**を正とする（実サーバのリライトに合わせる）。
+- **`Link` / `router.push` / `redirect()`** の文字列に **`*.php` を含めない**（新規）。深いリンクも HTML アンカーで `.php` を露出させない。
+- **Cron・外部Webhook・メール内URL** など、設定ファイルや `.env` に書くコールバックURLも **拡張子なしを正**とする。
+
+## 表（新規で使う／避ける）
+
+| 種別 | 良い例 | 避ける例（新規） |
+|------|--------|------------------|
+| API（論理） | `/api/me`, `/api/v1/projects/10/permission` | `/portal/api/get_me.php` |
+| 認証 | `/login`, `/auth/callback` | `/login.php` |
+| 画面 | `/project-list`, `/minutes` | `/project-list.php` |
+
 ## 避ける（新規）
 
 - 公開URLに `something.php` を含める設計。
 - ドキュメントやクライアントに `get_foo.php` 形式を正として書き残す。
+- **相対パスで `../foo.php` に逃げる**書き方（新規コードでは論理パスへ統一）。
 
 ## レガシー
 
@@ -23,4 +40,4 @@ alwaysApply: true
 
 ## 参照
 
-- 詳細: `platform-common/docs/url_routing_rules.md`
+- 詳細（Apache/Nginx/PHP 組み込みサーバー/移行手順）: `platform-common/docs/url_routing_rules.md`

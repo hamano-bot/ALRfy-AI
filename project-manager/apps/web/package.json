@@ -13,7 +13,7 @@
     "rebuild": "npm run clean && npm run build",
     "start": "node ./node_modules/next/dist/bin/next start",
     "start:lan": "node ./node_modules/next/dist/bin/next start -p 8001 -H 0.0.0.0",
-    "lint": "node ./node_modules/next/dist/bin/next lint",
+    "lint": "eslint .",
     "repair": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/repair-node-modules.ps1",
     "repair:admin": "node -e \"require('child_process').execSync('explorer /select,'+require('path').resolve('scripts/repair-node-modules-admin.cmd'),{stdio:'inherit'})\""
   },
@@ -29,6 +29,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
+    "exceljs": "^4.4.0",
     "japanese-holidays": "^1.0.10",
     "lucide-react": "^1.8.0",
     "next": "^16.2.4",

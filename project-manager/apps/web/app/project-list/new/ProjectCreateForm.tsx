@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ThemeDateField } from "@/app/components/ThemeDateField";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
@@ -13,6 +13,8 @@ import {
 } from "@/lib/portal-project-create-body";
 import type { PortalProjectDetail } from "@/lib/portal-project";
 import { PROJECT_ROLE_LABEL_JA } from "@/lib/project-role-labels";
+import { projectEditFormFingerprintFromDetail, projectEditFormFingerprintFromFormState } from "@/lib/project-edit-form-fingerprint";
+import { UNSAVED_LEAVE_CONFIRM_MESSAGE } from "@/lib/unsaved-navigation";
 import { cn } from "@/lib/utils";
 import { GripVertical } from "lucide-react";
 
@@ -445,6 +447,8 @@ export type ProjectCreateFormProps = {
   initialDetail?: PortalProjectDetail;
   onEditCancel?: () => void;
   onEditSaved?: () => void;
+  /** 編集モードでフォームが初期値から変わったか（離脱確認用） */
+  onEditDirtyChange?: (dirty: boolean) => void;
 };
 
 export function ProjectCreateForm({
@@ -453,6 +457,7 @@ export function ProjectCreateForm({
   initialDetail,
   onEditCancel,
   onEditSaved,
+  onEditDirtyChange,
 }: ProjectCreateFormProps = {}) {
   const router = useRouter();
   const isEditMode = mode === "edit" && editProjectId !== undefined && initialDetail !== undefined;
@@ -484,6 +489,8 @@ export function ProjectCreateForm({
 
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  /** 編集モードで initialDetail から state を流し込み終わるまで dirty にしない */
+  const [editFormHydrated, setEditFormHydrated] = useState(false);
 
   const participantsRef = useRef({ owners: [] as number[], editors: [] as number[], viewers: [] as number[] });
   participantsRef.current = { owners, editors, viewers };
@@ -532,8 +539,10 @@ export function ProjectCreateForm({
 
   useEffect(() => {
     if (!isEditMode || !initialDetail) {
+      setEditFormHydrated(false);
       return;
     }
+    setEditFormHydrated(false);
     const d = initialDetail;
     setName(d.name);
     setClientName(d.client_name ?? "");
@@ -606,7 +615,60 @@ export function ProjectCreateForm({
         setFormError("セッション情報の取得に失敗しました。");
       }
     })();
+
+    setEditFormHydrated(true);
   }, [isEditMode, initialDetail]);
+
+  const editFingerprintBaseline = useMemo(
+    () => (isEditMode && initialDetail ? projectEditFormFingerprintFromDetail(initialDetail) : null),
+    [isEditMode, initialDetail],
+  );
+
+  const editFingerprintCurrent = useMemo(
+    () =>
+      projectEditFormFingerprintFromFormState({
+        name,
+        clientName,
+        siteType,
+        siteTypeOther,
+        isRenewal,
+        renewalUrls,
+        kickoff,
+        releaseDue,
+        redmineRows,
+        miscLinks,
+        owners,
+        editors,
+        viewers,
+      }),
+    [
+      name,
+      clientName,
+      siteType,
+      siteTypeOther,
+      isRenewal,
+      renewalUrls,
+      kickoff,
+      releaseDue,
+      redmineRows,
+      miscLinks,
+      owners,
+      editors,
+      viewers,
+    ],
+  );
+
+  const editFormDirty =
+    Boolean(isEditMode && initialDetail && editFormHydrated && editFingerprintBaseline !== null) &&
+    editFingerprintCurrent !== editFingerprintBaseline;
+
+  useEffect(() => {
+    if (!isEditMode) {
+      onEditDirtyChange?.(false);
+      return;
+    }
+    onEditDirtyChange?.(editFormDirty);
+  }, [isEditMode, editFormDirty, onEditDirtyChange]);
 
   const addRedmineRow = () => {
     setRedmineRows((r) => [...r, { id: newRedmineRowId(), pick: null }]);
@@ -998,6 +1060,7 @@ export function ProjectCreateForm({
           </Label>
           <Select
             required
+            name={`${idPrefix}-site-type`}
             value={siteType === "" ? "__none__" : siteType}
             onValueChange={(v) => setSiteType(v === "__none__" ? "" : (v as typeof siteType))}
           >
@@ -1034,11 +1097,25 @@ export function ProjectCreateForm({
         <h2 className="pm-section-heading">区分</h2>
         <div className="flex gap-4 text-sm">
           <Label className="flex cursor-pointer items-center gap-2 text-[var(--foreground)]">
-            <input type="radio" className="accent-[var(--accent)]" checked={!isRenewal} onChange={() => setIsRenewal(false)} />
+            <input
+              id="pm-project-create-renewal-new"
+              name="pm-project-create-renewal"
+              type="radio"
+              className="accent-[var(--accent)]"
+              checked={!isRenewal}
+              onChange={() => setIsRenewal(false)}
+            />
             新規
           </Label>
           <Label className="flex cursor-pointer items-center gap-2 text-[var(--foreground)]">
-            <input type="radio" className="accent-[var(--accent)]" checked={isRenewal} onChange={() => setIsRenewal(true)} />
+            <input
+              id="pm-project-create-renewal-renewal"
+              name="pm-project-create-renewal"
+              type="radio"
+              className="accent-[var(--accent)]"
+              checked={isRenewal}
+              onChange={() => setIsRenewal(true)}
+            />
             リニューアル
           </Label>
         </div>
@@ -1292,7 +1369,16 @@ export function ProjectCreateForm({
               type="button"
               variant="default"
               className="min-w-[7rem]"
-              onClick={() => (isEditMode ? onEditCancel?.() : router.push("/project-list"))}
+              onClick={() => {
+                if (isEditMode) {
+                  if (editFormDirty && !window.confirm(UNSAVED_LEAVE_CONFIRM_MESSAGE)) {
+                    return;
+                  }
+                  onEditCancel?.();
+                } else {
+                  router.push("/project-list");
+                }
+              }}
             >
               キャンセル
             </Button>

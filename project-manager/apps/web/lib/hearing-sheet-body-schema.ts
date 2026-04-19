@@ -1,6 +1,12 @@
 import { z } from "zod";
 import { HEARING_TEMPLATE_IDS, type HearingTemplateId } from "@/lib/hearing-sheet-template-matrix";
 
+const hearingRowRedmineTicketSchema = z.object({
+  issue_id: z.number().int().positive(),
+  project_id: z.number().int().positive(),
+  base_url: z.union([z.string().max(512), z.null()]).optional(),
+});
+
 const hearingRowSchema = z.object({
   id: z.string().min(1).max(128),
   category: z.string().max(512),
@@ -10,6 +16,7 @@ const hearingRowSchema = z.object({
   assignee: z.string().max(512),
   due: z.string().max(128),
   row_status: z.string().max(512),
+  redmine_tickets: z.array(hearingRowRedmineTicketSchema).max(50).optional(),
 });
 
 const templateIdSchema = z.string().refine(

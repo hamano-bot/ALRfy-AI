@@ -32,7 +32,7 @@ export default function ProjectListError({ error, reset }: Props) {
 
   return (
     <section className="surface-card border border-red-500/30 p-5" role="alert">
-      <p className="text-sm font-semibold text-[var(--foreground)]">案件一覧を表示できません</p>
+      <p className="text-sm font-semibold text-[var(--foreground)]">Project一覧を表示できません</p>
       <p className="mt-2 text-sm text-[var(--foreground)]">
         表示中にエラーが発生しました。ターミナルまたはサーバーログに詳細が出力されている場合があります。
       </p>

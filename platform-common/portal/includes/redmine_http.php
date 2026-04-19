@@ -157,3 +157,108 @@ function platformRedmineFetchIssuesForProject(
         'error' => null,
     ];
 }
+
+/**
+ * Redmine REST POST（JSON ボディ）
+ *
+ * @param array<string, mixed> $body Encoded as JSON
+ * @return array{ok: bool, http_code: int, data: mixed, raw: string}
+ */
+function platformRedminePostJson(string $baseUrl, string $apiKey, string $path, array $body): array
+{
+    $baseUrl = rtrim(trim($baseUrl), '/');
+    if ($baseUrl === '' || $apiKey === '') {
+        return ['ok' => false, 'http_code' => 0, 'data' => null, 'raw' => ''];
+    }
+    $url = $baseUrl . $path;
+    if (!function_exists('curl_init')) {
+        return ['ok' => false, 'http_code' => 0, 'data' => null, 'raw' => 'curl unavailable'];
+    }
+    $payload = json_encode($body, JSON_UNESCAPED_UNICODE);
+    if ($payload === false) {
+        return ['ok' => false, 'http_code' => 0, 'data' => null, 'raw' => ''];
+    }
+    $ch = curl_init($url);
+    if ($ch === false) {
+        return ['ok' => false, 'http_code' => 0, 'data' => null, 'raw' => ''];
+    }
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => $payload,
+        CURLOPT_TIMEOUT => 30,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_HTTPHEADER => [
+            'X-Redmine-API-Key: ' . $apiKey,
+            'Content-Type: application/json',
+            'Accept: application/json',
+        ],
+    ]);
+    $raw = curl_exec($ch);
+    $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if (!is_string($raw)) {
+        return ['ok' => false, 'http_code' => $httpCode, 'data' => null, 'raw' => ''];
+    }
+    $data = json_decode($raw, true);
+    return [
+        'ok' => $httpCode >= 200 && $httpCode < 300 && is_array($data),
+        'http_code' => $httpCode,
+        'data' => is_array($data) ? $data : null,
+        'raw' => $raw,
+    ];
+}
+
+/**
+ * チケット作成 POST /issues.json
+ *
+ * @param array<string, mixed> $issueFields issue オブジェクトの中身（project_id, subject, description 等）
+ * @return array{ok: bool, http_code: int, issue: ?array<string, mixed>, error: ?string}
+ */
+function platformRedmineCreateIssue(string $baseUrl, string $apiKey, array $issueFields): array
+{
+    if ($baseUrl === '' || $apiKey === '') {
+        return ['ok' => false, 'http_code' => 0, 'issue' => null, 'error' => 'Redmine の設定が不正です。'];
+    }
+    $res = platformRedminePostJson($baseUrl, $apiKey, '/issues.json', ['issue' => $issueFields]);
+    if (!$res['ok'] || !is_array($res['data'])) {
+        $err = 'Redmine へのチケット作成に失敗しました（HTTP ' . $res['http_code'] . '）。';
+        return ['ok' => false, 'http_code' => $res['http_code'], 'issue' => null, 'error' => $err];
+    }
+    $issue = $res['data']['issue'] ?? null;
+    if (!is_array($issue)) {
+        return ['ok' => false, 'http_code' => $res['http_code'], 'issue' => null, 'error' => 'Redmine の応答形式が不正です。'];
+    }
+    return ['ok' => true, 'http_code' => $res['http_code'], 'issue' => $issue, 'error' => null];
+}
+
+/**
+ * API キーに紐づく Redmine ユーザー ID（GET /users/current.json）
+ *
+ * @return int 取得できない場合は 0
+ */
+function platformRedmineGetCurrentUserId(string $baseUrl, string $apiKey): int
+{
+    if (rtrim(trim($baseUrl), '/') === '' || $apiKey === '') {
+        return 0;
+    }
+    $res = platformRedmineGetJson($baseUrl, $apiKey, '/users/current.json');
+    if (!$res['ok'] || !is_array($res['data'])) {
+        return 0;
+    }
+    $user = $res['data']['user'] ?? null;
+    if (!is_array($user)) {
+        return 0;
+    }
+    $id = $user['id'] ?? null;
+    if (is_int($id) && $id > 0) {
+        return $id;
+    }
+    if (is_numeric($id)) {
+        $n = (int)$id;
+
+        return $n > 0 ? $n : 0;
+    }
+
+    return 0;
+}

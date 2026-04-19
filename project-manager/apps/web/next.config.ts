@@ -82,7 +82,7 @@ const allowedDevOrigins = [
 ];
 
 /**
- * ルート `/` がダッシュボード、`/project-list` が Project（案件一覧）アプリ。
+ * ルート `/` がダッシュボード、`/project-list` が Project一覧アプリ。
  * 本番ではリバースプロキシで同様に振り分けてもよい。
  */
 const nextConfig: NextConfig = {

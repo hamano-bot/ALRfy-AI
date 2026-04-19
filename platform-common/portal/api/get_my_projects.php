@@ -80,7 +80,7 @@ try {
         http_response_code(500);
         echo json_encode([
             'success' => false,
-            'message' => '案件一覧の取得に失敗しました。',
+            'message' => 'Project一覧の取得に失敗しました。',
         ], JSON_UNESCAPED_UNICODE);
         exit;
     }
@@ -94,6 +94,6 @@ try {
     http_response_code(500);
     echo json_encode([
         'success' => false,
-        'message' => '案件一覧の取得に失敗しました。',
+        'message' => 'Project一覧の取得に失敗しました。',
     ], JSON_UNESCAPED_UNICODE);
 }

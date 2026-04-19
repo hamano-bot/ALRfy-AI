@@ -125,7 +125,7 @@ body {
 }
 
 /**
- * 案件詳細・案件登録フォームのブロック見出し、案件一覧テーブルヘッダと共用する「区分」
+ * 案件詳細・案件登録フォームのブロック見出し、Project一覧テーブルヘッダと共用する「区分」
  * （左アクセント + セミボールド。見出し階層は h2/h3 どちらでも可）
  */
 .pm-section-heading {
@@ -140,7 +140,7 @@ body {
 }
 
 /**
- * 案件一覧テーブル thead：上記区分と同じアクセントバー・トーンのヘッダ帯
+ * Project一覧テーブル thead：上記区分と同じアクセントバー・トーンのヘッダ帯
  */
 .pm-table-head {
   border-bottom: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
@@ -227,6 +227,28 @@ body {
   }
 }
 
+/* ヒアリング: 右パネルを「折りたたみ→展開」したときだけ入場（ルート遷移時は付けない／左ナビ 200ms に合わせた尺） */
+@keyframes pm-hearing-right-aside-in {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.pm-hearing-right-aside-content-enter {
+  animation: pm-hearing-right-aside-in 220ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pm-hearing-right-aside-content-enter {
+    animation: none;
+  }
+}
+
 /* react-day-picker: プロジェクト登録フォームのテーマ連動カレンダー（議事録系ダーク UI に寄せる） */
 .theme-date-picker-panel .theme-dp-root {
   --rdp-accent-color: var(--accent);
@@ -286,4 +308,30 @@ body {
 
 .theme-date-picker-panel .rdp-day.rdp-selected .rdp-day_button {
   color: var(--accent-contrast);
+}
+
+/* ダークテーマのスクロールバー（モーダル内リスト等） */
+.pm-scrollbar-themed {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--border) 90%, transparent) color-mix(in srgb, var(--surface-soft) 88%, var(--background) 12%);
+}
+
+.pm-scrollbar-themed::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.pm-scrollbar-themed::-webkit-scrollbar-track {
+  background: color-mix(in srgb, var(--surface-soft) 88%, var(--background) 12%);
+  border-radius: 9999px;
+}
+
+.pm-scrollbar-themed::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--border) 85%, var(--muted) 15%);
+  border-radius: 9999px;
+  border: 2px solid color-mix(in srgb, var(--surface-soft) 88%, var(--background) 12%);
+}
+
+.pm-scrollbar-themed::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--muted) 45%, var(--border) 55%);
 }

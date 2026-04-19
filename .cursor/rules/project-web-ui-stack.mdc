@@ -1,0 +1,27 @@
+---
+description: Project Web UI stack — Tailwind CSS and shadcn/ui (copied components)
+globs: project-manager/apps/web/**/*
+---
+
+# Project Web（`project-manager/apps/web`）の UI 方針
+
+## 採用スタック（第一候補）
+
+- **Tailwind CSS** — ユーティリティファーストでレイアウト・余白・タイポ・レスポンシブを組む。
+- **shadcn/ui（実体コードを取り込む方式）** — `npx shadcn@latest add` 等で **`app/components/ui/` にソースを置く**形を正とする。npm の「黒箱コンポーネント」だけに依存するのではなく、**プロジェクト内で編集可能なコンポーネント**として扱う。
+
+## 必須に近い運用
+
+- 新規の画面・ダイアログ・フォームは、既存の **`app/components/ui/*`**（Button, Input, Dialog, Card 等）と **`globals.css` のテーマ変数**（`--foreground`, `--surface`, `--accent` 等）に揃える。
+- コンポーネントを追加するときは **shadcn の取り込み手順に従い**、既存の `cn()`（`@/lib/utils`）や `tailwind.config` と整合させる。
+- トークンやパターンが既にある場合は **新しい CSS ファイルやインラインスタイルで独自デザインシステムを増やさない**（必要なら変数を拡張）。
+
+## 避ける（新規）
+
+- 同じアプリ内で **別の CSS フレームワーク**（Bootstrap, MUI のスタイル前提コンポーネント等）を前提にした導入。やむを得ない場合は理由と範囲を明記する。
+- shadcn と **競合するグローバル CSS** の大量投入（特異性の戦いを増やさない）。
+
+## 参照
+
+- 既存の shadcn 系実装: `project-manager/apps/web/app/components/ui/`
+- テーマ・ユーティリティ: `project-manager/apps/web/app/globals.css`, `tailwind.config.*`

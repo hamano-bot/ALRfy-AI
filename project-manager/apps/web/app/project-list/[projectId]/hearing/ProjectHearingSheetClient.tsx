@@ -4,6 +4,8 @@ import { useDashboardSidebarOpen } from "@/app/components/DashboardSidebarContex
 import { ThemeDateField } from "@/app/components/ThemeDateField";
 import { Button } from "@/app/components/ui/button";
 import { Card, CardContent } from "@/app/components/ui/card";
+import { Input } from "@/app/components/ui/input";
+import { Label } from "@/app/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/app/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select";
 import type { HearingAdviceSuggestion } from "@/lib/hearing-advice-types";
@@ -14,31 +16,52 @@ import {
 } from "@/lib/hearing-advice-resolve";
 import { displayText } from "@/lib/empty-display";
 import { sanitizeHearingRowsFromExcelImport } from "@/lib/hearing-import-sanitize";
-import { createEmptyHearingRow, hearingBodyFromRows } from "@/lib/hearing-sheet-body-utils";
-import type { HearingSheetRow } from "@/lib/hearing-sheet-types";
+import { createEmptyHearingRow, hearingBodyFromRows, normalizeHearingRows } from "@/lib/hearing-sheet-body-utils";
+import type { HearingRowRedmineTicket, HearingSheetRow } from "@/lib/hearing-sheet-types";
 import { getDefaultRowsForTemplate } from "@/lib/hearing-sheet-template-rows";
 import { type HearingTemplateId } from "@/lib/hearing-sheet-template-matrix";
 import { formatSiteTypeLabel } from "@/lib/portal-my-projects";
 import type { PortalProjectDetail } from "@/lib/portal-project";
-import { projectPageLgMainSidebarGridClassName } from "@/lib/project-page-layout";
-import { buildRedmineProjectUrl } from "@/lib/redmine-url";
+import { downloadHearingRowsExcel } from "@/lib/hearing-excel-export";
+import { hearingFieldIds } from "@/lib/hearing-form-ids";
+import { buildRedmineIssueUrl, buildRedmineProjectUrl } from "@/lib/redmine-url";
+import { UNSAVED_LEAVE_CONFIRM_MESSAGE } from "@/lib/unsaved-navigation";
 import { cn } from "@/lib/utils";
 import { format, parse } from "date-fns";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { GripVertical } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronLeft, GripVertical, Pencil, X } from "lucide-react";
+import {
+  type MouseEvent,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { HearingAssigneeField } from "./HearingAssigneeField";
+import { HearingAutoCategoryDialog } from "./HearingAutoCategoryDialog";
 import { HearingAutoTextarea } from "./HearingAutoTextarea";
 import { HearingImportExcelDialog } from "./HearingImportExcelDialog";
+import { HearingUrlClipRow, hearingInlineIconButtonClassName } from "./HearingUrlClipRow";
+import { GeminiMarkIcon } from "./GeminiMarkIcon";
+import { HearingRedmineIssueDialog } from "./HearingRedmineIssueDialog";
 
-const hearingSheetTdClass = "px-1 py-1.5 align-top";
-const hearingSheetTdActionClass = "box-border py-1.5 pl-1 pr-2.5 align-middle";
+/** overflow-visible: 子の textarea 自動高さ＋クリップ行で内容が欠けないようにする */
+const hearingSheetTdClass = "overflow-visible px-1 py-1.5 align-top";
+const hearingSheetTdActionClass =
+  "box-border py-1.5 pl-2 pr-2 align-middle min-w-[7.75rem] max-w-[10rem]";
 const hearingSheetThClass = "px-1 py-2 font-medium text-[var(--muted)]";
-const hearingSheetThActionClass = "py-2 pl-1 pr-2.5 font-medium text-[var(--muted)]";
-
-const UNSAVED_LEAVE_MESSAGE = "変更が保存されていません。このままページを離れますか？";
+const hearingSheetThActionClass = "py-2 pl-2 pr-2 font-medium text-[var(--muted)] min-w-[7.75rem]";
+/** 画面スクロール時にヘッダ行を固定（祖先に overflow:hidden/auto があると効かないため Card / 表ラッパーは overflow-visible） */
+const hearingSheetStickyTh =
+  "sticky top-0 z-[30] bg-[var(--surface)] shadow-[0_1px_0_0_color-mix(in_srgb,var(--border)_88%,transparent)]";
 
 const AUTO_SAVE_INTERVAL_MS = 120_000;
+
+const HEARING_RIGHT_SIDEBAR_COLLAPSED_KEY = "pm-hearing-right-sidebar-collapsed";
 
 function hearingSheetStateFingerprint(
   templateId: HearingTemplateId,
@@ -107,6 +130,37 @@ function reorderHearingRows(rows: HearingSheetRow[], rowId: string, newIndex: nu
   }
   const i = Math.max(0, Math.min(newIndex, without.length));
   return [...without.slice(0, i), row, ...without.slice(i)];
+}
+
+function hearingRedmineTicketHref(
+  ticket: HearingRowRedmineTicket,
+  project: PortalProjectDetail,
+  userRedmineBase: string | null,
+): string | null {
+  const id = ticket.issue_id;
+  if (!Number.isFinite(id) || id <= 0) {
+    return null;
+  }
+  let base: string | null =
+    ticket.base_url !== undefined && ticket.base_url !== null && ticket.base_url.trim() !== ""
+      ? ticket.base_url.trim().replace(/\/+$/, "")
+      : null;
+  if (!base && ticket.project_id) {
+    const link = project.redmine_links.find((l) => l.redmine_project_id === ticket.project_id);
+    if (link?.redmine_base_url && link.redmine_base_url.trim() !== "") {
+      base = link.redmine_base_url.trim().replace(/\/+$/, "");
+    }
+  }
+  if (!base) {
+    const first = project.redmine_links[0];
+    if (first?.redmine_base_url && first.redmine_base_url.trim() !== "") {
+      base = first.redmine_base_url.trim().replace(/\/+$/, "");
+    }
+  }
+  if (!base && userRedmineBase && userRedmineBase.trim() !== "") {
+    base = userRedmineBase.trim().replace(/\/+$/, "");
+  }
+  return buildRedmineIssueUrl(base, id);
 }
 
 function formatDueYmdReadOnly(raw: string): string {
@@ -181,39 +235,95 @@ export function ProjectHearingSheetClient({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [autoCategoryDialogOpen, setAutoCategoryDialogOpen] = useState(false);
   const [templateReloadConfirmOpen, setTemplateReloadConfirmOpen] = useState(false);
   const [adviceSuggestions, setAdviceSuggestions] = useState<HearingAdviceSuggestion[]>([]);
   const [adviceLoading, setAdviceLoading] = useState(false);
   const [adviceError, setAdviceError] = useState<string | null>(null);
   const [focusedAdviceRowId, setFocusedAdviceRowId] = useState<string | null>(null);
+  /** 右パネルのアドバイス一覧でクリック選択中のカード（行ハイライトとは別） */
+  const [selectedAdviceIndex, setSelectedAdviceIndex] = useState<number | null>(null);
   const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
+  const [isLg, setIsLg] = useState(false);
+  const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false);
+  /** 折りたたみからシェブロンで展開したときだけ true（初回表示・他画面からの遷移ではフェードさせない） */
+  const [rightAsideExpandEntrance, setRightAsideExpandEntrance] = useState(false);
+  const [hideCompletedRows, setHideCompletedRows] = useState(false);
+  const [redmineDialogRowId, setRedmineDialogRowId] = useState<string | null>(null);
+  const [deleteConfirmRowId, setDeleteConfirmRowId] = useState<string | null>(null);
+  const [issueEditTarget, setIssueEditTarget] = useState<{ rowId: string; index: number } | null>(null);
+  const [issueEditDraft, setIssueEditDraft] = useState("");
+  const [userRedmineBase, setUserRedmineBase] = useState<string | null>(null);
 
   const sidebarMenuExpanded = useDashboardSidebarOpen();
+  /** lg でヒアリング右パネル展開時: 担当は「上の行と同じ」幅に寄せ、期限は全角2文字分だけ狭める */
+  const rightHearingPanelOpen = isLg && !rightSidebarCollapsed;
   const hearingTableCols = useMemo(() => {
+    const dueMin = rightHearingPanelOpen ? ("calc(8rem + 2ch - 2em)" as const) : ("calc(8rem + 2ch)" as const);
+    const assigneeWidth = rightHearingPanelOpen ? ("7.25rem" as const) : ("6%" as const);
     if (sidebarMenuExpanded) {
       return {
-        question: canEdit ? "29.85%" : "31.85%",
-        answer: canEdit ? "24.5%" : "27.5%",
+        question: canEdit ? "27.85%" : "31.85%",
+        answer: canEdit ? "22.5%" : "27.5%",
+        assigneeWidth,
         duePct: "11.6%",
-        dueMin: "calc(8rem + 2ch)" as const,
+        dueMin,
         statusPct: "6.05%",
-        deletePct: "5%" as const,
+        deletePct: "9%" as const,
       };
     }
     return {
-      question: canEdit ? "29.85%" : "31.85%",
-      answer: canEdit ? "23.7%" : "26.7%",
+      question: canEdit ? "27.85%" : "31.85%",
+      answer: canEdit ? "21.7%" : "26.7%",
+      assigneeWidth,
       duePct: "10.9%",
-      dueMin: "calc(8rem + 2ch)" as const,
+      dueMin,
       statusPct: "7.55%",
-      deletePct: "5%" as const,
+      deletePct: "9%" as const,
     };
-  }, [sidebarMenuExpanded, canEdit]);
+  }, [sidebarMenuExpanded, canEdit, rightHearingPanelOpen]);
+
+  useLayoutEffect(() => {
+    try {
+      if (localStorage.getItem(HEARING_RIGHT_SIDEBAR_COLLAPSED_KEY) === "1") {
+        setRightSidebarCollapsed(true);
+      }
+    } catch {
+      /* ignore */
+    }
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const apply = () => setIsLg(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
 
   useEffect(() => {
     setRows(sanitizeHearingRowsFromExcelImport(initialRows));
     setStatus(initialStatus);
   }, [initialRows, initialStatus]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/portal/me", { credentials: "include", cache: "no-store" });
+        const data = (await res.json()) as { redmine?: { base_url?: string | null } };
+        if (cancelled) {
+          return;
+        }
+        const b = data.redmine?.base_url;
+        setUserRedmineBase(typeof b === "string" && b.trim() !== "" ? b.trim().replace(/\/+$/, "") : null);
+      } catch {
+        if (!cancelled) {
+          setUserRedmineBase(null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const baselineRows = useMemo(
     () => sanitizeHearingRowsFromExcelImport(initialRows),
@@ -231,6 +341,31 @@ export function ProjectHearingSheetClient({
   );
 
   const isDirty = canEdit && currentFingerprint !== baselineFingerprint;
+
+  const persistSidebarCollapsed = useCallback((collapsed: boolean) => {
+    setRightSidebarCollapsed(collapsed);
+    try {
+      localStorage.setItem(HEARING_RIGHT_SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const toggleRightSidebarCollapsed = useCallback(() => {
+    if (rightSidebarCollapsed) {
+      setRightAsideExpandEntrance(true);
+    }
+    persistSidebarCollapsed(!rightSidebarCollapsed);
+  }, [rightSidebarCollapsed, persistSidebarCollapsed]);
+
+  const onProjectDetailNavigate = useCallback(
+    (e: MouseEvent<HTMLAnchorElement>) => {
+      if (isDirty && !window.confirm(UNSAVED_LEAVE_CONFIRM_MESSAGE)) {
+        e.preventDefault();
+      }
+    },
+    [isDirty],
+  );
 
   const isDirtyRef = useRef(isDirty);
   const savingRef = useRef(saving);
@@ -268,6 +403,29 @@ export function ProjectHearingSheetClient({
     () => collectAdviceRowIds(adviceSuggestions, rows),
     [adviceSuggestions, rows],
   );
+
+  const visibleRows = useMemo(() => {
+    if (!hideCompletedRows) {
+      return rows;
+    }
+    return rows.filter((r) => r.row_status.trim() !== "完了");
+  }, [rows, hideCompletedRows]);
+
+  /** 担当サジェスト用: シート内の担当の出現回数降順（空除外） */
+  const assigneeSuggestions = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const r of rows) {
+      const t = r.assignee.trim();
+      if (t) {
+        counts.set(t, (counts.get(t) ?? 0) + 1);
+      }
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ja"))
+      .map(([s]) => s);
+  }, [rows]);
+
+  const dragRowsEnabled = canEdit && !hideCompletedRows;
 
   const setRowRef = useCallback((id: string) => (el: HTMLTableRowElement | null) => {
     if (el) {
@@ -378,22 +536,27 @@ export function ProjectHearingSheetClient({
         if (!res.ok) {
           setAdviceError(msg);
           setAdviceSuggestions([]);
+          setSelectedAdviceIndex(null);
           return;
         }
         if (j.success !== true || !Array.isArray(j.suggestions)) {
           setAdviceError(msg);
           setAdviceSuggestions([]);
+          setSelectedAdviceIndex(null);
           return;
         }
         setAdviceSuggestions(j.suggestions);
         setFocusedAdviceRowId(null);
+        setSelectedAdviceIndex(null);
       } catch {
         setAdviceError(msg);
         setAdviceSuggestions([]);
+        setSelectedAdviceIndex(null);
       }
     } catch {
       setAdviceError("アドバイスの取得に失敗しました。");
       setAdviceSuggestions([]);
+      setSelectedAdviceIndex(null);
     } finally {
       setAdviceLoading(false);
     }
@@ -410,6 +573,14 @@ export function ProjectHearingSheetClient({
       el?.scrollIntoView({ behavior: "smooth", block: "center" });
     },
     [rows],
+  );
+
+  const onAdviceCardClick = useCallback(
+    (index: number, s: HearingAdviceSuggestion) => {
+      setSelectedAdviceIndex(index);
+      focusAdviceSuggestion(s);
+    },
+    [focusAdviceSuggestion],
   );
 
   const updateRow = useCallback((id: string, patch: Partial<HearingSheetRow>) => {
@@ -468,47 +639,69 @@ export function ProjectHearingSheetClient({
     applyTemplateReload();
   }, [applyTemplateReload]);
 
-  const performSave = useCallback(async (): Promise<boolean> => {
-    if (!canEdit) {
-      return false;
-    }
-    setSaving(true);
-    setError(null);
-    try {
-      const body_json = hearingBodyFromRows(resolvedTemplateId, rows);
-      const res = await fetch("/api/portal/project-hearing-sheet", {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({
-          project_id: projectId,
-          status,
-          body_json,
-        }),
-      });
-      const text = await res.text();
-      let msg = "保存に失敗しました。";
-      try {
-        const j = JSON.parse(text) as { message?: string };
-        if (typeof j.message === "string") {
-          msg = j.message;
-        }
-      } catch {
-        /* ignore */
-      }
-      if (!res.ok) {
-        setError(msg);
+  const saveRows = useCallback(
+    async (rowsToSave: HearingSheetRow[]): Promise<boolean> => {
+      if (!canEdit) {
         return false;
       }
-      router.refresh();
-      return true;
-    } catch {
-      setError("保存に失敗しました。");
-      return false;
-    } finally {
-      setSaving(false);
-    }
-  }, [canEdit, projectId, resolvedTemplateId, rows, status, router]);
+      setSaving(true);
+      setError(null);
+      try {
+        const body_json = hearingBodyFromRows(resolvedTemplateId, rowsToSave);
+        const res = await fetch("/api/portal/project-hearing-sheet", {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({
+            project_id: projectId,
+            status,
+            body_json,
+          }),
+        });
+        const text = await res.text();
+        let msg = "保存に失敗しました。";
+        try {
+          const j = JSON.parse(text) as { message?: string };
+          if (typeof j.message === "string") {
+            msg = j.message;
+          }
+        } catch {
+          /* ignore */
+        }
+        if (!res.ok) {
+          setError(msg);
+          return false;
+        }
+        try {
+          const j = JSON.parse(text) as {
+            success?: boolean;
+            hearing_sheet?: { body_json?: unknown; status?: string };
+          };
+          if (j.success && j.hearing_sheet?.body_json !== undefined && j.hearing_sheet.body_json !== null) {
+            setRows(sanitizeHearingRowsFromExcelImport(normalizeHearingRows(j.hearing_sheet.body_json)));
+            const st = j.hearing_sheet.status;
+            if (st === "draft" || st === "finalized" || st === "archived") {
+              setStatus(st);
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+        router.refresh();
+        return true;
+      } catch {
+        setError("保存に失敗しました。");
+        return false;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [canEdit, projectId, resolvedTemplateId, status, router],
+  );
+
+  const performSave = useCallback(async (): Promise<boolean> => {
+    return saveRows(rows);
+  }, [saveRows, rows]);
 
   performSaveRef.current = performSave;
 
@@ -516,15 +709,45 @@ export function ProjectHearingSheetClient({
     await performSave();
   }, [performSave]);
 
+  const handleRedmineIssueCreated = useCallback(
+    async (rowId: string, ticket: HearingRowRedmineTicket) => {
+      const nextRows = rows.map((r) =>
+        r.id === rowId ? { ...r, redmine_tickets: [...(r.redmine_tickets ?? []), ticket] } : r,
+      );
+      setRows(nextRows);
+      return saveRows(nextRows);
+    },
+    [rows, saveRows],
+  );
+
+  const removeRedmineTicketAt = useCallback(
+    (rowId: string, index: number) => {
+      const nextRows = rows.map((r) => {
+        if (r.id !== rowId) {
+          return r;
+        }
+        const list = [...(r.redmine_tickets ?? [])];
+        if (index < 0 || index >= list.length) {
+          return r;
+        }
+        list.splice(index, 1);
+        return { ...r, redmine_tickets: list };
+      });
+      setRows(nextRows);
+      void saveRows(nextRows);
+    },
+    [rows, saveRows],
+  );
+
   const masterPane = (
     <Card className="overflow-hidden shadow-sm">
       <CardContent className="space-y-4 p-4 sm:p-5">
         <h2 className="pm-section-heading">Project基本情報</h2>
         <p className="text-xs text-[var(--muted)]">
-          編集は詳細画面から行えます。{" "}
           <Link
             href={`/project-list/${projectId}`}
             prefetch
+            onClick={onProjectDetailNavigate}
             className="text-[color:color-mix(in_srgb,var(--accent)_82%,var(--foreground)_18%)] underline-offset-2 hover:underline"
           >
             詳細へ
@@ -572,8 +795,8 @@ export function ProjectHearingSheetClient({
   );
 
   const advicePane = (
-    <Card className="overflow-hidden shadow-sm">
-      <CardContent className="space-y-3 p-4 sm:p-5">
+    <Card className="shadow-sm">
+      <CardContent className="space-y-3 p-4 pb-5 sm:p-5">
         <h2 className="pm-section-heading">更新アドバイス（Gemini）</h2>
         <p className="text-xs leading-relaxed text-[var(--muted)]">
           Project基本情報とヒアリングシートに記載された内容をGeminiに送信し、重要な個所やProjectと矛盾しそうな箇所をアドバイスしてくれます。
@@ -586,7 +809,9 @@ export function ProjectHearingSheetClient({
           size="sm"
           disabled={adviceLoading || rows.length === 0}
           onClick={() => void fetchAdvice()}
+          className="inline-flex items-center gap-1.5"
         >
+          <GeminiMarkIcon className="h-4 w-4 shrink-0" />
           {adviceLoading ? "取得中…" : "アドバイスを取得"}
         </Button>
         {adviceError ? (
@@ -598,7 +823,7 @@ export function ProjectHearingSheetClient({
           <p className="text-xs text-[var(--muted)]">まだ取得していません。上のボタンで実行してください。</p>
         ) : null}
         {adviceSuggestions.length > 0 ? (
-          <ul className="max-h-[min(24rem,50vh)] space-y-2 overflow-y-auto pr-1">
+          <ul className="pm-scrollbar-themed max-h-[min(24rem,50vh)] space-y-2 overflow-y-auto pr-1 pb-0.5">
             {adviceSuggestions.map((s, i) => {
               const targetId = resolveAdviceToRowId(s, rows);
               const targetLine =
@@ -607,15 +832,26 @@ export function ProjectHearingSheetClient({
                   : s.row_id?.trim() !== ""
                     ? `行 ID: ${s.row_id!.trim()}`
                     : null;
+              const selected = selectedAdviceIndex === i;
               return (
                 <li key={`${i}-${s.message.slice(0, 24)}`}>
                   <button
                     type="button"
-                    disabled={!targetId}
-                    onClick={() => focusAdviceSuggestion(s)}
+                    aria-disabled={!targetId}
+                    onClick={() => {
+                      if (targetId) {
+                        onAdviceCardClick(i, s);
+                      } else {
+                        setSelectedAdviceIndex(i);
+                      }
+                    }}
                     className={cn(
-                      "w-full rounded-lg border border-[color:color-mix(in_srgb,var(--border)_88%,transparent)] bg-[color:color-mix(in_srgb,var(--surface)_98%,transparent)] p-2.5 text-left text-sm transition hover:bg-[color:color-mix(in_srgb,var(--surface)_92%,transparent)]",
-                      !targetId && "cursor-not-allowed opacity-60",
+                      "w-full rounded-lg border-2 bg-[color:color-mix(in_srgb,var(--surface)_98%,transparent)] p-2.5 text-left text-sm transition",
+                      selected
+                        ? "border-[color:color-mix(in_srgb,var(--accent)_88%,white_12%)] shadow-[0_0_0_1px_color-mix(in_srgb,var(--accent)_35%,transparent),0_6px_24px_-12px_color-mix(in_srgb,var(--accent)_45%,transparent)]"
+                        : "border-[color:color-mix(in_srgb,var(--border)_88%,transparent)] hover:bg-[color:color-mix(in_srgb,var(--surface)_92%,transparent)]",
+                      !targetId && "cursor-not-allowed opacity-75",
+                      targetId && "cursor-pointer",
                     )}
                   >
                     <div className="mb-1 flex flex-wrap items-center gap-1.5">
@@ -655,11 +891,7 @@ export function ProjectHearingSheetClient({
             <Link
               href={`/project-list/${projectId}`}
               prefetch
-              onClick={(e) => {
-                if (isDirty && !window.confirm(UNSAVED_LEAVE_MESSAGE)) {
-                  e.preventDefault();
-                }
-              }}
+              onClick={onProjectDetailNavigate}
               className="shrink-0 pt-0.5 text-sm text-[color:color-mix(in_srgb,var(--accent)_82%,var(--foreground)_18%)] hover:underline"
             >
               ←戻る
@@ -687,6 +919,7 @@ export function ProjectHearingSheetClient({
               </Label>
               <Select
                 disabled={!canEdit}
+                name="pm-hearing-status"
                 value={status}
                 onValueChange={(v) => setStatus(v as typeof status)}
               >
@@ -714,7 +947,7 @@ export function ProjectHearingSheetClient({
                 disabled={saving}
                 onClick={() => void save()}
               >
-                {saving ? "保存中…" : "保存"}
+                {saving ? "Saving…" : "Save"}
               </Button>
             ) : null}
           </div>
@@ -726,27 +959,70 @@ export function ProjectHearingSheetClient({
         </p>
       ) : null}
 
-      <div className={projectPageLgMainSidebarGridClassName}>
-        <Card className="min-w-0 overflow-hidden shadow-sm">
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-6">
+        <div className="min-w-0 w-full flex-1">
+          <Card className="min-w-0 overflow-visible shadow-sm">
           <CardContent className="space-y-3 p-4 sm:p-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="pm-section-heading mb-0">確認事項</h2>
-              {canEdit ? (
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="default" size="sm" onClick={sortRowsByCategoryCodeOrder}>
-                    分類で並べ替え（文字コード順）
-                  </Button>
-                  <Button type="button" variant="default" size="sm" onClick={() => setImportDialogOpen(true)}>
-                    Excel を取り込む
-                  </Button>
-                  <Button type="button" variant="default" size="sm" onClick={requestLoadTemplate}>
-                    テンプレを読込
-                  </Button>
+              <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+                <h2 className="pm-section-heading mb-0">確認事項</h2>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="pm-hearing-hide-completed"
+                    name="pm-hearing-hide-completed"
+                    type="checkbox"
+                    className="h-4 w-4 shrink-0 rounded border border-[color:color-mix(in_srgb,var(--border)_90%,transparent)] bg-[color:color-mix(in_srgb,var(--background)_94%,black_6%)] accent-[var(--accent)] outline-none focus-visible:ring-2 focus-visible:ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)]"
+                    checked={hideCompletedRows}
+                    onChange={(e) => setHideCompletedRows(e.target.checked)}
+                  />
+                  <Label htmlFor="pm-hearing-hide-completed" className="cursor-pointer text-xs font-normal text-[var(--muted)]">
+                    完了を除く
+                  </Label>
                 </div>
-              ) : null}
+              </div>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  onClick={() => void downloadHearingRowsExcel(rows, project.name, project.client_name)}
+                >
+                  Excel出力
+                </Button>
+                {canEdit ? (
+                  <>
+                    <Button
+                      type="button"
+                      variant="default"
+                      size="sm"
+                      className="inline-flex items-center gap-1.5"
+                      onClick={() => setAutoCategoryDialogOpen(true)}
+                    >
+                      <GeminiMarkIcon className="h-4 w-4 shrink-0" />
+                      分類を自動セット
+                    </Button>
+                    <Button type="button" variant="default" size="sm" onClick={sortRowsByCategoryCodeOrder}>
+                      分類で並べ替え
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="default"
+                      size="sm"
+                      className="inline-flex items-center gap-1.5"
+                      onClick={() => setImportDialogOpen(true)}
+                    >
+                      <GeminiMarkIcon className="h-4 w-4 shrink-0" />
+                      Excel を取り込む
+                    </Button>
+                    <Button type="button" variant="default" size="sm" onClick={requestLoadTemplate}>
+                      テンプレを読み込む
+                    </Button>
+                  </>
+                ) : null}
+              </div>
             </div>
 
-            <div className="overflow-x-auto rounded-lg border border-[color:color-mix(in_srgb,var(--border)_88%,transparent)]">
+            <div className="w-full min-w-0 rounded-lg border border-[color:color-mix(in_srgb,var(--border)_88%,transparent)]">
               <table className="w-full min-w-0 table-fixed border-collapse text-left text-sm">
                 <colgroup>
                   {canEdit ? <col style={{ width: "2.25rem" }} /> : null}
@@ -754,57 +1030,102 @@ export function ProjectHearingSheetClient({
                   <col style={{ width: "11%" }} />
                   <col style={{ width: hearingTableCols.question }} />
                   <col style={{ width: hearingTableCols.answer }} />
-                  <col style={{ width: "6%" }} />
+                  <col style={{ width: hearingTableCols.assigneeWidth }} />
                   <col style={{ width: hearingTableCols.duePct, minWidth: hearingTableCols.dueMin }} />
                   <col style={{ width: hearingTableCols.statusPct }} />
-                  {canEdit ? <col style={{ width: hearingTableCols.deletePct }} /> : null}
+                  {canEdit ? (
+                    <col style={{ width: hearingTableCols.deletePct, minWidth: "7.75rem" }} />
+                  ) : null}
                 </colgroup>
                 <thead>
-                  <tr className="border-b border-[color:color-mix(in_srgb,var(--border)_88%,transparent)] bg-[color:color-mix(in_srgb,var(--surface)_96%,transparent)]">
+                  <tr className="border-b border-[color:color-mix(in_srgb,var(--border)_88%,transparent)]">
                     {canEdit ? (
-                      <th className={cn(hearingSheetThClass, "w-9 max-w-[2.25rem] px-0.5")} scope="col">
+                      <th className={cn(hearingSheetThClass, hearingSheetStickyTh, "w-9 max-w-[2.25rem] px-0.5")} scope="col">
                         <span className="sr-only">行の並び替え</span>
                       </th>
                     ) : null}
-                    <th className={hearingSheetThClass}>分類</th>
-                    <th className={hearingSheetThClass}>見出し</th>
-                    <th className={hearingSheetThClass}>確認事項</th>
-                    <th className={hearingSheetThClass}>回答</th>
-                    <th className={hearingSheetThClass}>担当</th>
-                    <th className={hearingSheetThClass}>期限</th>
-                    <th className={hearingSheetThClass}>状況</th>
-                    {canEdit ? <th className={hearingSheetThActionClass} /> : null}
+                    <th className={cn(hearingSheetThClass, hearingSheetStickyTh)} scope="col">
+                      分類
+                    </th>
+                    <th className={cn(hearingSheetThClass, hearingSheetStickyTh)} scope="col">
+                      見出し
+                    </th>
+                    <th className={cn(hearingSheetThClass, hearingSheetStickyTh)} scope="col">
+                      確認事項
+                    </th>
+                    <th className={cn(hearingSheetThClass, hearingSheetStickyTh)} scope="col">
+                      回答
+                    </th>
+                    <th className={cn(hearingSheetThClass, hearingSheetStickyTh)} scope="col">
+                      担当
+                    </th>
+                    <th className={cn(hearingSheetThClass, hearingSheetStickyTh)} scope="col">
+                      期限
+                    </th>
+                    <th className={cn(hearingSheetThClass, hearingSheetStickyTh)} scope="col">
+                      状況
+                    </th>
+                    {canEdit ? <th className={cn(hearingSheetThActionClass, hearingSheetStickyTh)} scope="col" /> : null}
                   </tr>
                 </thead>
                 <tbody
                   ref={tbodyRef}
-                  onDragOver={canEdit ? onTbodyDragOver : undefined}
-                  onDrop={canEdit ? onTbodyDrop : undefined}
+                  onDragOver={dragRowsEnabled ? onTbodyDragOver : undefined}
+                  onDrop={dragRowsEnabled ? onTbodyDrop : undefined}
                 >
                   {rows.length === 0 ? (
                     <>
                       <tr>
-                        <td colSpan={canEdit ? 9 : 7} className="px-1 py-8 text-center text-sm text-[var(--muted)]">
-                          行がありません。下の「行を追加」、「Excel を取り込む」またはテンプレを読込で入力してください。
+                        <td colSpan={canEdit ? 9 : 7} className="px-1 py-6 text-center text-sm text-[var(--muted)]">
+                          <p className="mb-4">行がありません。下のボタンから入力を開始できます。</p>
+                          {canEdit ? (
+                            <div className="flex flex-wrap items-center justify-center gap-2">
+                              <Button
+                                type="button"
+                                variant="default"
+                                size="sm"
+                                className="inline-flex items-center gap-1.5"
+                                onClick={() => setImportDialogOpen(true)}
+                              >
+                                <GeminiMarkIcon className="h-4 w-4 shrink-0" />
+                                Excel を取り込む
+                              </Button>
+                              <Button type="button" variant="default" size="sm" onClick={requestLoadTemplate}>
+                                テンプレを読み込む
+                              </Button>
+                              <Button type="button" variant="default" size="sm" onClick={addRow}>
+                                行を追加
+                              </Button>
+                            </div>
+                          ) : (
+                            <p>閲覧のみのため、編集は案件のオーナー／編集者に依頼してください。</p>
+                          )}
                         </td>
                       </tr>
-                      {canEdit ? (
-                        <tr className="border-b border-[color:color-mix(in_srgb,var(--border)_70%,transparent)] bg-[color:color-mix(in_srgb,var(--surface)_98%,transparent)]">
-                          <td colSpan={9} className="px-1 py-2">
-                            <Button type="button" variant="default" size="sm" onClick={addRow}>
-                              行を追加
-                            </Button>
-                          </td>
-                        </tr>
-                      ) : null}
                     </>
+                  ) : visibleRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={canEdit ? 9 : 7} className="px-1 py-8 text-center text-sm text-[var(--muted)]">
+                        完了の行だけが該当するため、表示する行がありません。「完了を除く」をオフにするとすべて表示されます。
+                      </td>
+                    </tr>
                   ) : (
-                    rows.map((row, rowIndex) => {
-                      const isLastRow = rowIndex === rows.length - 1;
+                    visibleRows.map((row, rowIndex) => {
+                      const fieldIds = {
+                        category: hearingFieldIds(row.id, "category"),
+                        heading: hearingFieldIds(row.id, "heading"),
+                        question: hearingFieldIds(row.id, "question"),
+                        answer: hearingFieldIds(row.id, "answer"),
+                        assignee: hearingFieldIds(row.id, "assignee"),
+                        due: hearingFieldIds(row.id, "due"),
+                        row_status: hearingFieldIds(row.id, "row_status"),
+                      };
+                      const isLastRow = rowIndex === visibleRows.length - 1;
                       const insertAfter =
                         dropIndicatorIndex !== null &&
                         isLastRow &&
-                        (dropIndicatorIndex === rows.length || dropIndicatorIndex === rows.length - 1);
+                        (dropIndicatorIndex === visibleRows.length ||
+                          dropIndicatorIndex === visibleRows.length - 1);
                       const insertBefore =
                         dropIndicatorIndex !== null &&
                         dropIndicatorIndex === rowIndex &&
@@ -814,9 +1135,9 @@ export function ProjectHearingSheetClient({
                         key={row.id}
                         ref={setRowRef(row.id)}
                         data-hearing-row
-                        draggable={canEdit}
-                        onDragStart={canEdit ? (e) => onRowDragStart(e, row.id) : undefined}
-                        onDragEnd={canEdit ? clearRowDrag : undefined}
+                        draggable={dragRowsEnabled}
+                        onDragStart={dragRowsEnabled ? (e) => onRowDragStart(e, row.id) : undefined}
+                        onDragEnd={dragRowsEnabled ? clearRowDrag : undefined}
                         className={cn(
                           "relative border-b border-[color:color-mix(in_srgb,var(--border)_70%,transparent)] align-top transition-colors",
                           "hover:bg-[color:color-mix(in_srgb,var(--foreground)_5%,transparent)]",
@@ -834,8 +1155,17 @@ export function ProjectHearingSheetClient({
                         {canEdit ? (
                           <td className={cn(hearingSheetTdClass, "w-9 max-w-[2.25rem] px-0.5 align-middle")}>
                             <span
-                              className="inline-flex cursor-grab touch-none select-none items-center justify-center rounded px-0.5 text-[color:color-mix(in_srgb,var(--muted)_95%,transparent)] active:cursor-grabbing"
-                              title="ドラッグして並び替え"
+                              className={cn(
+                                "inline-flex touch-none select-none items-center justify-center rounded px-0.5 text-[color:color-mix(in_srgb,var(--muted)_95%,transparent)]",
+                                dragRowsEnabled ? "cursor-grab active:cursor-grabbing" : "cursor-not-allowed opacity-70",
+                              )}
+                              title={
+                                dragRowsEnabled
+                                  ? "ドラッグして並び替え"
+                                  : hideCompletedRows
+                                    ? "「完了を除く」表示中は並べ替えできません"
+                                    : "ドラッグして並び替え"
+                              }
                             >
                               <GripVertical className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
                             </span>
@@ -844,6 +1174,8 @@ export function ProjectHearingSheetClient({
                         <td className={hearingSheetTdClass}>
                           {canEdit ? (
                             <HearingAutoTextarea
+                              id={fieldIds.category.id}
+                              name={fieldIds.category.name}
                               value={row.category}
                               onChange={(e) => updateRow(row.id, { category: e.target.value })}
                             />
@@ -854,6 +1186,8 @@ export function ProjectHearingSheetClient({
                         <td className={hearingSheetTdClass}>
                           {canEdit ? (
                             <HearingAutoTextarea
+                              id={fieldIds.heading.id}
+                              name={fieldIds.heading.name}
                               value={row.heading}
                               onChange={(e) => updateRow(row.id, { heading: e.target.value })}
                             />
@@ -862,30 +1196,58 @@ export function ProjectHearingSheetClient({
                           )}
                         </td>
                         <td className={hearingSheetTdClass}>
-                          {canEdit ? (
-                            <HearingAutoTextarea
-                              value={row.question}
-                              onChange={(e) => updateRow(row.id, { question: e.target.value })}
-                            />
-                          ) : (
-                            <span className="block whitespace-pre-wrap px-1 py-1 text-xs">{displayText(row.question)}</span>
-                          )}
+                          <div className="flex min-w-0 flex-col gap-0.5">
+                            <div className="min-w-0 shrink-0">
+                              {canEdit ? (
+                                <HearingAutoTextarea
+                                  id={fieldIds.question.id}
+                                  name={fieldIds.question.name}
+                                  value={row.question}
+                                  onChange={(e) => updateRow(row.id, { question: e.target.value })}
+                                />
+                              ) : (
+                                <span className="block whitespace-pre-wrap px-1 py-1 text-xs">{displayText(row.question)}</span>
+                              )}
+                            </div>
+                            <div className="shrink-0">
+                              <HearingUrlClipRow text={row.question} />
+                            </div>
+                          </div>
+                        </td>
+                        <td className={hearingSheetTdClass}>
+                          <div className="flex min-w-0 flex-col gap-0.5">
+                            <div className="min-w-0 shrink-0">
+                              {canEdit ? (
+                                <HearingAutoTextarea
+                                  id={fieldIds.answer.id}
+                                  name={fieldIds.answer.name}
+                                  value={row.answer}
+                                  onChange={(e) => updateRow(row.id, { answer: e.target.value })}
+                                />
+                              ) : (
+                                <span className="block whitespace-pre-wrap px-1 py-1 text-xs">{displayText(row.answer)}</span>
+                              )}
+                            </div>
+                            <div className="shrink-0">
+                              <HearingUrlClipRow text={row.answer} />
+                            </div>
+                          </div>
                         </td>
                         <td className={hearingSheetTdClass}>
                           {canEdit ? (
-                            <HearingAutoTextarea
-                              value={row.answer}
-                              onChange={(e) => updateRow(row.id, { answer: e.target.value })}
-                            />
-                          ) : (
-                            <span className="block whitespace-pre-wrap px-1 py-1 text-xs">{displayText(row.answer)}</span>
-                          )}
-                        </td>
-                        <td className={hearingSheetTdClass}>
-                          {canEdit ? (
-                            <HearingAutoTextarea
+                            <HearingAssigneeField
+                              inputId={fieldIds.assignee.id}
+                              inputName={fieldIds.assignee.name}
                               value={row.assignee}
-                              onChange={(e) => updateRow(row.id, { assignee: e.target.value })}
+                              onValueChange={(next) => updateRow(row.id, { assignee: next })}
+                              suggestions={assigneeSuggestions}
+                              copyFromAboveDisabled={rowIndex === 0}
+                              onCopyFromAbove={() => {
+                                const prev = visibleRows[rowIndex - 1];
+                                if (prev) {
+                                  updateRow(row.id, { assignee: prev.assignee });
+                                }
+                              }}
                             />
                           ) : (
                             <span className="block whitespace-pre-wrap px-1 py-1.5 text-xs">{displayText(row.assignee)}</span>
@@ -896,6 +1258,8 @@ export function ProjectHearingSheetClient({
                             <ThemeDateField
                               displayVariant="iso"
                               label={<span className="sr-only">期限</span>}
+                              controlId={fieldIds.due.id}
+                              name={fieldIds.due.name}
                               value={row.due}
                               onChange={(next) => updateRow(row.id, { due: next })}
                               className="w-full min-w-0 [&_label]:sr-only [&_button]:mt-0 [&_button]:min-w-0 [&_button]:text-xs"
@@ -909,6 +1273,7 @@ export function ProjectHearingSheetClient({
                         <td className={cn(hearingSheetTdClass, "min-w-0")}>
                           {canEdit ? (
                             <Select
+                              name={fieldIds.row_status.name}
                               value={rowStatusSelectValue(row.row_status) === "" ? "__empty__" : rowStatusSelectValue(row.row_status)}
                               onValueChange={(v) =>
                                 updateRow(row.id, {
@@ -917,6 +1282,8 @@ export function ProjectHearingSheetClient({
                               }
                             >
                               <SelectTrigger
+                                id={fieldIds.row_status.id}
+                                name={fieldIds.row_status.name}
                                 aria-label="状況"
                                 draggable={false}
                                 className="h-8 min-h-8 w-full py-1.5 pl-2 text-xs leading-tight"
@@ -934,17 +1301,97 @@ export function ProjectHearingSheetClient({
                           )}
                         </td>
                         {canEdit ? (
-                          <td className={hearingSheetTdActionClass}>
-                            <div className="flex min-h-[2rem] items-center justify-center">
-                              <Button
-                                type="button"
-                                variant="destructive"
-                                size="sm"
-                                draggable={false}
-                                onClick={() => removeRow(row.id)}
-                              >
-                                Delete
-                              </Button>
+                          <td className={cn(hearingSheetTdActionClass, "align-top")}>
+                            <div className="flex w-full min-w-0 flex-col gap-2 py-0.5">
+                              <div className="flex w-full min-w-0 items-center justify-between gap-2">
+                                <div className="min-w-0 shrink">
+                                  <Button
+                                    type="button"
+                                    variant="default"
+                                    size="sm"
+                                    draggable={false}
+                                    disabled={project.redmine_links.length === 0}
+                                    className="h-9 w-9 shrink-0 border border-[color:color-mix(in_srgb,var(--border)_88%,transparent)] bg-[color:color-mix(in_srgb,var(--surface)_96%,transparent)] p-0"
+                                    aria-label="Redmine にチケットを作成"
+                                    title={
+                                      project.redmine_links.length === 0
+                                        ? "案件に Redmine を紐づけてください"
+                                        : "Redmine にチケットを作成"
+                                    }
+                                    onClick={() => setRedmineDialogRowId(row.id)}
+                                  >
+                                    <span
+                                      className="inline-flex rounded-lg border border-[color:color-mix(in_srgb,rgb(248_113_113)_55%,var(--border)_45%)] bg-[color:color-mix(in_srgb,var(--surface)_78%,rgb(120_30_35)_22%)] p-1 shadow-[inset_0_1px_0_0_rgba(252,165,165,0.12)] dark:border-red-400/45 dark:bg-[color:color-mix(in_srgb,var(--surface)_72%,rgb(100_28_32)_28%)]"
+                                      aria-hidden
+                                    >
+                                      <Image
+                                        src="/brand/redmine_logo.svg"
+                                        alt=""
+                                        width={28}
+                                        height={28}
+                                        className="h-6 w-6 brightness-110 contrast-110 dark:brightness-125"
+                                      />
+                                    </span>
+                                  </Button>
+                                </div>
+                                <div className="shrink-0">
+                                  <Button
+                                    type="button"
+                                    variant="destructive"
+                                    size="sm"
+                                    draggable={false}
+                                    className="h-8 w-8 shrink-0 p-0"
+                                    aria-label="行を削除"
+                                    title="行を削除"
+                                    onClick={() => setDeleteConfirmRowId(row.id)}
+                                  >
+                                    <X className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+                                  </Button>
+                                </div>
+                              </div>
+                              <div className="flex flex-col gap-1.5">
+                                {(row.redmine_tickets ?? []).map((t, ti) => {
+                                  const href = hearingRedmineTicketHref(t, project, userRedmineBase);
+                                  const n = t.issue_id;
+                                  return (
+                                    <div
+                                      key={`${row.id}-rm-${ti}-${n}`}
+                                      className="flex w-full min-w-0 items-center justify-start gap-2 pl-0.5"
+                                    >
+                                      {href ? (
+                                        <a
+                                          href={href}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="min-w-0 max-w-[6rem] shrink truncate font-mono text-xs tabular-nums text-[var(--accent)] underline-offset-2 hover:underline"
+                                          translate="no"
+                                        >
+                                          {n}
+                                        </a>
+                                      ) : (
+                                        <span
+                                          className="min-w-0 max-w-[6rem] shrink truncate font-mono text-xs tabular-nums text-[var(--foreground)]"
+                                          translate="no"
+                                        >
+                                          {n}
+                                        </span>
+                                      )}
+                                      <button
+                                        type="button"
+                                        draggable={false}
+                                        className={hearingInlineIconButtonClassName}
+                                        aria-label="チケット番号を編集"
+                                        onClick={() => {
+                                          setIssueEditTarget({ rowId: row.id, index: ti });
+                                          setIssueEditDraft(String(n));
+                                        }}
+                                      >
+                                        <Pencil className="h-3.5 w-3.5" aria-hidden strokeWidth={2} />
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             </div>
                           </td>
                         ) : null}
@@ -965,13 +1412,180 @@ export function ProjectHearingSheetClient({
               </table>
             </div>
           </CardContent>
-        </Card>
+          </Card>
+        </div>
 
-        <aside className="mt-6 flex min-w-0 flex-col gap-4 lg:mt-0 lg:sticky lg:top-4 lg:self-start">
-          {masterPane}
-          {advicePane}
+        <aside
+          className={cn(
+            "mt-6 flex min-w-0 flex-col gap-4 lg:mt-0 lg:shrink-0 lg:self-start",
+            "lg:sticky lg:top-4",
+            "min-w-0",
+            "motion-safe:transition-[width] motion-safe:duration-200 motion-safe:ease-out motion-reduce:transition-none",
+            isLg ? (rightSidebarCollapsed ? "lg:w-11 lg:overflow-hidden" : "lg:w-[236px]") : "w-full",
+          )}
+        >
+          {isLg ? (
+            <div className={cn("flex w-full", rightSidebarCollapsed ? "justify-center" : "justify-end")}>
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                className="group h-8 w-8 shrink-0 p-0"
+                aria-label={rightSidebarCollapsed ? "右パネルを展開" : "右パネルを折りたたむ"}
+                aria-expanded={!rightSidebarCollapsed}
+                onClick={toggleRightSidebarCollapsed}
+              >
+                <ChevronLeft
+                  className={[
+                    "h-3.5 w-3.5 shrink-0 text-[var(--foreground)] transition-[transform,color] duration-200 ease-out motion-reduce:transition-none",
+                    "group-hover:text-[color:color-mix(in_srgb,var(--accent)_78%,var(--foreground)_22%)] motion-safe:group-hover:scale-110",
+                    rightSidebarCollapsed ? "rotate-0" : "rotate-180",
+                  ].join(" ")}
+                  aria-hidden
+                  strokeWidth={2.25}
+                />
+              </Button>
+            </div>
+          ) : null}
+          {!isLg || !rightSidebarCollapsed ? (
+            <div
+              className={cn(
+                "space-y-4",
+                rightAsideExpandEntrance && "pm-hearing-right-aside-content-enter",
+              )}
+            >
+              {masterPane}
+              {advicePane}
+            </div>
+          ) : null}
         </aside>
       </div>
+
+      <HearingRedmineIssueDialog
+        open={redmineDialogRowId !== null}
+        onOpenChange={(o) => {
+          if (!o) {
+            setRedmineDialogRowId(null);
+          }
+        }}
+        project={project}
+        row={redmineDialogRowId === null ? null : rows.find((r) => r.id === redmineDialogRowId) ?? null}
+        canEdit={canEdit}
+        onIssueCreated={handleRedmineIssueCreated}
+      />
+
+      <Dialog open={deleteConfirmRowId !== null} onOpenChange={(o) => !o && setDeleteConfirmRowId(null)}>
+        <DialogContent className="max-w-md" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>行を削除しますか</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm leading-relaxed text-[var(--foreground)]">この行を削除すると元に戻せません。</p>
+          <div className="mt-6 flex flex-wrap justify-end gap-2">
+            <Button type="button" variant="default" size="sm" onClick={() => setDeleteConfirmRowId(null)}>
+              キャンセル
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                const id = deleteConfirmRowId;
+                setDeleteConfirmRowId(null);
+                if (id) {
+                  removeRow(id);
+                }
+              }}
+            >
+              削除
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={issueEditTarget !== null} onOpenChange={(o) => !o && setIssueEditTarget(null)}>
+        <DialogContent className="max-w-md" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>チケット番号を編集</DialogTitle>
+          </DialogHeader>
+          <Label htmlFor="hearing-issue-id-edit" className="text-xs text-[var(--muted)]">
+            Redmine のチケット ID（数字のみ、# なし）
+          </Label>
+          <Input
+            id="hearing-issue-id-edit"
+            name="hearing-issue-id-edit"
+            inputMode="numeric"
+            className="mt-1 font-mono tabular-nums"
+            value={issueEditDraft}
+            onChange={(e) => setIssueEditDraft(e.target.value.replace(/\D/g, ""))}
+          />
+          <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              className="w-full sm:w-auto"
+              onClick={() => {
+                const target = issueEditTarget;
+                if (!target) {
+                  return;
+                }
+                setIssueEditTarget(null);
+                removeRedmineTicketAt(target.rowId, target.index);
+              }}
+            >
+              紐づけを解除
+            </Button>
+            <div className="flex flex-wrap justify-end gap-2 sm:ml-auto">
+              <Button type="button" variant="default" size="sm" onClick={() => setIssueEditTarget(null)}>
+                キャンセル
+              </Button>
+              <Button
+                type="button"
+                variant="accent"
+                size="sm"
+                onClick={() => {
+                  const target = issueEditTarget;
+                  if (!target) {
+                    return;
+                  }
+                  const n = Number.parseInt(issueEditDraft, 10);
+                  if (!Number.isFinite(n) || n <= 0) {
+                    setError("正の整数を入力してください。");
+                    return;
+                  }
+                  const nextRows = rows.map((r) => {
+                    if (r.id !== target.rowId) {
+                      return r;
+                    }
+                    const list = [...(r.redmine_tickets ?? [])];
+                    const cur = list[target.index];
+                    if (!cur) {
+                      return r;
+                    }
+                    list[target.index] = { ...cur, issue_id: n };
+                    return { ...r, redmine_tickets: list };
+                  });
+                  setRows(nextRows);
+                  setIssueEditTarget(null);
+                  void saveRows(nextRows);
+                }}
+              >
+                保存
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <HearingAutoCategoryDialog
+        open={autoCategoryDialogOpen}
+        onOpenChange={setAutoCategoryDialogOpen}
+        resolvedTemplateId={resolvedTemplateId}
+        project={project}
+        currentRows={rows}
+        canEdit={canEdit}
+        onApply={(next) => setRows(next)}
+      />
 
       <HearingImportExcelDialog
         open={importDialogOpen}
@@ -991,7 +1605,7 @@ export function ProjectHearingSheetClient({
           aria-describedby={undefined}
         >
           <DialogHeader>
-            <DialogTitle className="text-red-500 dark:text-red-400">テンプレを読込</DialogTitle>
+            <DialogTitle className="text-red-500 dark:text-red-400">テンプレを読み込む</DialogTitle>
           </DialogHeader>
           <p className="text-sm leading-relaxed text-[var(--foreground)]">
             すでに入力されている値はすべてリセットされます。続行しますか？

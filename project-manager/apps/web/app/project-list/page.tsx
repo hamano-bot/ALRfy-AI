@@ -29,7 +29,7 @@ export default function ProjectManagerHomePage() {
               Project
             </h1>
             <p className="line-clamp-2 text-xs leading-snug text-[color:color-mix(in_srgb,var(--foreground)_88%,transparent)] sm:text-sm">
-              参加している案件の一覧です。
+              参加している Project の一覧です。
             </p>
           </div>
           <div className="flex shrink-0 self-center">

@@ -85,7 +85,7 @@
 
 | 論点 | 決める内容 |
 |------|------------|
-| **`project_id` の出所** | 上記 **決定（初期実装）** を正とする。追加で (d) 案件一覧以降のみ表示 等へ拡張する場合は本表を更新する。 |
+| **`project_id` の出所** | 上記 **決定（初期実装）** を正とする。追加で (d) Project一覧以降のみ表示 等へ拡張する場合は本表を更新する。 |
 | **リソース単位か** | 任意クエリ `resource_type` + `resource_id` を **ダッシュボードでは付けない**（プロジェクト単位のみ）か、ドキュメント詳細などでは付けるか。 |
 | **BFF** | ブラウザは **`/api/portal/project-permission?project_id=…`** のように **同一オリジン**のみ。Route Handler は **`PORTAL_API_BASE_URL` + 固定パス**（例: `/portal/api/project-permission`）へ **`Cookie` 転送**。**`project_id` はサーバー側で正の整数に限定**（SSRF 防止・既存方針と同型）。 |
 | **文言・ラベル** | 「実効ロール」とだけ書くと、**全案件の最大ロール**と誤解されうる。**例:** 「**案件 {name} での実効ロール: editor**」のように **対象プロジェクトを明示**。 |
@@ -110,12 +110,12 @@
 | パス | 役割 |
 |------|------|
 | [platform-common/portal/api/get_apps.php](../../../platform-common/portal/api/get_apps.php) | アプリ一覧 API。 |
-| [platform-common/portal/api/get_my_projects.php](../../../platform-common/portal/api/get_my_projects.php) | ログインユーザー所属案件一覧 API（`GET /portal/api/my-projects`）。 |
+| [platform-common/portal/api/get_my_projects.php](../../../platform-common/portal/api/get_my_projects.php) | ログインユーザー所属 Project 一覧 API（`GET /portal/api/my-projects`）。 |
 | [platform-common/router.php](../../../platform-common/router.php) | `/portal/api/*` ルーティング（`apps` / `me` / `project-permission` / `my-projects`）。 |
 | [project-manager/apps/web/app/components/DashboardShell.tsx](../../apps/web/app/components/DashboardShell.tsx) | 表示名・テーマは **`GET /api/portal/me`** を `credentials: 'include'` で取得。 |
 | [project-manager/apps/web/app/api/portal/project-permission/route.ts](../../apps/web/app/api/portal/project-permission/route.ts) | 案件単位実効ロール BFF（上流 `/portal/api/project-permission`）。 |
 | [project-manager/apps/web/app/api/portal/me/route.ts](../../apps/web/app/api/portal/me/route.ts) | ログインユーザー概要 BFF（上流 `/portal/api/me`）。 |
-| [project-manager/apps/web/app/api/portal/my-projects/route.ts](../../apps/web/app/api/portal/my-projects/route.ts) | 所属案件一覧 BFF（上流 `/portal/api/my-projects`）。 |
+| [project-manager/apps/web/app/api/portal/my-projects/route.ts](../../apps/web/app/api/portal/my-projects/route.ts) | 所属 Project 一覧 BFF（上流 `/portal/api/my-projects`）。 |
 | [project-manager/apps/web/app/components/EffectiveProjectRoleBanner.tsx](../../apps/web/app/components/EffectiveProjectRoleBanner.tsx) | `project_id` 解決（`window.location.search` + `usePathname`）+ BFF 取得 + ヘッダー直下1行表示。 |
 | [project-manager/apps/web/lib/portal-project-permission.ts](../../apps/web/lib/portal-project-permission.ts) | 詳細 RSC 用: 上流 `GET /portal/api/project-permission` を Cookie 付きで取得（帯と同一契約）。 |
 | [project-manager/apps/web/app/project-list/[projectId]/ProjectDetailView.tsx](../../apps/web/app/project-list/[projectId]/ProjectDetailView.tsx) | 案件メタ（`my-projects` 行）+ 実効ロール（`project-permission`）+ ドキュメントルート案。 |

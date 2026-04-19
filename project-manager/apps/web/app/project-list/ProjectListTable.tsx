@@ -251,6 +251,7 @@ export function ProjectListTable({ initialProjects }: Props) {
             <input
               type="checkbox"
               id="project-list-owner-only"
+              name="project-list-owner-only"
               checked={ownerOnly}
               onChange={(e) => setOwnerOnly(e.target.checked)}
               className={checkboxClass}
@@ -287,6 +288,7 @@ export function ProjectListTable({ initialProjects }: Props) {
                 <Label htmlFor="flt-id">ID</Label>
                 <Input
                   id="flt-id"
+                  name="flt-id"
                   placeholder="完全一致"
                   inputMode="numeric"
                   value={draftFilters.idQuery}
@@ -309,6 +311,7 @@ export function ProjectListTable({ initialProjects }: Props) {
                 <div ref={projectSuggestRef} className="relative">
                   <Input
                     id="flt-name"
+                    name="flt-name"
                     autoComplete="off"
                     value={draftFilters.nameQuery}
                     onChange={(e) => setDraftFilters((f) => ({ ...f, nameQuery: e.target.value }))}
@@ -354,6 +357,7 @@ export function ProjectListTable({ initialProjects }: Props) {
                 <div ref={clientSuggestRef} className="relative">
                   <Input
                     id="flt-client"
+                    name="flt-client"
                     autoComplete="off"
                     value={draftFilters.clientQuery}
                     onChange={(e) => setDraftFilters((f) => ({ ...f, clientQuery: e.target.value }))}
@@ -407,6 +411,8 @@ export function ProjectListTable({ initialProjects }: Props) {
                         <label key={value} className="flex cursor-pointer items-center gap-2 text-sm">
                           <input
                             type="checkbox"
+                            id={`pm-flt-site-${value}`}
+                            name={`pm-flt-site-${value}`}
                             className={checkboxClass}
                             checked={draftFilters.siteTypes.includes(value)}
                             onChange={() =>
@@ -434,6 +440,7 @@ export function ProjectListTable({ initialProjects }: Props) {
                   <label className="flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap">
                     <input
                       type="radio"
+                      id="pm-flt-renewal-all"
                       name="pm-project-list-renewal-filter"
                       className={radioClass}
                       checked={draftFilters.renewalFilter === "all"}
@@ -444,6 +451,7 @@ export function ProjectListTable({ initialProjects }: Props) {
                   <label className="flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap">
                     <input
                       type="radio"
+                      id="pm-flt-renewal-renewal"
                       name="pm-project-list-renewal-filter"
                       className={radioClass}
                       checked={draftFilters.renewalFilter === "renewal"}
@@ -454,6 +462,7 @@ export function ProjectListTable({ initialProjects }: Props) {
                   <label className="flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap">
                     <input
                       type="radio"
+                      id="pm-flt-renewal-new"
                       name="pm-project-list-renewal-filter"
                       className={radioClass}
                       checked={draftFilters.renewalFilter === "new"}
@@ -469,12 +478,16 @@ export function ProjectListTable({ initialProjects }: Props) {
                   <ThemeDateField
                     className="min-w-0 flex-1"
                     label="から"
+                    controlId="flt-kickoff-from"
+                    name="flt-kickoff-from"
                     value={draftFilters.kickoffFrom}
                     onChange={(v) => setDraftFilters((f) => ({ ...f, kickoffFrom: v }))}
                   />
                   <ThemeDateField
                     className="min-w-0 flex-1"
                     label="まで"
+                    controlId="flt-kickoff-to"
+                    name="flt-kickoff-to"
                     value={draftFilters.kickoffTo}
                     onChange={(v) => setDraftFilters((f) => ({ ...f, kickoffTo: v }))}
                   />
@@ -486,12 +499,16 @@ export function ProjectListTable({ initialProjects }: Props) {
                   <ThemeDateField
                     className="min-w-0 flex-1"
                     label="から"
+                    controlId="flt-release-from"
+                    name="flt-release-from"
                     value={draftFilters.releaseFrom}
                     onChange={(v) => setDraftFilters((f) => ({ ...f, releaseFrom: v }))}
                   />
                   <ThemeDateField
                     className="min-w-0 flex-1"
                     label="まで"
+                    controlId="flt-release-to"
+                    name="flt-release-to"
                     value={draftFilters.releaseTo}
                     onChange={(v) => setDraftFilters((f) => ({ ...f, releaseTo: v }))}
                   />
@@ -516,6 +533,8 @@ export function ProjectListTable({ initialProjects }: Props) {
                         <label key={value} className="flex cursor-pointer items-center gap-2 text-sm">
                           <input
                             type="checkbox"
+                            id={`pm-flt-role-${value}`}
+                            name={`pm-flt-role-${value}`}
                             className={checkboxClass}
                             checked={draftFilters.roles.includes(value)}
                             onChange={() =>

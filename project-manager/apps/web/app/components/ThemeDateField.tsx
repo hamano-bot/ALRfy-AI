@@ -35,6 +35,10 @@ type ThemeDateFieldProps = {
   className?: string;
   /** `iso`: `yyyy-MM-dd` 1行表示（曜日なし）。既定は日本語表記。 */
   displayVariant?: "default" | "iso";
+  /** 複数行で安定した id を付与するとき（省略時は内部 useId） */
+  controlId?: string;
+  /** フォーム監査・オートフィル用の name（任意） */
+  name?: string;
 };
 
 export function ThemeDateField({
@@ -44,8 +48,11 @@ export function ThemeDateField({
   required,
   className,
   displayVariant = "default",
+  controlId: controlIdProp,
+  name,
 }: ThemeDateFieldProps) {
-  const id = useId();
+  const generatedId = useId();
+  const id = controlIdProp ?? generatedId;
   const [open, setOpen] = useState(false);
   const selected = parseYmd(value);
 
@@ -66,6 +73,7 @@ export function ThemeDateField({
             type="button"
             variant="default"
             id={id}
+            name={name}
             draggable={false}
             className={cn(
               inputBaseClassName,
@@ -86,7 +94,10 @@ export function ThemeDateField({
             <CalendarIcon className="h-4 w-4 shrink-0 text-[var(--muted)]" aria-hidden />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="theme-date-picker-panel w-[min(100vw-2rem,20rem)] p-3" align="start">
+        <PopoverContent
+          className="theme-date-picker-panel w-[min(100vw-2rem,20rem)] px-3 pt-3 pb-2"
+          align="start"
+        >
           <Calendar
             mode="single"
             selected={selected}
@@ -107,22 +118,11 @@ export function ThemeDateField({
               jpHoliday: "theme-dp-holiday",
             }}
           />
-          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 border-t border-[color:color-mix(in_srgb,var(--border)_85%,transparent)] pt-2 text-[10px] text-[var(--muted)]">
-            <span>
-              <span className="font-medium text-sky-400">土</span> 土曜
-            </span>
-            <span>
-              <span className="font-medium text-red-500">日</span> 日曜
-            </span>
-            <span>
-              <span className="font-medium text-red-500">祝</span> 祝日・振替
-            </span>
-          </div>
           {!required ? (
             <Button
               type="button"
               variant="ghost"
-              className="mt-2 w-full text-xs text-[var(--muted)] hover:text-[var(--foreground)]"
+              className="mt-1.5 w-full text-xs text-[var(--muted)] hover:text-[var(--foreground)]"
               onClick={() => {
                 onChange("");
                 setOpen(false);

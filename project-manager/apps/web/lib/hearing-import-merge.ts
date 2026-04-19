@@ -6,8 +6,13 @@ function norm(s: string): string {
   return s.trim().toLowerCase();
 }
 
-function rowKey(r: HearingSheetRow): string {
-  return `${norm(r.category)}|${norm(r.heading)}`;
+/** 行の同一・照合に使うキー（分類は含めない）。見出し＋確認事項を正規化して連結。 */
+export function hearingRowMatchKey(r: HearingSheetRow): string {
+  return `${norm(r.heading)}|${norm(r.question)}`;
+}
+
+function isBlankRowForImport(r: HearingSheetRow): boolean {
+  return r.heading.trim() === "" && r.question.trim() === "";
 }
 
 function newId(prefix: string): string {
@@ -18,9 +23,11 @@ function newId(prefix: string): string {
 
 /**
  * 取り込んだ行を現在の表にマージする。
+ * 同一判定・照合は **見出し＋確認事項**（正規化後の組）のみ。分類は判定に使わない。
+ *
  * - replace: 取り込みをそのまま採用（id は維持・欠ける場合は付与）
- * - fill_empty: 見出し（+分類）一致で空欄のみ上書き。一致しない取り込み行は末尾に追加。
- * - append: 見出し+分類の組が現状に無い行だけ追加
+ * - fill_empty: 見出し＋確認事項が一致する行同士で、空のセルのみ取り込みで上書き。一致しない取り込み行は末尾に追加。
+ * - append: 見出し＋確認事項の組が現状に無い行だけ追加
  */
 export function mergeHearingItems(
   current: HearingSheetRow[],
@@ -35,14 +42,14 @@ export function mergeHearingItems(
   }
 
   if (mode === "append") {
-    const keys = new Set(current.map((r) => rowKey(r)));
+    const keys = new Set(current.map((r) => hearingRowMatchKey(r)));
     const extra: HearingSheetRow[] = [];
     for (const r of imported) {
-      const k = rowKey(r);
-      if (keys.has(k)) {
+      if (isBlankRowForImport(r)) {
         continue;
       }
-      if (r.heading.trim() === "" && r.question.trim() === "") {
+      const k = hearingRowMatchKey(r);
+      if (keys.has(k)) {
         continue;
       }
       keys.add(k);
@@ -56,25 +63,26 @@ export function mergeHearingItems(
 
   // fill_empty
   const result = current.map((r) => ({ ...r }));
-  const byHeading = new Map<string, HearingSheetRow[]>();
+
+  const byMatchKey = new Map<string, HearingSheetRow[]>();
   for (const r of imported) {
-    const h = norm(r.heading);
-    if (!h) {
+    if (isBlankRowForImport(r)) {
       continue;
     }
-    const list = byHeading.get(h) ?? [];
+    const k = hearingRowMatchKey(r);
+    const list = byMatchKey.get(k) ?? [];
     list.push(r);
-    byHeading.set(h, list);
+    byMatchKey.set(k, list);
   }
 
   for (let i = 0; i < result.length; i++) {
     const r = result[i];
-    const h = norm(r.heading);
-    const candidates = h ? byHeading.get(h) : undefined;
-    const imp =
-      candidates?.find((x) => norm(x.category) === norm(r.category)) ??
-      candidates?.[0] ??
-      imported.find((x) => norm(x.heading) === h && (norm(x.category) === norm(r.category) || r.category.trim() === ""));
+    if (isBlankRowForImport(r)) {
+      continue;
+    }
+    const k = hearingRowMatchKey(r);
+    const candidates = byMatchKey.get(k);
+    const imp = candidates?.[0];
     if (!imp) {
       continue;
     }
@@ -87,6 +95,9 @@ export function mergeHearingItems(
     if (!r.category.trim()) {
       r.category = imp.category;
     }
+    if (!r.heading.trim()) {
+      r.heading = imp.heading;
+    }
     if (!r.assignee.trim()) {
       r.assignee = imp.assignee;
     }
@@ -98,13 +109,13 @@ export function mergeHearingItems(
     }
   }
 
-  const keys = new Set(result.map((k) => rowKey(k)));
+  const keys = new Set(result.map((row) => hearingRowMatchKey(row)));
   for (const imp of imported) {
-    const k = rowKey(imp);
-    if (keys.has(k)) {
+    if (isBlankRowForImport(imp)) {
       continue;
     }
-    if (imp.heading.trim() === "" && imp.question.trim() === "") {
+    const k = hearingRowMatchKey(imp);
+    if (keys.has(k)) {
       continue;
     }
     keys.add(k);
@@ -115,6 +126,66 @@ export function mergeHearingItems(
   }
 
   return result;
+}
+
+const PREVIEW_DIFF_FIELDS: (keyof HearingSheetRow)[] = [
+  "category",
+  "heading",
+  "question",
+  "answer",
+  "assignee",
+  "due",
+  "row_status",
+];
+
+function compareRowContent(a: HearingSheetRow, b: HearingSheetRow): (keyof HearingSheetRow)[] {
+  const changed: (keyof HearingSheetRow)[] = [];
+  for (const f of PREVIEW_DIFF_FIELDS) {
+    if (String(a[f]).trim() !== String(b[f]).trim()) {
+      changed.push(f);
+    }
+  }
+  return changed;
+}
+
+/** プレビュー表用: マージ後の各行が新規か、既存キーに対してどの列が変わるか */
+export type HearingPreviewRowDiff = {
+  row: HearingSheetRow;
+  /** すべて置換モードでは常に true（行は取り込み由来のため） */
+  isNew: boolean;
+  changedFields: (keyof HearingSheetRow)[];
+};
+
+export function diffPreviewRows(
+  current: HearingSheetRow[],
+  merged: HearingSheetRow[],
+  mode: HearingMergeMode,
+): HearingPreviewRowDiff[] {
+  if (mode === "replace") {
+    return merged.map((row) => ({
+      row,
+      isNew: true,
+      changedFields: [] as (keyof HearingSheetRow)[],
+    }));
+  }
+
+  const byKey = new Map<string, HearingSheetRow>();
+  for (const r of current) {
+    byKey.set(hearingRowMatchKey(r), r);
+  }
+
+  return merged.map((row) => {
+    const k = hearingRowMatchKey(row);
+    const prev = byKey.get(k);
+    if (!prev) {
+      return { row, isNew: true, changedFields: [] as (keyof HearingSheetRow)[] };
+    }
+    return {
+      row,
+      isNew: false,
+      changedFields: compareRowContent(prev, row),
+    };
+  });
 }
 
 /** マージ前後の差分（簡易・行単位） */

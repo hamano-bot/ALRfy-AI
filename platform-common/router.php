@@ -36,6 +36,7 @@ $routes = [
     '/portal/api/user/redmine/test' => __DIR__ . '/portal/api/post_user_redmine_test.php',
     '/portal/api/redmine-project-suggest' => __DIR__ . '/portal/api/get_redmine_project_suggest.php',
     '/portal/api/project-redmine-issues' => __DIR__ . '/portal/api/get_project_redmine_issues.php',
+    '/portal/api/project-redmine-issue-create' => __DIR__ . '/portal/api/post_project_redmine_issue_create.php',
     '/portal/api/user-suggest' => __DIR__ . '/portal/api/get_user_suggest.php',
 ];
 

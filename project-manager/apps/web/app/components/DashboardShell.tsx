@@ -468,6 +468,8 @@ export function DashboardShell({ children }: DashboardShellProps) {
               </div>
               <div className="mt-3 border-t border-[color:color-mix(in_srgb,var(--border)_90%,transparent)] pt-3">
                 <input
+                  id="pm-ai-chat-dummy-input"
+                  name="pm-ai-chat-dummy-input"
                   type="text"
                   disabled
                   placeholder="入力欄（ダミー）"
@@ -582,6 +584,8 @@ export function DashboardShell({ children }: DashboardShellProps) {
               <label className="block text-xs text-[var(--muted)]">
                 Redmine の URL（ベース）
                 <input
+                  id="pm-settings-redmine-base-url"
+                  name="pm-settings-redmine-base-url"
                   type="url"
                   className="mt-1 w-full rounded-lg border border-[color:color-mix(in_srgb,var(--border)_90%,transparent)] bg-[color:color-mix(in_srgb,var(--background)_94%,black_6%)] px-3 py-2 text-sm"
                   placeholder="https://redmine.example.com"
@@ -593,6 +597,8 @@ export function DashboardShell({ children }: DashboardShellProps) {
               <label className="block text-xs text-[var(--muted)]">
                 API キー（変更時のみ入力）
                 <input
+                  id="pm-settings-redmine-api-key"
+                  name="pm-settings-redmine-api-key"
                   type="password"
                   className="mt-1 w-full rounded-lg border border-[color:color-mix(in_srgb,var(--border)_90%,transparent)] bg-[color:color-mix(in_srgb,var(--background)_94%,black_6%)] px-3 py-2 text-sm"
                   placeholder="••••••••"

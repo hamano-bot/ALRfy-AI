@@ -18,7 +18,7 @@ export default async function ProjectManagerList() {
       >
         <p className="text-sm font-semibold text-[var(--foreground)]">一覧を表示できません</p>
         <p className="mt-2 text-sm text-[var(--foreground)]">
-          <code className="text-[var(--muted)]">PORTAL_API_BASE_URL</code> が未設定のため、ポータルから案件一覧を取得できません。
+          <code className="text-[var(--muted)]">PORTAL_API_BASE_URL</code> が未設定のため、ポータルからProject一覧を取得できません。
         </p>
         <p className="mt-2 text-xs text-[var(--muted)]">
           <code className="text-[var(--muted)]">project-manager/apps/web/.env.local</code> に PHP のオリジン（例:{" "}
@@ -45,7 +45,7 @@ export default async function ProjectManagerList() {
     const msg = parsePortalJsonMessage(raw.text) ?? "ログインが必要です。";
     return (
       <section className="surface-card p-5" role="status">
-        <p className="text-sm font-semibold text-[var(--foreground)]">案件一覧</p>
+        <p className="text-sm font-semibold text-[var(--foreground)]">Project一覧</p>
         <p className="mt-2 text-sm text-[var(--muted)]">{msg}</p>
         <p className="mt-2 text-xs text-[var(--muted)]">
           セッションは platform-common（PHP）と共有します。PHP 側でログインしたうえで、同一ブラウザからこのアプリを開いてください。
@@ -58,7 +58,7 @@ export default async function ProjectManagerList() {
     const msg = parsePortalJsonMessage(raw.text) ?? "所属先が未設定のため利用できません。";
     return (
       <section className="surface-card border border-amber-500/35 p-5" role="status">
-        <p className="text-sm font-semibold text-[var(--foreground)]">案件一覧</p>
+        <p className="text-sm font-semibold text-[var(--foreground)]">Project一覧</p>
         <p className="mt-2 text-sm text-[var(--foreground)]">{msg}</p>
       </section>
     );
@@ -86,7 +86,7 @@ export default async function ProjectManagerList() {
 
   if (projects.length === 0) {
     return (
-      <section className="surface-card p-5" aria-label="案件一覧">
+      <section className="surface-card p-5" aria-label="Project一覧">
         <p className="text-sm text-[var(--muted)]">
           <code className="text-[var(--muted)]">project_members</code> に行がまだ無いか、案件が未登録です。共有 DB のシードまたは管理画面から所属を追加してください。
         </p>
@@ -98,7 +98,7 @@ export default async function ProjectManagerList() {
     <section
       id="project-list"
       className="surface-card flex min-h-0 flex-1 flex-col overflow-hidden p-0"
-      aria-label="案件一覧"
+      aria-label="Project一覧"
     >
       <ProjectListTable initialProjects={projects} />
     </section>

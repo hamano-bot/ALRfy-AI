@@ -21,7 +21,7 @@ export default function DetailLayoutMocksPage() {
             href="/project-list"
             className="text-[color:color-mix(in_srgb,var(--accent)_82%,var(--foreground)_18%)] hover:underline"
           >
-            案件一覧
+            Project一覧
           </Link>
           <span className="mx-1.5">/</span>
           <span className="text-[var(--foreground)]">レイアウト比較モック</span>

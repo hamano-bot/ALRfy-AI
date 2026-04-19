@@ -11,11 +11,11 @@ import { buildRedmineProjectUrl } from "@/lib/redmine-url";
 import { getParticipantViewLine, type PortalProjectDetail } from "@/lib/portal-project";
 import { projectPageLgMainSidebarGridClassName } from "@/lib/project-page-layout";
 import { PROJECT_ROLE_LABEL_JA } from "@/lib/project-role-labels";
+import { UNSAVED_LEAVE_CONFIRM_MESSAGE } from "@/lib/unsaved-navigation";
 import { cn } from "@/lib/utils";
-import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 type ProjectDetailClientProps = {
   projectId: number;
@@ -35,11 +35,36 @@ function ReadOnlyField({ label, children }: { label: string; children: React.Rea
 export function ProjectDetailClient({ projectId, initialProject, canEdit }: ProjectDetailClientProps) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
+  const [editFormDirty, setEditFormDirty] = useState(false);
   const [project, setProject] = useState<PortalProjectDetail>(initialProject);
 
   useEffect(() => {
     setProject(initialProject);
   }, [initialProject]);
+
+  useEffect(() => {
+    if (!editing || !editFormDirty || !canEdit) {
+      return;
+    }
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [editing, editFormDirty, canEdit]);
+
+  const leaveEditMode = useCallback(() => {
+    setEditFormDirty(false);
+    setEditing(false);
+  }, []);
+
+  const onBackToViewClick = useCallback(() => {
+    if (editFormDirty && !window.confirm(UNSAVED_LEAVE_CONFIRM_MESSAGE)) {
+      return;
+    }
+    leaveEditMode();
+  }, [editFormDirty, leaveEditMode]);
 
   if (editing) {
     return (
@@ -56,7 +81,7 @@ export function ProjectDetailClient({ projectId, initialProject, canEdit }: Proj
             <span className="text-[var(--muted)]">：</span>
             案件を更新しています。保存するまで一覧には反映されません。
           </span>
-          <Button type="button" variant="default" size="sm" className="shrink-0" onClick={() => setEditing(false)}>
+          <Button type="button" variant="default" size="sm" className="shrink-0" onClick={onBackToViewClick}>
             閲覧に戻る
           </Button>
         </div>
@@ -64,9 +89,10 @@ export function ProjectDetailClient({ projectId, initialProject, canEdit }: Proj
           mode="edit"
           editProjectId={projectId}
           initialDetail={project}
-          onEditCancel={() => setEditing(false)}
+          onEditDirtyChange={setEditFormDirty}
+          onEditCancel={leaveEditMode}
           onEditSaved={() => {
-            setEditing(false);
+            leaveEditMode();
             router.refresh();
           }}
         />
@@ -249,67 +275,72 @@ export function ProjectDetailClient({ projectId, initialProject, canEdit }: Proj
         const externalOpen = Boolean(t.href && t.href.trim() !== "");
         const internalOpen = Boolean(hearingHref);
         const open = internalOpen || externalOpen;
-        return (
-          <li key={t.key}>
-            <Card
+        const cardSurfaceClass = cn(
+          "rounded-2xl border shadow-sm transition-colors",
+          "border-[color:color-mix(in_srgb,var(--border)_90%,transparent)] bg-[color:color-mix(in_srgb,var(--surface)_95%,black_5%)]",
+          open &&
+            "border-[color:color-mix(in_srgb,var(--accent)_42%,var(--border)_58%)] bg-[color:color-mix(in_srgb,var(--accent)_11%,var(--surface)_89%)]",
+        );
+        const focusRingClass =
+          "outline-none focus-visible:ring-2 focus-visible:ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]";
+        const inner = (
+          <>
+            <span
               className={cn(
-                "shadow-sm transition-colors",
-                "border-[color:color-mix(in_srgb,var(--border)_90%,transparent)]",
-                open &&
-                  "border-[color:color-mix(in_srgb,var(--accent)_42%,var(--border)_58%)] bg-[color:color-mix(in_srgb,var(--accent)_11%,var(--surface)_89%)]",
+                "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_4px_12px_rgba(15,23,42,0.32)] motion-safe:transition motion-safe:duration-200",
+                accentButtonSurfaceBaseClassName,
               )}
             >
-              <CardContent
+              <Icon className="h-5 w-5" strokeWidth={2} aria-hidden />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold leading-snug text-[var(--foreground)]">{t.title}</p>
+              <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">{t.description}</p>
+            </div>
+            {!open ? (
+              <span
+                className="shrink-0 self-center rounded-md border border-[color:color-mix(in_srgb,var(--border)_85%,transparent)] bg-[color:color-mix(in_srgb,var(--surface)_96%,transparent)] px-2.5 py-1 text-xs text-[var(--muted)]"
+                title="連携先の画面は準備中です"
+              >
+                準備中
+              </span>
+            ) : null}
+          </>
+        );
+        return (
+          <li key={t.key}>
+            {internalOpen ? (
+              <Link
+                href={hearingHref!}
+                prefetch
                 className={cn(
-                  "flex gap-3",
-                  "flex-col sm:flex-row sm:items-center sm:justify-between sm:gap-4",
-                  "lg:flex-col lg:items-stretch lg:gap-3 lg:p-3",
+                  cardSurfaceClass,
+                  focusRingClass,
+                  "flex cursor-pointer items-start gap-3 p-4 no-underline sm:items-center",
+                  "motion-safe:transition motion-safe:hover:border-[color:color-mix(in_srgb,var(--accent)_55%,var(--border)_45%)]",
                 )}
               >
-                <div className="flex min-w-0 flex-1 items-start gap-3">
-                  <span
-                    className={cn(
-                      "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_4px_12px_rgba(15,23,42,0.32)] motion-safe:transition motion-safe:duration-200",
-                      accentButtonSurfaceBaseClassName,
-                    )}
-                  >
-                    <Icon className="h-5 w-5" strokeWidth={2} aria-hidden />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold leading-snug text-[var(--foreground)]">{t.title}</p>
-                    <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">{t.description}</p>
-                  </div>
-                </div>
-                <div className="flex shrink-0 justify-end sm:pl-2 lg:w-full lg:justify-stretch lg:pl-0">
-                  {internalOpen ? (
-                    <Button type="button" variant="accent" size="sm" className="gap-1 lg:w-full" asChild>
-                      <Link href={hearingHref!} prefetch>
-                        開く
-                        <ArrowUpRight className="h-3.5 w-3.5" aria-hidden />
-                      </Link>
-                    </Button>
-                  ) : open ? (
-                    <Button type="button" variant="accent" size="sm" className="gap-1 lg:w-full" asChild>
-                      <a href={t.href} target="_blank" rel="noreferrer">
-                        開く
-                        <ArrowUpRight className="h-3.5 w-3.5" aria-hidden />
-                      </a>
-                    </Button>
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="default"
-                      size="sm"
-                      className="lg:w-full"
-                      disabled
-                      title="連携先の画面は準備中です"
-                    >
-                      準備中
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+                {inner}
+              </Link>
+            ) : open ? (
+              <a
+                href={t.href}
+                target="_blank"
+                rel="noreferrer"
+                className={cn(
+                  cardSurfaceClass,
+                  focusRingClass,
+                  "flex cursor-pointer items-start gap-3 p-4 no-underline sm:items-center",
+                  "motion-safe:transition motion-safe:hover:border-[color:color-mix(in_srgb,var(--accent)_55%,var(--border)_45%)]",
+                )}
+              >
+                {inner}
+              </a>
+            ) : (
+              <Card className={cn(cardSurfaceClass, "cursor-default")}>
+                <CardContent className="flex items-start gap-3 p-4 sm:items-center">{inner}</CardContent>
+              </Card>
+            )}
           </li>
         );
       })}

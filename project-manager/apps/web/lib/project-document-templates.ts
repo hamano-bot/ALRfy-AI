@@ -26,7 +26,7 @@ export const PROJECT_DOCUMENT_TEMPLATES: ProjectDocumentTemplateItem[] = [
   },
   {
     key: "director_check",
-    title: "ディレクターチェックシート",
+    title: "チェックシート",
     description: "制作・進行上の確認項目を洗い出すための一覧です。",
     icon: ShieldCheck,
   },
