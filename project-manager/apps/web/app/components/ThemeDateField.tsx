@@ -32,6 +32,8 @@ type ThemeDateFieldProps = {
   value: string;
   onChange: (next: string) => void;
   required?: boolean;
+  /** 閲覧のみ・ロック時など */
+  disabled?: boolean;
   className?: string;
   /** `iso`: `yyyy-MM-dd` 1行表示（曜日なし）。既定は日本語表記。 */
   displayVariant?: "default" | "iso";
@@ -46,6 +48,7 @@ export function ThemeDateField({
   value,
   onChange,
   required,
+  disabled = false,
   className,
   displayVariant = "default",
   controlId: controlIdProp,
@@ -67,7 +70,7 @@ export function ThemeDateField({
   return (
     <div className={cn("w-full min-w-0", className)}>
       <Label htmlFor={id}>{label}</Label>
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover open={open && !disabled} onOpenChange={(o) => !disabled && setOpen(o)}>
         <PopoverTrigger asChild>
           <Button
             type="button"
@@ -75,6 +78,7 @@ export function ThemeDateField({
             id={id}
             name={name}
             draggable={false}
+            disabled={disabled}
             className={cn(
               inputBaseClassName,
               "mt-1 h-auto min-h-9 w-full justify-between gap-2 text-left font-normal hover:bg-[color:color-mix(in_srgb,var(--background)_88%,black_12%)]",

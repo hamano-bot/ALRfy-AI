@@ -27,6 +27,7 @@ $routes = [
     '/portal/api/projects' => __DIR__ . '/portal/api/post_projects.php',
     '/portal/api/project' => __DIR__ . '/portal/api/get_patch_project.php',
     '/portal/api/project-hearing-sheet' => __DIR__ . '/portal/api/get_patch_project_hearing_sheet.php',
+    '/portal/api/project-requirements' => __DIR__ . '/portal/api/get_patch_project_requirements.php',
     '/portal/api/hearing-insight-batch-state' => __DIR__ . '/portal/api/get_hearing_insight_batch_state.php',
     '/portal/api/hearing-insight-export' => __DIR__ . '/portal/api/get_hearing_insight_export.php',
     '/portal/api/hearing-template-definition' => __DIR__ . '/portal/api/get_hearing_template_definition.php',

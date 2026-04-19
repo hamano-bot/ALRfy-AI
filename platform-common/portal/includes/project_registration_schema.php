@@ -173,4 +173,20 @@ function ensureProjectRegistrationSchema(PDO $pdo): void
               COMMENT=\'案件に 1:1 のヒアリングシート（常に最新1枚）\''
         );
     }
+
+    if (!$tableExists('project_requirements')) {
+        $pdo->exec(
+            'CREATE TABLE `project_requirements` (
+              `project_id` INT UNSIGNED NOT NULL,
+              `body_json` LONGTEXT NOT NULL COMMENT \'要件定義 JSON（pages 配列など）\',
+              `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+              PRIMARY KEY (`project_id`),
+              CONSTRAINT `fk_project_requirements_project`
+                FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`)
+                ON UPDATE CASCADE ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+              COMMENT=\'案件に 1:1 の要件定義（常に最新1枚）\''
+        );
+    }
 }

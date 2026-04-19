@@ -4,6 +4,9 @@
 .env.*
 !.env*.example
 
+# LocalStack (S3 開発用・PC ローカル永続)
+project-manager/apps/web/.localstack/
+
 # Dependencies & build (Next.js 等)
 **/node_modules/
 **/.next/

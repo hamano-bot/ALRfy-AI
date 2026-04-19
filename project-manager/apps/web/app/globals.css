@@ -335,3 +335,341 @@ body {
 .pm-scrollbar-themed::-webkit-scrollbar-thumb:hover {
   background: color-mix(in srgb, var(--muted) 45%, var(--border) 55%);
 }
+
+/* 要件定義: TipTap（.requirements-tiptap 内にスコープ） */
+.requirements-tiptap .ProseMirror {
+  min-height: inherit;
+  padding: 0.625rem 0.75rem;
+  outline: none;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--foreground);
+}
+
+.requirements-tiptap .ProseMirror p {
+  margin: 0.35em 0;
+}
+
+.requirements-tiptap .ProseMirror h1,
+.requirements-tiptap .ProseMirror h2,
+.requirements-tiptap .ProseMirror h3 {
+  font-weight: 600;
+  margin: 0.65em 0 0.35em;
+  line-height: 1.35;
+}
+
+.requirements-tiptap .ProseMirror h1 {
+  font-size: 1.2rem;
+}
+
+.requirements-tiptap .ProseMirror h2 {
+  font-size: 1.05rem;
+}
+
+.requirements-tiptap .ProseMirror h3 {
+  font-size: 0.95rem;
+}
+
+.requirements-tiptap .ProseMirror pre {
+  margin: 0.5em 0;
+  padding: 0.65rem 0.75rem;
+  border-radius: 0.375rem;
+  background: color-mix(in srgb, var(--background) 55%, var(--surface) 45%);
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  font-size: 0.8125rem;
+  overflow-x: auto;
+}
+
+.requirements-tiptap .ProseMirror code {
+  font-size: 0.85em;
+  padding: 0.1em 0.35em;
+  border-radius: 0.25rem;
+  background: color-mix(in srgb, var(--surface-soft) 70%, transparent);
+}
+
+.requirements-tiptap .ProseMirror pre code {
+  padding: 0;
+  background: none;
+  font-size: inherit;
+}
+
+.requirements-tiptap .ProseMirror a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* ドラッグハンドル用ラッパーと重なっても本文（画像）を確実にクリックできるように */
+.requirements-tiptap-editor .ProseMirror {
+  position: relative;
+  z-index: 2;
+}
+
+.requirements-tiptap .ProseMirror img.requirements-tiptap-image,
+.requirements-tiptap .ProseMirror img {
+  max-width: 100%;
+  vertical-align: middle;
+  border-radius: 0.375rem;
+  margin: 0.5em 0;
+  border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+  position: relative;
+  z-index: 1;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+/* ホバーでどの画像に効くか分かるように */
+.requirements-tiptap .ProseMirror img.requirements-tiptap-image:hover {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border) 50%);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+/* テキストブロック・カラムにカーソルを置いたときのガイド（画像は上記で別表示） */
+.requirements-tiptap .ProseMirror p:hover,
+.requirements-tiptap .ProseMirror h1:hover,
+.requirements-tiptap .ProseMirror h2:hover,
+.requirements-tiptap .ProseMirror h3:hover,
+.requirements-tiptap .ProseMirror blockquote:hover,
+.requirements-tiptap .ProseMirror .requirements-tiptap-columns:hover,
+.requirements-tiptap .ProseMirror .requirements-tiptap-column:hover {
+  outline: 1px dashed color-mix(in srgb, var(--border) 60%, var(--accent) 40%);
+  outline-offset: 2px;
+  border-radius: 0.25rem;
+}
+
+/* ノード選択時：枠をアクセントでハイライト（リサイズ無し・img 自体が選択ノードのとき） */
+.requirements-tiptap .ProseMirror img.requirements-tiptap-image.ProseMirror-selectednode,
+.requirements-tiptap .ProseMirror .ProseMirror-selectednode img.requirements-tiptap-image {
+  position: relative;
+  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent),
+    0 0 0 5px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.requirements-tiptap .ProseMirror img.requirements-tiptap-image.ProseMirror-selectednode::after,
+.requirements-tiptap .ProseMirror .ProseMirror-selectednode img.requirements-tiptap-image::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 2;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+/* リサイズ NodeView：選択は外側 [data-node="image"] に付く（wrapper > img のため :has(>img) では届かない） */
+.requirements-tiptap .ProseMirror [data-node="image"].ProseMirror-selectednode {
+  position: relative;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 0.375rem;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent),
+    0 0 0 6px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+/* 画像の上に薄いマスク（ハンドル z-index より下・操作は透過） */
+.requirements-tiptap .ProseMirror [data-node="image"].ProseMirror-selectednode [data-resize-wrapper] {
+  position: relative;
+}
+
+.requirements-tiptap .ProseMirror [data-node="image"].ProseMirror-selectednode [data-resize-wrapper]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 0.375rem;
+  pointer-events: none;
+  z-index: 2;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 65%, transparent);
+}
+
+/* リサイズ NodeView 外側：横幅いっぱいで横位置（justify-content）が効くように */
+.requirements-tiptap .ProseMirror .requirements-tiptap-image-host[data-node="image"] {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* リサイズハンドル（角を掴んで拡大縮小）— ヒット領域と視認性 */
+.requirements-tiptap .ProseMirror [data-node="image"] [data-resize-handle] {
+  z-index: 4;
+  width: 11px;
+  height: 11px;
+  min-width: 11px;
+  min-height: 11px;
+  box-sizing: border-box;
+  border-radius: 2px;
+  border: 2px solid color-mix(in srgb, var(--surface) 92%, var(--background) 8%);
+  background: color-mix(in srgb, var(--accent) 85%, var(--background) 15%);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--border) 65%, transparent),
+    0 1px 2px color-mix(in srgb, var(--foreground) 12%, transparent);
+}
+
+/* 角ハンドル：ホバー時に対角リサイズであることが分かるカーソル（⇔系） */
+.requirements-tiptap .ProseMirror [data-node="image"] [data-resize-handle="top-left"],
+.requirements-tiptap .ProseMirror [data-node="image"] [data-resize-handle="bottom-right"] {
+  cursor: nwse-resize;
+}
+
+.requirements-tiptap .ProseMirror [data-node="image"] [data-resize-handle="top-right"],
+.requirements-tiptap .ProseMirror [data-node="image"] [data-resize-handle="bottom-left"] {
+  cursor: nesw-resize;
+}
+
+/* 辺ハンドル（リサイズ directions に含まれる場合） */
+.requirements-tiptap .ProseMirror [data-node="image"] [data-resize-handle="top"],
+.requirements-tiptap .ProseMirror [data-node="image"] [data-resize-handle="bottom"] {
+  cursor: ns-resize;
+}
+
+.requirements-tiptap .ProseMirror [data-node="image"] [data-resize-handle="left"],
+.requirements-tiptap .ProseMirror [data-node="image"] [data-resize-handle="right"] {
+  cursor: ew-resize;
+}
+
+/* リサイズ無効時のみ img に data-align が付く場合の横位置 */
+.requirements-tiptap .ProseMirror img.requirements-tiptap-image[data-align="center"] {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.requirements-tiptap .ProseMirror img.requirements-tiptap-image[data-align="right"] {
+  display: block;
+  margin-left: auto;
+  margin-right: 0;
+}
+
+/* リサイズ未設定時は縦横比を保つ（幅・高さを指定したときはインライン style が優先） */
+.requirements-tiptap .ProseMirror img.requirements-tiptap-image:not([style*="height"]):not([height]) {
+  height: auto;
+}
+
+.requirements-tiptap .ProseMirror ul,
+.requirements-tiptap .ProseMirror ol {
+  margin: 0.35em 0;
+  padding-left: 1.35rem;
+}
+
+.requirements-tiptap .ProseMirror .tableWrapper {
+  margin: 0.5em 0;
+  overflow-x: auto;
+}
+
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  font-size: 0.95em;
+}
+
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table td,
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table th {
+  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  padding: 0.35rem 0.5rem;
+  vertical-align: top;
+  min-width: 2.5rem;
+}
+
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table th {
+  background: color-mix(in srgb, var(--surface-soft) 70%, var(--background) 30%);
+  font-weight: 600;
+}
+
+.requirements-tiptap .ProseMirror blockquote {
+  margin: 0.35em 0;
+  padding-left: 0.75rem;
+  border-left: 3px solid color-mix(in srgb, var(--border) 80%, var(--accent) 20%);
+  color: color-mix(in srgb, var(--foreground) 88%, var(--muted) 12%);
+}
+
+.requirements-tiptap .ProseMirror hr {
+  margin: 0.75em 0;
+  border: none;
+  border-top: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+}
+
+.requirements-tiptap .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: var(--muted);
+  pointer-events: none;
+  height: 0;
+}
+
+/* TipTap DragHandle（@tiptap/extension-drag-handle） */
+.requirements-tiptap .requirements-tiptap-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.5rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0.25rem;
+  background: transparent;
+  color: var(--muted);
+  cursor: grab;
+  z-index: 2;
+  flex-shrink: 0;
+}
+
+.requirements-tiptap .requirements-tiptap-drag-handle:hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.requirements-tiptap .requirements-tiptap-drag-handle:active {
+  cursor: grabbing;
+}
+
+.requirements-tiptap .requirements-tiptap-drag-handle[data-dragging="true"] {
+  cursor: grabbing;
+}
+
+/* 2 / 3 カラム（カスタムノード） */
+.requirements-tiptap .ProseMirror .requirements-tiptap-columns {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0.5em 0;
+  padding: 0.45rem;
+  border-radius: 0.4rem;
+  border: 1px dashed color-mix(in srgb, var(--border) 70%, var(--accent) 30%);
+  background: color-mix(in srgb, var(--surface-soft) 55%, transparent);
+}
+
+.requirements-tiptap .ProseMirror .requirements-tiptap-columns--2 {
+  grid-template-columns: 1fr 1fr;
+}
+
+.requirements-tiptap .ProseMirror .requirements-tiptap-columns--3 {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+@media (max-width: 640px) {
+  .requirements-tiptap .ProseMirror .requirements-tiptap-columns--2,
+  .requirements-tiptap .ProseMirror .requirements-tiptap-columns--3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.requirements-tiptap .ProseMirror .requirements-tiptap-column {
+  min-width: 0;
+  min-height: 2.25rem;
+  padding: 0.4rem 0.45rem;
+  border-radius: 0.3rem;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  background: color-mix(in srgb, var(--surface) 88%, var(--background) 12%);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 6%, transparent);
+}
+
+.requirements-tiptap .ProseMirror .requirements-tiptap-column:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border) 65%);
+  background: color-mix(in srgb, var(--surface) 92%, var(--accent) 5%);
+}

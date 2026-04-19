@@ -271,9 +271,14 @@ export function ProjectDetailClient({ projectId, initialProject, canEdit }: Proj
     <ul className="flex flex-col gap-3">
       {PROJECT_DOCUMENT_TEMPLATES.map((t) => {
         const Icon = t.icon;
-        const hearingHref = t.key === "hearing" ? `/project-list/${projectId}/hearing` : null;
+        const internalDocumentHref =
+          t.key === "hearing"
+            ? `/project-list/${projectId}/hearing`
+            : t.key === "requirements"
+              ? `/project-list/${projectId}/requirements`
+              : null;
         const externalOpen = Boolean(t.href && t.href.trim() !== "");
-        const internalOpen = Boolean(hearingHref);
+        const internalOpen = Boolean(internalDocumentHref);
         const open = internalOpen || externalOpen;
         const cardSurfaceClass = cn(
           "rounded-2xl border shadow-sm transition-colors",
@@ -311,7 +316,7 @@ export function ProjectDetailClient({ projectId, initialProject, canEdit }: Proj
           <li key={t.key}>
             {internalOpen ? (
               <Link
-                href={hearingHref!}
+                href={internalDocumentHref!}
                 prefetch
                 className={cn(
                   cardSurfaceClass,

@@ -1,0 +1,20 @@
+# 開発用: PC 上に S3 互換 API（LocalStack）を立て、実装は本番と同じ PutObject / 同じキー規則を使う。
+# データは ./.localstack に永続化（リポジトリ直下ではなく apps/web 配下）。
+#
+# 起動: docker compose -f docker-compose.localstack.yml up -d
+# 初期化: npm run localstack:init
+#
+# .env.local の例は .env.example を参照。
+
+services:
+  localstack:
+    image: localstack/localstack:3
+    container_name: alrfy-localstack-s3
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: s3
+      DEBUG: "0"
+      DOCKER_HOST: unix:///var/run/docker.sock
+    volumes:
+      - ./.localstack:/var/lib/localstack
