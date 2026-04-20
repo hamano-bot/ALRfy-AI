@@ -400,9 +400,11 @@ body {
 }
 
 /* ドラッグハンドル用ラッパーと重なっても本文（画像）を確実にクリックできるように */
+/* 本文は親カードの 1 レイヤーに寄せ、表セル罫線と surface の境目が溶けないようにする */
 .requirements-tiptap-editor .ProseMirror {
   position: relative;
   z-index: 2;
+  background: transparent;
 }
 
 .requirements-tiptap .ProseMirror img.requirements-tiptap-image,
@@ -556,29 +558,247 @@ body {
   padding-left: 1.35rem;
 }
 
+/* 表: 外枠は点線（2/3 カラムの破線グリッドと見た目を分ける）。中身は実線の罫線（--foreground 多めでダークテーマでも視認性確保）。 */
 .requirements-tiptap .ProseMirror .tableWrapper {
   margin: 0.5em 0;
   overflow-x: auto;
+  box-sizing: border-box;
+  padding: 0.35rem;
+  border-radius: 0.4rem;
+  border: 2px dotted color-mix(in srgb, var(--accent) 42%, var(--border) 58%);
+  background: color-mix(in srgb, var(--background) 45%, transparent);
 }
 
-.requirements-tiptap .ProseMirror table.requirements-tiptap-table {
+/* 罫線なしプリセット: ラッパーも控えめに（表の範囲は分かるように 1px のみ） */
+.requirements-tiptap .ProseMirror .tableWrapper:has(table.requirements-tiptap-table[data-requirements-table-border-preset="none"]) {
+  border: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  background: color-mix(in srgb, var(--background) 38%, transparent);
+}
+
+/* default / 属性なし（既存ドキュメント）— foreground 多めでダーク UI でも視認性を確保 */
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table:not([data-requirements-table-border-preset]),
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="default"] {
   width: 100%;
   border-collapse: collapse;
-  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  border-style: solid;
+  border-width: 1px;
+  border-color: color-mix(in srgb, var(--border) 28%, var(--foreground) 72%);
   font-size: 0.95em;
+  background: color-mix(in srgb, var(--background) 52%, var(--surface) 48%);
 }
 
-.requirements-tiptap .ProseMirror table.requirements-tiptap-table td,
-.requirements-tiptap .ProseMirror table.requirements-tiptap-table th {
-  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
-  padding: 0.35rem 0.5rem;
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table:not([data-requirements-table-border-preset]) td,
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table:not([data-requirements-table-border-preset]) th,
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="default"] td,
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="default"] th {
+  border-style: solid;
+  border-width: 1px;
+  border-color: color-mix(in srgb, var(--border) 18%, var(--foreground) 82%);
+  padding: 0.4rem 0.55rem;
   vertical-align: top;
-  min-width: 2.5rem;
+  min-width: 2.75rem;
+  min-height: 1.85rem;
 }
 
-.requirements-tiptap .ProseMirror table.requirements-tiptap-table th {
-  background: color-mix(in srgb, var(--surface-soft) 70%, var(--background) 30%);
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table:not([data-requirements-table-border-preset]) th,
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="default"] th {
+  background: color-mix(in srgb, var(--surface-soft) 55%, var(--background) 45%);
   font-weight: 600;
+}
+
+/* 罫線なし */
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="none"] {
+  width: 100%;
+  border-collapse: collapse;
+  border-style: none;
+  border-width: 0;
+  font-size: 0.95em;
+  background: color-mix(in srgb, var(--background) 52%, var(--surface) 48%);
+}
+
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="none"] td,
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="none"] th {
+  border-style: none;
+  border-width: 0;
+  padding: 0.4rem 0.55rem;
+  vertical-align: top;
+  min-width: 2.75rem;
+  min-height: 1.85rem;
+}
+
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="none"] th {
+  background: color-mix(in srgb, var(--surface-soft) 55%, var(--background) 45%);
+  font-weight: 600;
+}
+
+/* 点線・細め（種類の変更） */
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="dashed"] {
+  width: 100%;
+  border-collapse: collapse;
+  border-style: dashed;
+  border-width: 1px;
+  border-color: color-mix(in srgb, var(--border) 28%, var(--foreground) 72%);
+  font-size: 0.95em;
+  background: color-mix(in srgb, var(--background) 52%, var(--surface) 48%);
+}
+
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="dashed"] td,
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="dashed"] th {
+  border-style: dashed;
+  border-width: 1px;
+  border-color: color-mix(in srgb, var(--border) 18%, var(--foreground) 82%);
+  padding: 0.4rem 0.55rem;
+  vertical-align: top;
+  min-width: 2.75rem;
+  min-height: 1.85rem;
+}
+
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="dashed"] th {
+  background: color-mix(in srgb, var(--surface-soft) 55%, var(--background) 45%);
+  font-weight: 600;
+}
+
+/* 太線（太さの変更） */
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="thick"] {
+  width: 100%;
+  border-collapse: collapse;
+  border-style: solid;
+  border-width: 2px;
+  border-color: color-mix(in srgb, var(--border) 22%, var(--foreground) 78%);
+  font-size: 0.95em;
+  background: color-mix(in srgb, var(--background) 52%, var(--surface) 48%);
+}
+
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="thick"] td,
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="thick"] th {
+  border-style: solid;
+  border-width: 2px;
+  border-color: color-mix(in srgb, var(--border) 15%, var(--foreground) 85%);
+  padding: 0.4rem 0.55rem;
+  vertical-align: top;
+  min-width: 2.75rem;
+  min-height: 1.85rem;
+}
+
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="thick"] th {
+  background: color-mix(in srgb, var(--surface-soft) 55%, var(--background) 45%);
+  font-weight: 600;
+}
+
+/* ヘッダー行の下のみ二重実線、その他は標準実線（ヘッダー行がない表は default と同じ見た目） */
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="header_double"] {
+  width: 100%;
+  border-collapse: collapse;
+  border-style: solid;
+  border-width: 1px;
+  border-color: color-mix(in srgb, var(--border) 28%, var(--foreground) 72%);
+  font-size: 0.95em;
+  background: color-mix(in srgb, var(--background) 52%, var(--surface) 48%);
+}
+
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="header_double"] td,
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="header_double"] th {
+  border-style: solid;
+  border-width: 1px;
+  border-color: color-mix(in srgb, var(--border) 18%, var(--foreground) 82%);
+  padding: 0.4rem 0.55rem;
+  vertical-align: top;
+  min-width: 2.75rem;
+  min-height: 1.85rem;
+}
+
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="header_double"] th {
+  background: color-mix(in srgb, var(--surface-soft) 55%, var(--background) 45%);
+  font-weight: 600;
+}
+
+/* 先頭行の下を二重線（th のヘッダー行でも、先頭が td のみの表でも同じ） */
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="header_double"] tr:first-child th,
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="header_double"] tr:first-child td {
+  border-bottom-style: double;
+  border-bottom-width: 3px;
+  border-bottom-color: color-mix(in srgb, var(--border) 18%, var(--foreground) 82%);
+}
+
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="header_double"] tr:first-child + tr td,
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="header_double"] tr:first-child + tr th {
+  border-top: none;
+}
+
+/* タイトル行（先頭行）の下＋先頭列の右を二重線、その他は標準実線 */
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="row_col_double"] {
+  width: 100%;
+  border-collapse: collapse;
+  border-style: solid;
+  border-width: 1px;
+  border-color: color-mix(in srgb, var(--border) 28%, var(--foreground) 72%);
+  font-size: 0.95em;
+  background: color-mix(in srgb, var(--background) 52%, var(--surface) 48%);
+}
+
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="row_col_double"] td,
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="row_col_double"] th {
+  border-style: solid;
+  border-width: 1px;
+  border-color: color-mix(in srgb, var(--border) 18%, var(--foreground) 82%);
+  padding: 0.4rem 0.55rem;
+  vertical-align: top;
+  min-width: 2.75rem;
+  min-height: 1.85rem;
+}
+
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="row_col_double"] th {
+  background: color-mix(in srgb, var(--surface-soft) 55%, var(--background) 45%);
+  font-weight: 600;
+}
+
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="row_col_double"] tr:first-child th,
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="row_col_double"] tr:first-child td {
+  border-bottom-style: double;
+  border-bottom-width: 3px;
+  border-bottom-color: color-mix(in srgb, var(--border) 18%, var(--foreground) 82%);
+}
+
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="row_col_double"] tr:first-child + tr td,
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="row_col_double"] tr:first-child + tr th {
+  border-top: none;
+}
+
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="row_col_double"] tr > th:first-child,
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="row_col_double"] tr > td:first-child {
+  border-right-style: double;
+  border-right-width: 3px;
+  border-right-color: color-mix(in srgb, var(--border) 18%, var(--foreground) 82%);
+}
+
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="row_col_double"] tr > th:nth-child(2),
+.requirements-tiptap .ProseMirror table.requirements-tiptap-table[data-requirements-table-border-preset="row_col_double"] tr > td:nth-child(2) {
+  border-left: none;
+}
+
+/* prosemirror-tables / TipTap Table（resizable）: 列境界ドラッグの視認性 */
+.requirements-tiptap .ProseMirror .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  z-index: 3;
+  background-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  pointer-events: none;
+  opacity: 0.9;
+}
+
+.requirements-tiptap .ProseMirror.resize-cursor {
+  cursor: col-resize;
+}
+
+.requirements-tiptap .ProseMirror .tableWrapper td.selectedCell,
+.requirements-tiptap .ProseMirror .tableWrapper th.selectedCell {
+  position: relative;
+  z-index: 2;
+  outline: 1px solid color-mix(in srgb, var(--accent) 65%, var(--border) 35%);
+  outline-offset: -1px;
 }
 
 .requirements-tiptap .ProseMirror blockquote {

@@ -38,6 +38,7 @@ import {
   type PortalMyProjectRow,
 } from "@/lib/portal-my-projects";
 import { displayText } from "@/lib/empty-display";
+import { formatDateDisplayYmd } from "@/lib/format-date-display";
 import { cn } from "@/lib/utils";
 
 const SITE_TYPE_OPTIONS = Object.entries(SITE_TYPE_LABEL_JA) as [string, string][];
@@ -673,8 +674,12 @@ export function ProjectListTable({ initialProjects }: Props) {
                         {formatSiteTypeLabel(p.site_type, p.site_type_other)}
                       </td>
                       <td className="px-3 py-3 text-[var(--muted)]">{p.is_renewal ? "リニューアル" : "新規"}</td>
-                      <td className="whitespace-nowrap px-3 py-3 font-mono text-xs text-[var(--muted)]">{displayText(p.kickoff_date)}</td>
-                      <td className="whitespace-nowrap px-3 py-3 font-mono text-xs text-[var(--muted)]">{displayText(p.release_due_date)}</td>
+                      <td className="whitespace-nowrap px-3 py-3 font-mono text-xs text-[var(--muted)] tabular-nums">
+                        {formatDateDisplayYmd(p.kickoff_date)}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-3 font-mono text-xs text-[var(--muted)] tabular-nums">
+                        {formatDateDisplayYmd(p.release_due_date)}
+                      </td>
                       <td className="w-[4.5rem] min-w-[4.5rem] max-w-[4.5rem] px-2 py-3 align-middle">
                         <span
                           className="inline-block max-w-full truncate rounded-full bg-[color:color-mix(in_srgb,var(--accent)_18%,transparent)] px-1.5 py-0.5 text-center text-[11px] font-medium leading-tight text-[var(--accent)]"

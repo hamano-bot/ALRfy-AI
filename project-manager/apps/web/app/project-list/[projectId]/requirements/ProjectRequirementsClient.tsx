@@ -647,7 +647,7 @@ export function ProjectRequirementsClient({
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <ThemeDateField
-                    className="w-1/6 max-w-full"
+                    className="min-w-[12.5rem] max-w-full sm:w-auto"
                     controlId="req-created"
                     name="req-created"
                     label="作成日"
@@ -656,7 +656,7 @@ export function ProjectRequirementsClient({
                     disabled={readOnly}
                   />
                   <ThemeDateField
-                    className="w-1/6 max-w-full"
+                    className="min-w-[12.5rem] max-w-full sm:w-auto"
                     controlId="req-updated"
                     name="req-updated"
                     label="最終更新日"

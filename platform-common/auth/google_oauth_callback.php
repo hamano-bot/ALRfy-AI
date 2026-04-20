@@ -116,6 +116,34 @@ function persistPlatformSession(PDO $pdo, int $userId): void
     }
 }
 
+/**
+ * 社内ドメインユーザーを既定プロジェクトへ自動付与します。
+ * - 手動 SQL 運用を減らすため、OAuth ログイン時に実行
+ * - 既存行がある場合は role を editor に引き上げる
+ */
+function autoGrantDefaultProjectMembership(PDO $pdo, int $userId, string $email): void
+{
+    $normalized = strtolower(trim($email));
+    if ($normalized === '' || !str_ends_with($normalized, '@shift-jp.net')) {
+        return;
+    }
+
+    try {
+        $stmt = $pdo->prepare(
+            'INSERT INTO project_members (project_id, user_id, role)
+             VALUES (1, :user_id, :role)
+             ON DUPLICATE KEY UPDATE role = VALUES(role)'
+        );
+        $stmt->execute([
+            ':user_id' => $userId,
+            ':role' => 'editor',
+        ]);
+    } catch (Throwable $e) {
+        // テーブル未作成などでもログイン処理自体は継続させる。
+        error_log('[platform-common/google_oauth_callback] auto grant をスキップ: ' . $e->getMessage());
+    }
+}
+
 try {
     if (!isset($_GET['code']) || !is_string($_GET['code']) || $_GET['code'] === '') {
         throw new RuntimeException('認可コードがありません。');
@@ -148,6 +176,7 @@ try {
 
     $pdo = createPdoFromApplicationEnv();
     $userId = syncPlatformUserFromGoogle($pdo, $email, $displayName);
+    autoGrantDefaultProjectMembership($pdo, $userId, $email);
 
     session_regenerate_id(true);
     $_SESSION['user_id'] = $userId;

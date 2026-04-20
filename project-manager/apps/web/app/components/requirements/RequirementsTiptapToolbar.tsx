@@ -39,7 +39,6 @@ import {
   Circle,
   Square,
   ChevronDown,
-  Table as TableIcon,
 } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
 import {
@@ -60,6 +59,7 @@ import type { RequirementsImageAlign, RequirementsImageValign } from "@/lib/tipt
 import type { BulletListStyleType } from "@/lib/tiptap-requirements-bullet-list";
 import type { OrderedListStyleType } from "@/lib/tiptap-requirements-ordered-list";
 import { cn } from "@/lib/utils";
+import { RequirementsTiptapTableInsertPopover } from "@/app/components/requirements/RequirementsTiptapTableInsertPopover";
 
 /** ソース表示用：タグ境界で改行しつつ簡易インデント（完全な HTML 整形ではない） */
 function formatHtmlReadable(html: string): string {
@@ -1065,31 +1065,7 @@ export const RequirementsTiptapToolbar = forwardRef<RequirementsTiptapToolbarHan
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 min-w-[2.75rem] shrink-0 gap-0.5 px-1.5 text-[var(--muted)]"
-              disabled={disabled}
-              title="表"
-              aria-label="表"
-            >
-              <TableIcon className="h-4 w-4" />
-              <ChevronDown className="h-3 w-3 shrink-0 opacity-70" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="min-w-[220px]">
-            <DropdownMenuItem
-              onSelect={() => {
-                editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
-              }}
-            >
-              表を挿入（3×3・先頭行ヘッダー）
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <RequirementsTiptapTableInsertPopover editor={editor} disabled={disabled} />
 
         <ToolbarSep />
 

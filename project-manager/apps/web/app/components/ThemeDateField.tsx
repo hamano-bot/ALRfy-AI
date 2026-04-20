@@ -3,7 +3,6 @@
 import JapaneseHolidays from "japanese-holidays";
 import { CalendarIcon } from "lucide-react";
 import { format, parse } from "date-fns";
-import { ja } from "date-fns/locale";
 import { type ReactNode, useId, useState } from "react";
 
 import { Button } from "@/app/components/ui/button";
@@ -13,8 +12,8 @@ import { Label } from "@/app/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/app/components/ui/popover";
 import { cn } from "@/lib/utils";
 
-/** 画面上の日付表記（内部値・API は `yyyy-MM-dd` のまま） */
-export const THEME_DATE_DISPLAY_FORMAT = "yyyy年M月d日（E）" as const;
+/** 画面上の日付表記（内部値・API とも **YYYY-MM-DD** に統一） */
+export const THEME_DATE_DISPLAY_FORMAT = "yyyy-MM-dd" as const;
 
 function parseYmd(s: string): Date | undefined {
   if (!s.trim()) {
@@ -35,8 +34,6 @@ type ThemeDateFieldProps = {
   /** 閲覧のみ・ロック時など */
   disabled?: boolean;
   className?: string;
-  /** `iso`: `yyyy-MM-dd` 1行表示（曜日なし）。既定は日本語表記。 */
-  displayVariant?: "default" | "iso";
   /** 複数行で安定した id を付与するとき（省略時は内部 useId） */
   controlId?: string;
   /** フォーム監査・オートフィル用の name（任意） */
@@ -50,7 +47,6 @@ export function ThemeDateField({
   required,
   disabled = false,
   className,
-  displayVariant = "default",
   controlId: controlIdProp,
   name,
 }: ThemeDateFieldProps) {
@@ -60,12 +56,7 @@ export function ThemeDateField({
   const selected = parseYmd(value);
 
   const hasDate = Boolean(selected && !Number.isNaN(selected.getTime()));
-  const display =
-    hasDate && selected
-      ? displayVariant === "iso"
-        ? format(selected, "yyyy-MM-dd")
-        : format(selected, THEME_DATE_DISPLAY_FORMAT, { locale: ja })
-      : "日付を選択";
+  const display = hasDate && selected ? format(selected, THEME_DATE_DISPLAY_FORMAT) : "日付を選択";
 
   return (
     <div className={cn("w-full min-w-0", className)}>
@@ -81,14 +72,13 @@ export function ThemeDateField({
             disabled={disabled}
             className={cn(
               inputBaseClassName,
-              "mt-1 h-auto min-h-9 w-full justify-between gap-2 text-left font-normal hover:bg-[color:color-mix(in_srgb,var(--background)_88%,black_12%)]",
-              displayVariant === "iso" && "min-h-8 py-1.5",
+              "mt-1 h-9 min-h-9 w-full shrink-0 justify-between gap-2 px-3 py-2 text-left font-normal tabular-nums hover:bg-[color:color-mix(in_srgb,var(--background)_88%,black_12%)]",
+              "font-mono text-sm leading-none tracking-normal",
             )}
           >
             <span
               className={cn(
-                "min-w-0 flex-1 text-left leading-snug",
-                displayVariant === "iso" ? "truncate whitespace-nowrap" : "whitespace-normal",
+                "min-w-0 flex-1 truncate text-left",
                 !hasDate && "text-[var(--muted)]",
                 hasDate && "text-[var(--foreground)]",
               )}

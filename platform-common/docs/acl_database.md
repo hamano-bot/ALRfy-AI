@@ -40,6 +40,17 @@ docker cp platform-common/database/migrations/20260417_platform_acl_and_apps.sql
 docker exec minutes-db-dev sh -c "mysql -uroot -proot --default-character-set=utf8mb4 minutes_record_db < /tmp/acl_migration.sql"
 ```
 
+## `project_members` をメールで付与（手間削減）
+
+個別の `.sql` を置かずに、Docker 内の mysql へ標準入力で流し込むスクリプトを使うと **`docker cp` やホストの mysql クライアントは不要**です。
+
+| ファイル | 使い方（リポジトリルート想定） |
+|----------|----------------|
+| [database/scripts/grant-project-members.ps1](../database/scripts/grant-project-members.ps1) | `.\platform-common\database\scripts\grant-project-members.ps1 user1@example.com user2@example.com` |
+| [database/scripts/grant-project-members.sh](../database/scripts/grant-project-members.sh) | `CONTAINER=minutes-db-dev ./platform-common/database/scripts/grant-project-members.sh user1@example.com` |
+
+オプション（PowerShell は同名パラメータ、sh は主に環境変数）: `ProjectId` / `PROJECT_ID`（既定 `1`）、`Role` / `ROLE`（既定 `editor`）、`Container` / `CONTAINER`（既定 `minutes-db-dev`）、MySQL パスワードは `MYSQL_ROOT_PASSWORD` または `MYSQL_PASSWORD`（未設定時は開発用 `root`）。
+
 ## シード方針
 
 | シナリオ | 推奨 |

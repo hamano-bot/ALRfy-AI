@@ -4,6 +4,7 @@ import { accentButtonSurfaceBaseClassName, Button } from "@/app/components/ui/bu
 import { Card, CardContent } from "@/app/components/ui/card";
 import { MOCK_DOCUMENT_TEMPLATES, MOCK_PROJECT } from "@/lib/detail-layout-mock-data";
 import { displayText } from "@/lib/empty-display";
+import { formatDateDisplayYmd } from "@/lib/format-date-display";
 import { formatSiteTypeLabel } from "@/lib/portal-my-projects";
 import { buildRedmineProjectUrl } from "@/lib/redmine-url";
 import { getParticipantViewLine, type PortalProjectDetail } from "@/lib/portal-project";
@@ -73,8 +74,8 @@ function MetaSections({ project }: { project: PortalProjectDetail }) {
 
       <section className="space-y-4">
         <div className="grid gap-6 sm:grid-cols-2 sm:items-start lg:gap-8">
-          <MockReadOnlyField label="キックオフ日">{displayText(project.kickoff_date)}</MockReadOnlyField>
-          <MockReadOnlyField label="リリース予定日">{displayText(project.release_due_date)}</MockReadOnlyField>
+          <MockReadOnlyField label="キックオフ日">{formatDateDisplayYmd(project.kickoff_date)}</MockReadOnlyField>
+          <MockReadOnlyField label="リリース予定日">{formatDateDisplayYmd(project.release_due_date)}</MockReadOnlyField>
         </div>
       </section>
 

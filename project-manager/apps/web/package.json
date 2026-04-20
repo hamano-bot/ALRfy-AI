@@ -33,6 +33,7 @@
     "@radix-ui/react-slot": "^1.2.4",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@tiptap/core": "^3.22.4",
+    "@tiptap/extension-bubble-menu": "^3.22.4",
     "@tiptap/extension-collaboration": "^3.22.4",
     "@tiptap/extension-color": "^3.22.4",
     "@tiptap/extension-drag-handle": "^3.22.4",

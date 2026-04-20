@@ -27,7 +27,7 @@ import { hearingFieldIds } from "@/lib/hearing-form-ids";
 import { buildRedmineIssueUrl, buildRedmineProjectUrl } from "@/lib/redmine-url";
 import { UNSAVED_LEAVE_CONFIRM_MESSAGE } from "@/lib/unsaved-navigation";
 import { cn } from "@/lib/utils";
-import { format, parse } from "date-fns";
+import { formatDateDisplayYmd } from "@/lib/format-date-display";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -164,19 +164,7 @@ function hearingRedmineTicketHref(
 }
 
 function formatDueYmdReadOnly(raw: string): string {
-  const t = raw.trim();
-  if (t === "") {
-    return displayText(raw);
-  }
-  try {
-    const d = parse(t, "yyyy-MM-dd", new Date());
-    if (!Number.isNaN(d.getTime())) {
-      return format(d, "yyyy-MM-dd");
-    }
-  } catch {
-    /* ignore */
-  }
-  return displayText(raw);
+  return formatDateDisplayYmd(raw);
 }
 
 function adviceKindLabel(kind: HearingAdviceSuggestion["kind"]): string {
@@ -758,8 +746,8 @@ export function ProjectHearingSheetClient({
           <ReadOnlyField label="クライアント">{displayText(project.client_name)}</ReadOnlyField>
           <ReadOnlyField label="サイト種別">{formatSiteTypeLabel(project.site_type, project.site_type_other)}</ReadOnlyField>
           <ReadOnlyField label="区分">{project.is_renewal ? "リニューアル" : "新規"}</ReadOnlyField>
-          <ReadOnlyField label="キックオフ日">{displayText(project.kickoff_date)}</ReadOnlyField>
-          <ReadOnlyField label="リリース予定日">{displayText(project.release_due_date)}</ReadOnlyField>
+          <ReadOnlyField label="キックオフ日">{formatDateDisplayYmd(project.kickoff_date)}</ReadOnlyField>
+          <ReadOnlyField label="リリース予定日">{formatDateDisplayYmd(project.release_due_date)}</ReadOnlyField>
         </div>
         {project.redmine_links.length > 0 ? (
           <ReadOnlyField label="Redmine">
@@ -1256,7 +1244,6 @@ export function ProjectHearingSheetClient({
                         <td className={cn(hearingSheetTdClass, "min-w-0")}>
                           {canEdit ? (
                             <ThemeDateField
-                              displayVariant="iso"
                               label={<span className="sr-only">期限</span>}
                               controlId={fieldIds.due.id}
                               name={fieldIds.due.name}

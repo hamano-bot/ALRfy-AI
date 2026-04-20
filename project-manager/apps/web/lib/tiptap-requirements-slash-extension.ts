@@ -100,6 +100,32 @@ function allSlashItems(): SlashMenuItem[] {
       },
     },
     {
+      id: "table-3",
+      label: "表（3×3・ヘッダー）",
+      description: "リッチテキスト内に表を挿入",
+      run: ({ editor, range }) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+          .run();
+      },
+    },
+    {
+      id: "table-4",
+      label: "表（4×4・ヘッダー）",
+      description: "やや広い表",
+      run: ({ editor, range }) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .insertTable({ rows: 4, cols: 4, withHeaderRow: true })
+          .run();
+      },
+    },
+    {
       id: "image",
       label: "画像（アップロード）",
       description: "S3 に保存",

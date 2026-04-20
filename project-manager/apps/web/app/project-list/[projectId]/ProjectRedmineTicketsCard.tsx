@@ -3,6 +3,7 @@
 import { Button } from "@/app/components/ui/button";
 import { Card, CardContent } from "@/app/components/ui/card";
 import { Input, inputBaseClassName } from "@/app/components/ui/input";
+import { formatDateDisplayYmd } from "@/lib/format-date-display";
 import { buildRedmineProjectUrl } from "@/lib/redmine-url";
 import type { PortalProjectDetail } from "@/lib/portal-project";
 import { cn } from "@/lib/utils";
@@ -128,17 +129,7 @@ type IssuesApiSuccess = {
 };
 
 function formatShortDate(value: string | null): string {
-  if (!value || value.trim() === "") {
-    return "";
-  }
-  const d = new Date(value);
-  if (!Number.isNaN(d.getTime())) {
-    return d.toLocaleDateString("ja-JP", { year: "numeric", month: "2-digit", day: "2-digit" });
-  }
-  if (/^\d{4}-\d{2}-\d{2}/.test(value)) {
-    return value.slice(0, 10);
-  }
-  return value;
+  return formatDateDisplayYmd(value);
 }
 
 function SortableTh({

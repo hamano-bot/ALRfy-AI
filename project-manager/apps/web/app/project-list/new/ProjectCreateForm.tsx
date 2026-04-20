@@ -1146,8 +1146,8 @@ export function ProjectCreateForm({
       </section>
 
       <section className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:gap-8">
-        <ThemeDateField className="w-1/6 max-w-full" label="キックオフ日" value={kickoff} onChange={setKickoff} />
-        <ThemeDateField className="w-1/6 max-w-full" label="リリース予定日" value={releaseDue} onChange={setReleaseDue} />
+        <ThemeDateField className="min-w-[12.5rem] max-w-full sm:w-auto" label="キックオフ日" value={kickoff} onChange={setKickoff} />
+        <ThemeDateField className="min-w-[12.5rem] max-w-full sm:w-auto" label="リリース予定日" value={releaseDue} onChange={setReleaseDue} />
       </section>
 
       <section className="space-y-3">

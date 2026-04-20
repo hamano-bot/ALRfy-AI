@@ -5,6 +5,7 @@ import { ProjectRedmineTicketsCard } from "./ProjectRedmineTicketsCard";
 import { accentButtonSurfaceBaseClassName, Button } from "@/app/components/ui/button";
 import { Card, CardContent } from "@/app/components/ui/card";
 import { displayText } from "@/lib/empty-display";
+import { formatDateDisplayYmd } from "@/lib/format-date-display";
 import { PROJECT_DOCUMENT_TEMPLATES } from "@/lib/project-document-templates";
 import { formatSiteTypeLabel } from "@/lib/portal-my-projects";
 import { buildRedmineProjectUrl } from "@/lib/redmine-url";
@@ -176,8 +177,8 @@ export function ProjectDetailClient({ projectId, initialProject, canEdit }: Proj
 
       <section className="space-y-4">
         <div className="grid gap-6 sm:grid-cols-2 sm:items-start lg:gap-8">
-          <ReadOnlyField label="キックオフ日">{displayText(project.kickoff_date)}</ReadOnlyField>
-          <ReadOnlyField label="リリース予定日">{displayText(project.release_due_date)}</ReadOnlyField>
+          <ReadOnlyField label="キックオフ日">{formatDateDisplayYmd(project.kickoff_date)}</ReadOnlyField>
+          <ReadOnlyField label="リリース予定日">{formatDateDisplayYmd(project.release_due_date)}</ReadOnlyField>
         </div>
       </section>
 

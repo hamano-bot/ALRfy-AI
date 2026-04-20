@@ -21,6 +21,8 @@ import { RequirementsTiptapOutline } from "@/app/components/requirements/Require
 
 import { RequirementsTiptapSlashMenu } from "@/app/components/requirements/RequirementsTiptapSlashMenu";
 
+import { RequirementsTiptapTableBubbleMenu } from "@/app/components/requirements/RequirementsTiptapTableBubbleMenu";
+
 import {
   RequirementsTiptapToolbar,
   type RequirementsTiptapToolbarHandle,
@@ -38,8 +40,6 @@ import { RequirementsBulletList } from "@/lib/tiptap-requirements-bullet-list";
 
 import { RequirementsOrderedList } from "@/lib/tiptap-requirements-ordered-list";
 
-import { Table } from "@tiptap/extension-table";
-
 import { TableCell } from "@tiptap/extension-table-cell";
 
 import { TableHeader } from "@tiptap/extension-table-header";
@@ -49,6 +49,8 @@ import { TableRow } from "@tiptap/extension-table-row";
 import { RequirementsColumn, RequirementsColumns } from "@/lib/tiptap-requirements-columns";
 
 import { RequirementsImage } from "@/lib/tiptap-requirements-image";
+
+import { RequirementsTable } from "@/lib/tiptap-requirements-table";
 
 import NodeRange from "@tiptap/extension-node-range";
 
@@ -182,18 +184,28 @@ export function RequirementsTiptapField({
 
       RequirementsOrderedList,
 
-      Table.configure({
+      RequirementsTable.configure({
         resizable: true,
         HTMLAttributes: {
           class: "requirements-tiptap-table",
+          cellSpacing: 0,
+          cellPadding: 0,
         },
       }),
 
       TableRow,
 
-      TableHeader,
+      TableHeader.configure({
+        HTMLAttributes: {
+          class: "requirements-tiptap-table-header-cell",
+        },
+      }),
 
-      TableCell,
+      TableCell.configure({
+        HTMLAttributes: {
+          class: "requirements-tiptap-table-cell",
+        },
+      }),
 
       NodeRange,
 
@@ -464,6 +476,8 @@ export function RequirementsTiptapField({
             />
 
           </RequirementsTiptapBlockContextMenu>
+
+          <RequirementsTiptapTableBubbleMenu editor={editor} readOnly={readOnly} />
 
         </div>
 
