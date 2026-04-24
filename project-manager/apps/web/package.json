@@ -21,7 +21,7 @@
     "repair:admin": "node -e \"require('child_process').execSync('explorer /select,'+require('path').resolve('scripts/repair-node-modules-admin.cmd'),{stdio:'inherit'})\""
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1032.0",
+    "@aws-sdk/client-s3": "^3.1037.0",
     "@floating-ui/dom": "^1.7.6",
     "@google/generative-ai": "^0.24.1",
     "@radix-ui/react-context-menu": "^2.2.16",
