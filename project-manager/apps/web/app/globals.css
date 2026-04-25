@@ -893,3 +893,30 @@ body {
   border-color: color-mix(in srgb, var(--accent) 35%, var(--border) 65%);
   background: color-mix(in srgb, var(--surface) 92%, var(--accent) 5%);
 }
+
+.requirements-sitemap-preview-row {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+/* サイトマップ: 印刷時はツールバー等を隠し、プレビューを白背景で印字 */
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+
+  .requirements-sitemap-no-print {
+    display: none !important;
+  }
+
+  .requirements-sitemap-page-break-guide {
+    display: none !important;
+  }
+
+  .requirements-sitemap-print-root {
+    background: #fff !important;
+    color: #0f172a !important;
+    box-shadow: none !important;
+  }
+}

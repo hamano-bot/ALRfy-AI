@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp, GripVertical, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { GripVertical, Plus, RotateCcw, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from "react";
@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/app/components/ui/select";
+import { RequirementsSitemapEditor } from "@/app/components/requirements/RequirementsSitemapEditor";
 import { RequirementsTiptapField } from "@/app/components/requirements/RequirementsTiptapField";
 import {
   emptyTableRow,
@@ -24,7 +25,6 @@ import {
 import { requirementsDocFingerprint } from "@/lib/requirements-doc-fingerprint";
 import {
   insertionIndexFromPointerYForStrings,
-  reorderVisiblePage,
   reorderVisiblePageToInsertionIndex,
 } from "@/lib/requirements-doc-reorder";
 import type {
@@ -72,6 +72,7 @@ const INPUT_MODE_LABEL: Record<RequirementsInputMode, string> = {
   richtext: "リッチテキスト（TipTap）",
   table: "表組",
   split_editor_table: "分割（5/8 テキスト + 3/8 表）",
+  sitemap: "サイトマップ",
 };
 
 function RequirementsTableEditor({
@@ -403,16 +404,6 @@ export function ProjectRequirementsClient({
     [activePage, canEdit, replacePage],
   );
 
-  const movePage = useCallback(
-    (pageId: string, dir: "up" | "down") => {
-      if (!canEdit) {
-        return;
-      }
-      setBody((prev) => reorderVisiblePage(prev, pageId, dir));
-    },
-    [canEdit],
-  );
-
   const clearPageDrag = useCallback(() => {
     dndSourceIdRef.current = null;
     setDraggingPageId(null);
@@ -507,14 +498,6 @@ export function ProjectRequirementsClient({
   }, [performSave]);
 
   const readOnly = !canEdit || (activePage?.is_fixed ?? false);
-
-  const visibleIndex = activePage ? visiblePages.findIndex((p) => p.id === activePage.id) : -1;
-  const canMoveUp =
-    activePage &&
-    activePage.pageType !== "cover" &&
-    visibleIndex > 1 &&
-    visiblePages[visibleIndex - 1]?.pageType !== "cover";
-  const canMoveDown = activePage && activePage.pageType !== "cover" && visibleIndex >= 0 && visibleIndex < visiblePages.length - 1;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5">
@@ -618,32 +601,6 @@ export function ProjectRequirementsClient({
                       ページを非表示
                     </Button>
                   ) : null}
-                  {canEdit && activePage.pageType !== "cover" ? (
-                    <div className="flex items-center gap-1 text-xs text-[var(--muted)]">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-8"
-                        disabled={!canMoveUp}
-                        onClick={() => movePage(activePage.id, "up")}
-                      >
-                        <ArrowUp className="h-4 w-4" />
-                        上へ
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-8"
-                        disabled={!canMoveDown}
-                        onClick={() => movePage(activePage.id, "down")}
-                      >
-                        <ArrowDown className="h-4 w-4" />
-                        下へ
-                      </Button>
-                    </div>
-                  ) : null}
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <ThemeDateField
@@ -710,8 +667,25 @@ export function ProjectRequirementsClient({
                   </div>
                 ) : null}
 
+                {activePage.inputMode === "sitemap" ? (
+                  <div className="space-y-1.5">
+                    <Label>サイトマップ</Label>
+                    <RequirementsSitemapEditor
+                      key={activePage.id}
+                      content={activePage.content}
+                      readOnly={readOnly}
+                      onChange={(c) => {
+                        if (readOnly) {
+                          return;
+                        }
+                        replacePage({ ...activePage, content: c });
+                      }}
+                    />
+                  </div>
+                ) : null}
+
                 <p className="text-xs text-[var(--muted)]">
-                  表紙は常に先頭です。自動保存は未保存時に約2分ごと（ヒアリングシートと同様）。リッチテキストは TipTap（見出し・箇条書き等）で編集します。
+                  表紙は常に先頭です。自動保存は未保存時に約2分ごと（ヒアリングシートと同様）。リッチテキストは TipTap（見出し・箇条書き等）で編集します。サイトマップはツリー編集・Excel 取り込み・Gemini 編集・印刷・PNG・JSON 出力に対応します。
                 </p>
                   </>
                 ) : (
@@ -777,28 +751,6 @@ export function ProjectRequirementsClient({
                     <span className="line-clamp-2">{p.title || p.pageType}</span>
                     {p.is_fixed ? <span className="mt-0.5 block text-[10px] text-[var(--muted)]">FIX</span> : null}
                   </button>
-                  {canEdit && p.pageType !== "cover" ? (
-                    <div className="flex shrink-0 flex-col justify-center gap-0 border-l border-[color:color-mix(in_srgb,var(--border)_60%,transparent)] pl-0.5">
-                      <button
-                        type="button"
-                        className="rounded p-0.5 text-[var(--muted)] hover:bg-[color:color-mix(in_srgb,var(--surface)_90%,transparent)] hover:text-[var(--foreground)] disabled:opacity-30"
-                        disabled={vi <= 1}
-                        title="上へ"
-                        onClick={() => movePage(p.id, "up")}
-                      >
-                        <ArrowUp className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        className="rounded p-0.5 text-[var(--muted)] hover:bg-[color:color-mix(in_srgb,var(--surface)_90%,transparent)] hover:text-[var(--foreground)] disabled:opacity-30"
-                        disabled={vi >= visiblePages.length - 1}
-                        title="下へ"
-                        onClick={() => movePage(p.id, "down")}
-                      >
-                        <ArrowDown className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ) : null}
                 </div>
                 );
               })}

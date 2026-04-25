@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sitemapContentSchema } from "@/lib/requirements-sitemap-schema";
 
 const cellTriple = z.tuple([z.string().max(8192), z.string().max(8192), z.string().max(8192)]);
 
@@ -53,6 +54,10 @@ export const requirementsPageSchema = z.discriminatedUnion("inputMode", [
   pageBaseSchema.extend({
     inputMode: z.literal("split_editor_table"),
     content: splitContentSchema,
+  }),
+  pageBaseSchema.extend({
+    inputMode: z.literal("sitemap"),
+    content: sitemapContentSchema,
   }),
 ]);
 

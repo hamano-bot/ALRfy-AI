@@ -31,6 +31,10 @@ function migratePage(p: RequirementsDocBodyParsed["pages"][number]): Requirement
     return { ...p, ...dates };
   }
 
+  if (p.inputMode === "sitemap") {
+    return { ...p, ...dates };
+  }
+
   if (p.inputMode === "richtext") {
     const c = p.content;
     if ("doc" in c && c.doc !== undefined && isDoc(c.doc)) {

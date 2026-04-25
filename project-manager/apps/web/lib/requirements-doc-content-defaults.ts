@@ -6,6 +6,7 @@ import type {
   RequirementsPageContentTable,
   RequirementsTableRow,
 } from "@/lib/requirements-doc-types";
+import { defaultSitemapContent } from "@/lib/requirements-sitemap-schema";
 import { EMPTY_TIPTAP_DOC } from "@/lib/tiptap-json";
 
 function newRowId(): string {
@@ -44,6 +45,8 @@ export function defaultContentForMode(mode: RequirementsInputMode): Requirements
       return defaultTableContent();
     case "split_editor_table":
       return defaultSplitContent();
+    case "sitemap":
+      return defaultSitemapContent();
     default: {
       const _exhaustive: never = mode;
       return _exhaustive;
@@ -72,5 +75,8 @@ export function pageWithNewInputMode(page: RequirementsPage, mode: RequirementsI
   if (mode === "table") {
     return { ...base, inputMode: "table", content: defaultTableContent() };
   }
-  return { ...base, inputMode: "split_editor_table", content: defaultSplitContent() };
+  if (mode === "split_editor_table") {
+    return { ...base, inputMode: "split_editor_table", content: defaultSplitContent() };
+  }
+  return { ...base, inputMode: "sitemap", content: defaultSitemapContent() };
 }

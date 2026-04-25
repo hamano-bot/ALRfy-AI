@@ -1,6 +1,10 @@
 import type { JSONContent } from "@tiptap/core";
 
-export type RequirementsInputMode = "richtext" | "table" | "split_editor_table";
+import type { RequirementsPageContentSitemap } from "@/lib/requirements-sitemap-schema";
+
+export type RequirementsInputMode = "richtext" | "table" | "split_editor_table" | "sitemap";
+
+export type { RequirementsPageContentSitemap, SitemapNode } from "@/lib/requirements-sitemap-schema";
 
 export type RequirementsPageContentRichtext = {
   doc: JSONContent;
@@ -36,7 +40,8 @@ type RequirementsPageBase = {
 export type RequirementsPage =
   | (RequirementsPageBase & { inputMode: "richtext"; content: RequirementsPageContentRichtext })
   | (RequirementsPageBase & { inputMode: "table"; content: RequirementsPageContentTable })
-  | (RequirementsPageBase & { inputMode: "split_editor_table"; content: RequirementsPageContentSplit });
+  | (RequirementsPageBase & { inputMode: "split_editor_table"; content: RequirementsPageContentSplit })
+  | (RequirementsPageBase & { inputMode: "sitemap"; content: RequirementsPageContentSitemap });
 
 export type RequirementsDocBody = {
   schema_version?: number;

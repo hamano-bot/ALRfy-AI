@@ -41,8 +41,11 @@ import {
   Square,
   ChevronDown,
   BookTemplate,
+  Lock,
+  LockOpen,
+  Trash2,
 } from "lucide-react";
-import { Button } from "@/app/components/ui/button";
+import { accentButtonSurfaceBaseClassName, Button } from "@/app/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,7 +55,7 @@ import {
 } from "@/app/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/app/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/app/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/app/components/ui/dialog";
 import { Input } from "@/app/components/ui/input";
 import { Label } from "@/app/components/ui/label";
 import { copyTextToClipboard, copyTextToClipboardSync } from "@/lib/clipboard-write";
@@ -63,6 +66,18 @@ import type { BulletListStyleType } from "@/lib/tiptap-requirements-bullet-list"
 import type { OrderedListStyleType } from "@/lib/tiptap-requirements-ordered-list";
 import { cn } from "@/lib/utils";
 import { RequirementsTiptapTableInsertPopover } from "@/app/components/requirements/RequirementsTiptapTableInsertPopover";
+import { RequirementsTiptapTemplatePreviewDialog } from "@/app/components/requirements/RequirementsTiptapTemplatePreviewDialog";
+import {
+  deleteRequirementsTemplate,
+  fetchRequirementsTemplatesList,
+  patchRequirementsTemplate,
+  postRequirementsTemplate,
+  type PortalRequirementsTemplate,
+  type RequirementsTemplateVisibility,
+} from "@/lib/portal-requirements-templates";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/app/components/ui/hover-card";
+import { RequirementsTiptapTemplateHoverPeek } from "@/app/components/requirements/RequirementsTiptapTemplateHoverPeek";
+import { sanitizeRequirementsRawHtml } from "@/lib/requirements-html-sanitize";
 
 /** ソース表示用：タグ境界で改行しつつ簡易インデント（完全な HTML 整形ではない） */
 function formatHtmlReadable(html: string): string {
@@ -126,6 +141,21 @@ function getSourceModalClipboardText(
   jsonDraft: string,
 ): string {
   return tab === "html" ? htmlDraft : jsonDraft;
+}
+
+function getHtmlSourceDraftFromEditor(ed: Editor): string {
+  const json = ed.getJSON();
+  const content = Array.isArray(json.content) ? json.content : [];
+  const rawHtmlNodes = content.filter(
+    (n) => n && typeof n === "object" && (n as { type?: string }).type === "requirementsRawHtmlBlock",
+  ) as Array<{ attrs?: { html?: unknown } }>;
+  if (rawHtmlNodes.length > 0) {
+    return rawHtmlNodes
+      .map((n) => (typeof n.attrs?.html === "string" ? n.attrs.html : ""))
+      .filter((v) => v.trim() !== "")
+      .join("\n\n");
+  }
+  return ed.getHTML();
 }
 
 /**
@@ -202,68 +232,6 @@ const FONT_FAMILY_OPTIONS: { value: string; label: string }[] = [
   { value: '"Courier New", Courier, monospace', label: "Courier" },
 ];
 
-type RequirementsEditorTemplate = {
-  id: string;
-  name: string;
-  doc: JSONContent;
-  updatedAt: number;
-};
-
-const REQUIREMENTS_TEMPLATE_STORAGE_KEY = "alrfy-requirements-editor-templates-v1";
-
-function createTemplateId(): string {
-  const c = globalThis.crypto;
-  if (c && typeof c.randomUUID === "function") {
-    return c.randomUUID();
-  }
-  return `tmpl-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function loadRequirementsTemplates(): RequirementsEditorTemplate[] {
-  try {
-    const raw = window.localStorage.getItem(REQUIREMENTS_TEMPLATE_STORAGE_KEY);
-    if (!raw) {
-      return [];
-    }
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-    const templates: RequirementsEditorTemplate[] = [];
-    for (const item of parsed) {
-      if (!item || typeof item !== "object") {
-        continue;
-      }
-      const rec = item as Partial<RequirementsEditorTemplate>;
-      if (
-        typeof rec.id === "string" &&
-        typeof rec.name === "string" &&
-        rec.name.trim() !== "" &&
-        rec.doc &&
-        typeof rec.updatedAt === "number"
-      ) {
-        templates.push({
-          id: rec.id,
-          name: rec.name.trim(),
-          doc: rec.doc,
-          updatedAt: rec.updatedAt,
-        });
-      }
-    }
-    return templates.sort((a, b) => b.updatedAt - a.updatedAt);
-  } catch {
-    return [];
-  }
-}
-
-function persistRequirementsTemplates(templates: RequirementsEditorTemplate[]): void {
-  try {
-    window.localStorage.setItem(REQUIREMENTS_TEMPLATE_STORAGE_KEY, JSON.stringify(templates));
-  } catch {
-    /* ignore */
-  }
-}
-
 export type RequirementsTiptapNoticeOptions = { title?: string };
 
 type RequirementsTiptapToolbarProps = {
@@ -274,7 +242,11 @@ type RequirementsTiptapToolbarProps = {
   onToggleOutline: () => void;
   /** ブラウザ alert の代わりにテーマ付きダイアログで表示する */
   onShowNotice: (message: string, options?: RequirementsTiptapNoticeOptions) => void;
+  /** `/api/portal/me` で取得したユーザー ID（テンプレの作成者判定・保存に使用） */
+  currentUserId: number | null;
 };
+
+type TemplateApplyMode = "prepend" | "append" | "replace";
 
 /** 右クリックメニューなどツールバー外から同じ操作を呼ぶ用 */
 export type RequirementsTiptapToolbarHandle = {
@@ -320,7 +292,7 @@ function ToolbarSep() {
 }
 
 export const RequirementsTiptapToolbar = forwardRef<RequirementsTiptapToolbarHandle, RequirementsTiptapToolbarProps>(function RequirementsTiptapToolbar(
-  { editor, projectId, readOnly, showOutline, onToggleOutline, onShowNotice },
+  { editor, projectId, readOnly, showOutline, onToggleOutline, onShowNotice, currentUserId },
   ref,
 ) {
   const ui = useEditorState({
@@ -403,15 +375,40 @@ export const RequirementsTiptapToolbar = forwardRef<RequirementsTiptapToolbarHan
   const sourceCopyFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [templateSaveOpen, setTemplateSaveOpen] = useState(false);
   const [templateName, setTemplateName] = useState("");
-  const [templates, setTemplates] = useState<RequirementsEditorTemplate[]>([]);
+  const [templateVisibility, setTemplateVisibility] = useState<RequirementsTemplateVisibility>("private");
+  const [templateSaving, setTemplateSaving] = useState(false);
+  const [templateActionBusyId, setTemplateActionBusyId] = useState<string | null>(null);
+  const [templateActionFeedback, setTemplateActionFeedback] = useState<{ id: string; message: string } | null>(null);
+  const templateActionFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [templates, setTemplates] = useState<PortalRequirementsTemplate[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [overwriteDialogOpen, setOverwriteDialogOpen] = useState(false);
+  const [overwriteTemplateId, setOverwriteTemplateId] = useState<string | null>(null);
+  const [previewTemplate, setPreviewTemplate] = useState<PortalRequirementsTemplate | null>(null);
+  const [deleteDialog, setDeleteDialog] = useState<{ id: string; name: string } | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [templateApplyDialog, setTemplateApplyDialog] = useState<{ templateId: string } | null>(null);
 
-  const reloadTemplates = useCallback(() => {
-    setTemplates(loadRequirementsTemplates());
+  const reloadTemplates = useCallback(async () => {
+    setTemplatesLoading(true);
+    try {
+      const res = await fetchRequirementsTemplatesList();
+      if (res.ok) {
+        setTemplates(res.templates);
+      } else {
+        setTemplates([]);
+      }
+    } finally {
+      setTemplatesLoading(false);
+    }
   }, []);
 
   const closeTemplateSaveDialog = useCallback(() => {
     setTemplateSaveOpen(false);
     setTemplateName("");
+    setTemplateVisibility("private");
+    setOverwriteDialogOpen(false);
+    setOverwriteTemplateId(null);
   }, []);
 
   const openTemplateSaveDialog = useCallback(() => {
@@ -419,11 +416,12 @@ export const RequirementsTiptapToolbar = forwardRef<RequirementsTiptapToolbarHan
       return;
     }
     setTemplateName("");
+    setTemplateVisibility("private");
     setTemplateSaveOpen(true);
   }, [editor, readOnly]);
 
   const applyTemplateById = useCallback(
-    (templateId: string) => {
+    (templateId: string, mode: TemplateApplyMode = "replace") => {
       if (!editor || readOnly || !editor.isEditable) {
         return;
       }
@@ -431,13 +429,54 @@ export const RequirementsTiptapToolbar = forwardRef<RequirementsTiptapToolbarHan
       if (!found) {
         return;
       }
-      editor.chain().focus().setContent(found.doc).run();
+      if (mode === "replace") {
+        editor.chain().focus().setContent(found.doc).run();
+        return;
+      }
+      const cur = editor.getJSON();
+      const curContent = Array.isArray(cur.content) ? cur.content : [];
+      const tplContent = Array.isArray(found.doc.content) ? found.doc.content : [];
+      const next: JSONContent = {
+        type: "doc",
+        content: mode === "prepend" ? [...tplContent, ...curContent] : [...curContent, ...tplContent],
+      };
+      editor.chain().focus().setContent(next).run();
     },
     [editor, readOnly, templates],
   );
 
-  const saveCurrentAsTemplate = useCallback(() => {
+  const requestApplyTemplate = useCallback(
+    (templateId: string) => {
+      if (!editor || readOnly || !editor.isEditable) {
+        return;
+      }
+      const hasExistingData = editor.getText().trim().length > 0 || editor.getJSON().content?.length;
+      if (hasExistingData) {
+        setTemplateApplyDialog({ templateId });
+        return;
+      }
+      applyTemplateById(templateId, "replace");
+    },
+    [editor, readOnly, applyTemplateById],
+  );
+
+  const runTemplateApplyFromDialog = useCallback(
+    (mode: TemplateApplyMode) => {
+      if (!templateApplyDialog) {
+        return;
+      }
+      applyTemplateById(templateApplyDialog.templateId, mode);
+      setTemplateApplyDialog(null);
+    },
+    [templateApplyDialog, applyTemplateById],
+  );
+
+  const saveCurrentAsTemplate = useCallback(async () => {
     if (!editor || readOnly || !editor.isEditable) {
+      return;
+    }
+    if (currentUserId == null) {
+      onShowNotice("ログイン情報が取得できません。ページを再読み込みしてください。", { title: "テンプレート" });
       return;
     }
     const trimmed = templateName.trim();
@@ -445,25 +484,139 @@ export const RequirementsTiptapToolbar = forwardRef<RequirementsTiptapToolbarHan
       onShowNotice("テンプレート名を入力してください。", { title: "テンプレート" });
       return;
     }
-    const next: RequirementsEditorTemplate = {
-      id: createTemplateId(),
-      name: trimmed,
-      doc: editor.getJSON(),
-      updatedAt: Date.now(),
-    };
-    const prev = loadRequirementsTemplates();
-    const sameName = prev.find((t) => t.name === trimmed);
-    const merged = sameName
-      ? prev.map((t) => (t.id === sameName.id ? { ...next, id: sameName.id } : t))
-      : [next, ...prev];
-    persistRequirementsTemplates(merged);
-    reloadTemplates();
-    closeTemplateSaveDialog();
-  }, [editor, readOnly, templateName, reloadTemplates, closeTemplateSaveDialog, onShowNotice]);
+    const dup = templates.find((t) => t.name === trimmed && t.created_by_user_id === currentUserId);
+    if (dup) {
+      setOverwriteTemplateId(dup.id);
+      setOverwriteDialogOpen(true);
+      return;
+    }
+    setTemplateSaving(true);
+    try {
+      const res = await postRequirementsTemplate({
+        name: trimmed,
+        doc: editor.getJSON(),
+        visibility: templateVisibility,
+      });
+      if (res.ok) {
+        await reloadTemplates();
+        closeTemplateSaveDialog();
+        return;
+      }
+      if (res.status === 409 && res.duplicateExistingId) {
+        setOverwriteTemplateId(res.duplicateExistingId);
+        setOverwriteDialogOpen(true);
+        return;
+      }
+      onShowNotice(res.message, { title: "テンプレート" });
+    } finally {
+      setTemplateSaving(false);
+    }
+  }, [
+    editor,
+    readOnly,
+    templateName,
+    templateVisibility,
+    templates,
+    currentUserId,
+    reloadTemplates,
+    closeTemplateSaveDialog,
+    onShowNotice,
+  ]);
+
+  const confirmOverwriteTemplate = useCallback(async () => {
+    if (!overwriteTemplateId || !editor || readOnly || !editor.isEditable) {
+      return;
+    }
+    const trimmed = templateName.trim();
+    if (trimmed === "") {
+      onShowNotice("テンプレート名を入力してください。", { title: "テンプレート" });
+      return;
+    }
+    setTemplateSaving(true);
+    try {
+      const res = await patchRequirementsTemplate({
+        id: overwriteTemplateId,
+        name: trimmed,
+        doc: editor.getJSON(),
+        visibility: templateVisibility,
+      });
+      if (res.ok) {
+        setOverwriteDialogOpen(false);
+        setOverwriteTemplateId(null);
+        await reloadTemplates();
+        closeTemplateSaveDialog();
+      } else {
+        onShowNotice(res.message, { title: "テンプレート" });
+      }
+    } finally {
+      setTemplateSaving(false);
+    }
+  }, [
+    overwriteTemplateId,
+    editor,
+    readOnly,
+    templateName,
+    templateVisibility,
+    reloadTemplates,
+    closeTemplateSaveDialog,
+    onShowNotice,
+  ]);
+
+  const setTemplateLocked = useCallback(
+    async (id: string, locked: boolean) => {
+      setTemplateActionBusyId(id);
+      try {
+        const res = await patchRequirementsTemplate({ id, locked });
+        if (res.ok) {
+          setTemplates((prev) => prev.map((t) => (t.id === id ? { ...res.template } : t)));
+          if (templateActionFeedbackTimerRef.current) {
+            clearTimeout(templateActionFeedbackTimerRef.current);
+          }
+          setTemplateActionFeedback({ id, message: locked ? "ロックしました" : "ロック解除しました" });
+          templateActionFeedbackTimerRef.current = setTimeout(() => {
+            setTemplateActionFeedback((prev) => (prev?.id === id ? null : prev));
+            templateActionFeedbackTimerRef.current = null;
+          }, 500);
+        } else {
+          onShowNotice(res.message, { title: "テンプレート" });
+        }
+      } finally {
+        setTemplateActionBusyId((prev) => (prev === id ? null : prev));
+      }
+    },
+    [onShowNotice],
+  );
+
+  const confirmDeleteTemplate = useCallback(async () => {
+    if (!deleteDialog) {
+      return;
+    }
+    setDeleteBusy(true);
+    try {
+      const res = await deleteRequirementsTemplate(deleteDialog.id);
+      if (res.ok) {
+        setDeleteDialog(null);
+        await reloadTemplates();
+      } else {
+        onShowNotice(res.message, { title: "テンプレート" });
+      }
+    } finally {
+      setDeleteBusy(false);
+    }
+  }, [deleteDialog, reloadTemplates, onShowNotice]);
 
   useEffect(() => {
-    reloadTemplates();
+    void reloadTemplates();
   }, [reloadTemplates]);
+
+  useEffect(() => {
+    return () => {
+      if (templateActionFeedbackTimerRef.current) {
+        clearTimeout(templateActionFeedbackTimerRef.current);
+        templateActionFeedbackTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!sourceOpen) {
@@ -610,7 +763,7 @@ export const RequirementsTiptapToolbar = forwardRef<RequirementsTiptapToolbarHan
     if (!editor) {
       return;
     }
-    setSourceDraftHtml(formatHtmlReadable(editor.getHTML()));
+    setSourceDraftHtml(formatHtmlReadable(getHtmlSourceDraftFromEditor(editor)));
     setSourceDraftJson(JSON.stringify(editor.getJSON(), null, 2));
     setSourceTab("html");
     setSourceOpen(true);
@@ -622,7 +775,24 @@ export const RequirementsTiptapToolbar = forwardRef<RequirementsTiptapToolbarHan
     }
     try {
       if (sourceTab === "html") {
-        editor.chain().focus().setContent(sourceDraftHtml).run();
+        const sanitized = sanitizeRequirementsRawHtml(sourceDraftHtml);
+        if (sanitized === "") {
+          onShowNotice("危険な要素を除去した結果、適用可能なHTMLが残りませんでした。", { title: "ソースコード" });
+          return;
+        }
+        editor
+          .chain()
+          .focus()
+          .setContent({
+            type: "doc",
+            content: [
+              {
+                type: "requirementsRawHtmlBlock",
+                attrs: { html: sanitized },
+              },
+            ],
+          })
+          .run();
       } else {
         editor.chain().focus().setContent(JSON.parse(sourceDraftJson)).run();
       }
@@ -893,7 +1063,7 @@ export const RequirementsTiptapToolbar = forwardRef<RequirementsTiptapToolbarHan
           <DialogHeader>
             <DialogTitle>テンプレートとして保存</DialogTitle>
           </DialogHeader>
-          <div className="flex flex-col gap-1.5">
+          <div className="mb-3 flex flex-col gap-1.5">
             <Label htmlFor="requirements-template-name">テンプレート名</Label>
             <Input
               id="requirements-template-name"
@@ -905,21 +1075,129 @@ export const RequirementsTiptapToolbar = forwardRef<RequirementsTiptapToolbarHan
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
-                  saveCurrentAsTemplate();
+                  void saveCurrentAsTemplate();
                 }
               }}
             />
           </div>
+          <fieldset className="mt-1 border-0 p-0">
+            <legend className="mb-1 text-sm font-medium text-[var(--foreground)]">公開範囲</legend>
+            <div className="flex items-center gap-4">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--foreground)]">
+              <input
+                type="radio"
+                name="requirements-template-visibility"
+                className="h-4 w-4 accent-[var(--accent)]"
+                checked={templateVisibility === "private"}
+                onChange={() => setTemplateVisibility("private")}
+              />
+              自分のみ
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--foreground)]">
+              <input
+                type="radio"
+                name="requirements-template-visibility"
+                className="h-4 w-4 accent-[var(--accent)]"
+                checked={templateVisibility === "public"}
+                onChange={() => setTemplateVisibility("public")}
+              />
+              ログインユーザ全体
+            </label>
+            </div>
+          </fieldset>
           <div className="flex justify-end gap-2 pt-1">
-            <Button type="button" variant="ghost" size="sm" onClick={closeTemplateSaveDialog}>
+            <Button type="button" variant="ghost" size="sm" onClick={closeTemplateSaveDialog} disabled={templateSaving}>
               キャンセル
             </Button>
-            <Button type="button" size="sm" onClick={saveCurrentAsTemplate}>
-              保存
+            <Button type="button" size="sm" onClick={() => void saveCurrentAsTemplate()} disabled={templateSaving}>
+              {templateSaving ? "保存中…" : "保存"}
             </Button>
           </div>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={overwriteDialogOpen} onOpenChange={(o) => !o && setOverwriteDialogOpen(false)}>
+        <DialogContent className="gap-4 sm:max-w-md" onOpenAutoFocus={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle>テンプレートの上書き</DialogTitle>
+            <DialogDescription>
+              同じ名前のテンプレートが既にあります。上書きしてよいですか？
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setOverwriteDialogOpen(false);
+                setOverwriteTemplateId(null);
+              }}
+              disabled={templateSaving}
+            >
+              キャンセル
+            </Button>
+            <Button type="button" size="sm" onClick={() => void confirmOverwriteTemplate()} disabled={templateSaving}>
+              {templateSaving ? "保存中…" : "上書きする"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteDialog !== null} onOpenChange={(o) => !o && setDeleteDialog(null)}>
+        <DialogContent
+          className="z-[260] gap-4 sm:max-w-md"
+          overlayClassName="z-[259]"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>テンプレートを削除</DialogTitle>
+            <DialogDescription>
+              {deleteDialog ? `「${deleteDialog.name}」を削除します。よろしいですか？` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button type="button" variant="ghost" size="sm" onClick={() => setDeleteDialog(null)} disabled={deleteBusy}>
+              キャンセル
+            </Button>
+            <Button type="button" variant="destructive" size="sm" onClick={() => void confirmDeleteTemplate()} disabled={deleteBusy}>
+              {deleteBusy ? "削除中…" : "削除"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={templateApplyDialog !== null} onOpenChange={(o) => !o && setTemplateApplyDialog(null)}>
+        <DialogContent className="z-[260] gap-4 sm:max-w-md" overlayClassName="z-[259]" onOpenAutoFocus={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle>テンプレートの適用方法</DialogTitle>
+            <DialogDescription>エディタ内に既存データがあります。適用方法を選択してください。</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <Button type="button" size="sm" onClick={() => runTemplateApplyFromDialog("prepend")}>
+              最上部に追加
+            </Button>
+            <Button type="button" size="sm" onClick={() => runTemplateApplyFromDialog("append")}>
+              最下部に追加
+            </Button>
+            <Button type="button" size="sm" onClick={() => runTemplateApplyFromDialog("replace")}>
+              置き換え
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <RequirementsTiptapTemplatePreviewDialog
+        open={previewTemplate !== null}
+        onOpenChange={(o) => !o && setPreviewTemplate(null)}
+        title={previewTemplate?.name ?? ""}
+        doc={previewTemplate?.doc ?? null}
+        onApply={() => {
+          if (previewTemplate) {
+            requestApplyTemplate(previewTemplate.id);
+          }
+        }}
+      />
 
       <div
         role="toolbar"
@@ -979,17 +1257,96 @@ export const RequirementsTiptapToolbar = forwardRef<RequirementsTiptapToolbarHan
               <span className="text-[11px]">テンプレ</span>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="min-w-[260px]">
-            <DropdownMenuItem onSelect={openTemplateSaveDialog}>現在の内容をテンプレート保存</DropdownMenuItem>
+          <DropdownMenuContent align="start" className="min-w-[320px] max-h-[min(72vh,520px)] overflow-y-auto">
+            <DropdownMenuItem className={cn("mb-1 justify-center rounded-md py-2 text-sm font-semibold", accentButtonSurfaceBaseClassName)} onSelect={openTemplateSaveDialog}>
+              現在の内容を保存する
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
-            {templates.length === 0 ? (
+            {templatesLoading ? (
+              <DropdownMenuItem disabled>読み込み中…</DropdownMenuItem>
+            ) : templates.length === 0 ? (
               <DropdownMenuItem disabled>保存済みテンプレートはありません</DropdownMenuItem>
             ) : (
-              templates.map((t) => (
-                <DropdownMenuItem key={t.id} onSelect={() => applyTemplateById(t.id)}>
-                  挿入: {t.name}
-                </DropdownMenuItem>
-              ))
+              <div className="space-y-2 p-1">
+                {templates.map((t) => {
+                  const badge = t.visibility === "public" ? "全体" : "自分";
+                  const isCreator = currentUserId !== null && t.created_by_user_id === currentUserId;
+                  const busy = templateActionBusyId === t.id;
+                  const creatorName = t.creator_display_name?.trim() || t.creator_email;
+                  const meta = `${creatorName} · ${(t.updated_at || "").slice(0, 10)}`;
+                  return (
+                    <div
+                      key={t.id}
+                      className="rounded-lg border border-[color:color-mix(in_srgb,var(--border)_80%,transparent)] bg-[color:color-mix(in_srgb,var(--surface)_94%,transparent)] p-2"
+                    >
+                      <HoverCard openDelay={180} closeDelay={120}>
+                        <HoverCardTrigger asChild>
+                          <button
+                            type="button"
+                            className="w-full rounded-md border border-transparent px-1 py-1 text-left text-[11px] leading-tight text-[var(--muted)] transition hover:border-[color:color-mix(in_srgb,var(--accent)_65%,var(--border)_35%)] hover:bg-[color:color-mix(in_srgb,var(--surface-soft)_75%,transparent)] hover:shadow-[0_0_0_1px_color-mix(in_srgb,var(--accent)_35%,transparent)]"
+                            onClick={() => setPreviewTemplate(t)}
+                          >
+                            <span className="font-medium text-[var(--foreground)]">{t.name}</span>
+                            <span className="ml-1 rounded bg-[color:color-mix(in_srgb,var(--surface-soft)_90%,transparent)] px-1">{badge}</span>
+                            {t.locked ? (
+                              <Lock className="ml-1 inline h-3 w-3 align-middle text-[var(--muted)]" aria-label="ロック済み" />
+                            ) : null}
+                            <br />
+                            <span className="break-all">{meta}</span>
+                          </button>
+                        </HoverCardTrigger>
+                        <HoverCardContent side="right" align="start" className="p-0">
+                          <RequirementsTiptapTemplateHoverPeek doc={t.doc} />
+                        </HoverCardContent>
+                      </HoverCard>
+                      <div className="mt-1 flex items-center gap-1">
+                        {isCreator ? (
+                          <>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 text-red-600 hover:text-red-500"
+                              title="削除"
+                              disabled={busy || deleteBusy}
+                              onClick={() => setDeleteDialog({ id: t.id, name: t.name })}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0"
+                              title={t.locked ? "ロック解除" : "ロックする"}
+                              disabled={busy}
+                              onClick={() => {
+                                void setTemplateLocked(t.id, !t.locked);
+                              }}
+                            >
+                              {t.locked ? <LockOpen className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                            </Button>
+                          </>
+                        ) : null}
+                        {templateActionFeedback?.id === t.id ? (
+                          <span className="ml-auto text-xs text-[var(--muted)]" aria-live="polite">
+                            {templateActionFeedback.message}
+                          </span>
+                        ) : null}
+                        <Button
+                          type="button"
+                          size="sm"
+                          className={cn("h-7 px-2", templateActionFeedback?.id === t.id ? "" : "ml-auto")}
+                          disabled={disabled || busy}
+                          onClick={() => requestApplyTemplate(t.id)}
+                        >
+                          適用
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </DropdownMenuContent>
         </DropdownMenu>

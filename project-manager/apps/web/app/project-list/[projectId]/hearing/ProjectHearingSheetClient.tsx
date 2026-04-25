@@ -1404,7 +1404,7 @@ export function ProjectHearingSheetClient({
 
         <aside
           className={cn(
-            "mt-6 flex min-w-0 flex-col gap-4 lg:mt-0 lg:shrink-0 lg:self-start",
+            "relative mt-6 flex min-w-0 flex-col gap-4 lg:mt-0 lg:shrink-0 lg:self-start",
             "lg:sticky lg:top-4",
             "min-w-0",
             "motion-safe:transition-[width] motion-safe:duration-200 motion-safe:ease-out motion-reduce:transition-none",
@@ -1412,12 +1412,19 @@ export function ProjectHearingSheetClient({
           )}
         >
           {isLg ? (
-            <div className={cn("flex w-full", rightSidebarCollapsed ? "justify-center" : "justify-end")}>
+            <div
+              className={cn(
+                "z-40",
+                rightSidebarCollapsed
+                  ? "relative flex h-8 w-full items-start justify-center"
+                  : "absolute top-0 right-0",
+              )}
+            >
               <Button
                 type="button"
                 variant="default"
                 size="sm"
-                className="group h-8 w-8 shrink-0 p-0"
+                className="group h-8 w-8 shrink-0 p-0 shadow-sm"
                 aria-label={rightSidebarCollapsed ? "右パネルを展開" : "右パネルを折りたたむ"}
                 aria-expanded={!rightSidebarCollapsed}
                 onClick={toggleRightSidebarCollapsed}
