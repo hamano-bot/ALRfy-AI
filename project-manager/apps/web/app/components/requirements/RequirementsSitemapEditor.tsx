@@ -36,7 +36,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 
 const DND_MIME = "application/x-alrfy-sitemap-node";
 
-type SitemapPreviewDiagramLayout = "horizontal" | "vertical";
+export type SitemapPreviewDiagramLayout = "horizontal" | "vertical";
 
 type Props = {
   content: RequirementsPageContentSitemap;
@@ -482,7 +482,7 @@ function buildTreeLayout(root: SitemapNode, direction: SitemapPreviewDiagramLayo
   return { nodes, edges };
 }
 
-function PreviewSitemapCanvas({ root, diagramLayout }: { root: SitemapNode; diagramLayout: SitemapPreviewDiagramLayout }) {
+export function PreviewSitemapCanvas({ root, diagramLayout }: { root: SitemapNode; diagramLayout: SitemapPreviewDiagramLayout }) {
   const { nodes, edges } = useMemo(() => buildTreeLayout(root, diagramLayout), [root, diagramLayout]);
   const labelOffsetTop = diagramLayout === "horizontal" ? HORIZONTAL_LABEL_OFFSET_TOP_PX : 0;
   return (

@@ -1,6 +1,6 @@
 "use client";
 
-import { GripVertical, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { ExternalLink, GripVertical, Plus, RotateCcw, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from "react";
@@ -19,7 +19,7 @@ import {
 import { RequirementsSitemapEditor } from "@/app/components/requirements/RequirementsSitemapEditor";
 import { RequirementsTiptapField } from "@/app/components/requirements/RequirementsTiptapField";
 import {
-  emptyTableRow,
+  emptyTableRowByColumnCount,
   pageWithNewInputMode,
 } from "@/lib/requirements-doc-content-defaults";
 import { requirementsDocFingerprint } from "@/lib/requirements-doc-fingerprint";
@@ -36,6 +36,7 @@ import type {
 } from "@/lib/requirements-doc-types";
 import { UNSAVED_LEAVE_CONFIRM_MESSAGE } from "@/lib/unsaved-navigation";
 import { cn } from "@/lib/utils";
+import { requirementsPrintPreviewChannelName } from "@/lib/requirements-print-preview-channel";
 
 const AUTO_SAVE_INTERVAL_MS = 120_000;
 const DND_MIME = "application/x-alrfy-req-page";
@@ -79,23 +80,25 @@ function RequirementsTableEditor({
   content,
   readOnly,
   onChange,
+  allowColumnEdit = true,
 }: {
   content: RequirementsPageContentTable;
   readOnly: boolean;
   onChange: (c: RequirementsPageContentTable) => void;
+  allowColumnEdit?: boolean;
 }) {
-  const setLabels = (i: 0 | 1 | 2, v: string) => {
-    const columnLabels = [...content.columnLabels] as [string, string, string];
+  const setLabels = (i: number, v: string) => {
+    const columnLabels = [...content.columnLabels];
     columnLabels[i] = v;
     onChange({ ...content, columnLabels });
   };
 
-  const setCell = (rowIndex: number, col: 0 | 1 | 2, v: string) => {
+  const setCell = (rowIndex: number, col: number, v: string) => {
     const rows = content.rows.map((r, ri) => {
       if (ri !== rowIndex) {
         return r;
       }
-      const cells = [...r.cells] as [string, string, string];
+      const cells = [...r.cells];
       cells[col] = v;
       return { ...r, cells };
     });
@@ -103,7 +106,27 @@ function RequirementsTableEditor({
   };
 
   const addRow = () => {
-    onChange({ ...content, rows: [...content.rows, emptyTableRow()] });
+    onChange({ ...content, rows: [...content.rows, emptyTableRowByColumnCount(content.columnLabels.length)] });
+  };
+
+  const addColumn = () => {
+    const current = content.columnLabels.length;
+    if (current >= 12) {
+      return;
+    }
+    const columnLabels = [...content.columnLabels, `列${current + 1}`];
+    const rows = content.rows.map((r) => ({ ...r, cells: [...r.cells, ""] }));
+    onChange({ ...content, columnLabels, rows });
+  };
+
+  const removeColumn = (colIndex: number) => {
+    const current = content.columnLabels.length;
+    if (current <= 1 || !allowColumnEdit) {
+      return;
+    }
+    const columnLabels = content.columnLabels.filter((_, idx) => idx !== colIndex);
+    const rows = content.rows.map((r) => ({ ...r, cells: r.cells.filter((_, idx) => idx !== colIndex) }));
+    onChange({ ...content, columnLabels, rows });
   };
 
   const removeRow = (rowIndex: number) => {
@@ -115,16 +138,25 @@ function RequirementsTableEditor({
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-3 gap-2">
-        {([0, 1, 2] as const).map((ci) => (
+      <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.max(content.columnLabels.length, 1)}, minmax(0, 1fr))` }}>
+        {content.columnLabels.map((label, ci) => (
           <div key={ci} className="space-y-1">
             <Label className="text-[10px]">列{ci + 1}</Label>
-            <Input
-              value={content.columnLabels[ci]}
-              onChange={(e) => setLabels(ci, e.target.value)}
-              disabled={readOnly}
-              className="text-xs"
-            />
+            <div className="flex items-center gap-1">
+              <Input value={label} onChange={(e) => setLabels(ci, e.target.value)} disabled={readOnly} className="text-xs" />
+              {allowColumnEdit ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2 text-[10px]"
+                  disabled={readOnly || content.columnLabels.length <= 1}
+                  onClick={() => removeColumn(ci)}
+                >
+                  削除
+                </Button>
+              ) : null}
+            </div>
           </div>
         ))}
       </div>
@@ -133,7 +165,7 @@ function RequirementsTableEditor({
           <tbody>
             {content.rows.map((row, ri) => (
               <tr key={row.id} className="border-b border-[color:color-mix(in_srgb,var(--border)_80%,transparent)]">
-                {([0, 1, 2] as const).map((ci) => (
+                {content.columnLabels.map((_, ci) => (
                   <td key={ci} className="p-1 align-top">
                     <textarea
                       value={row.cells[ci]}
@@ -162,10 +194,25 @@ function RequirementsTableEditor({
           </tbody>
         </table>
       </div>
-      <Button type="button" variant="ghost" size="sm" disabled={readOnly} onClick={addRow} className="gap-1">
-        <Plus className="h-4 w-4" />
-        行を追加
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" variant="ghost" size="sm" disabled={readOnly} onClick={addRow} className="gap-1">
+          <Plus className="h-4 w-4" />
+          行を追加
+        </Button>
+        {allowColumnEdit ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={readOnly || content.columnLabels.length >= 12}
+            onClick={addColumn}
+            className="gap-1"
+          >
+            <Plus className="h-4 w-4" />
+            列を追加
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -204,7 +251,21 @@ function RequirementsSplitEditor({
         <RequirementsTableEditor
           content={tablePart}
           readOnly={readOnly}
-          onChange={(t) => onChange({ ...content, columnLabels: t.columnLabels, rows: t.rows })}
+          allowColumnEdit={false}
+          onChange={(t) =>
+            onChange({
+              ...content,
+              columnLabels: [
+                t.columnLabels[0] ?? "",
+                t.columnLabels[1] ?? "",
+                t.columnLabels[2] ?? "",
+              ],
+              rows: t.rows.map((row) => ({
+                ...row,
+                cells: [row.cells[0] ?? "", row.cells[1] ?? "", row.cells[2] ?? ""],
+              })),
+            })
+          }
         />
       </div>
     </div>
@@ -239,6 +300,7 @@ export function ProjectRequirementsClient({
   const [draggingPageId, setDraggingPageId] = useState<string | null>(null);
   const dndSourceIdRef = useRef<string | null>(null);
   const pageListRef = useRef<HTMLDivElement | null>(null);
+  const previewChannelRef = useRef<BroadcastChannel | null>(null);
 
   const currentFingerprint = useMemo(() => requirementsDocFingerprint(body), [body]);
   const isDirty = canEdit && currentFingerprint !== savedFingerprint;
@@ -355,6 +417,19 @@ export function ProjectRequirementsClient({
     }, AUTO_SAVE_INTERVAL_MS);
     return () => window.clearInterval(id);
   }, [canEdit]);
+
+  useEffect(() => {
+    const channel = new BroadcastChannel(requirementsPrintPreviewChannelName(projectId));
+    previewChannelRef.current = channel;
+    return () => {
+      channel.close();
+      previewChannelRef.current = null;
+    };
+  }, [projectId]);
+
+  useEffect(() => {
+    previewChannelRef.current?.postMessage({ body, activePageId });
+  }, [body, activePageId]);
 
   const onProjectDetailNavigate = useCallback(
     (e: MouseEvent<HTMLAnchorElement>) => {
@@ -497,6 +572,19 @@ export function ProjectRequirementsClient({
     await performSave();
   }, [performSave]);
 
+  const openPreview = useCallback(() => {
+    const qs = new URLSearchParams();
+    if (activePageId) {
+      qs.set("selected_page_id", activePageId);
+    }
+    const suffix = qs.toString();
+    window.open(
+      `/project-list/${projectId}/requirements/print-preview${suffix ? `?${suffix}` : ""}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+  }, [projectId, activePageId]);
+
   const readOnly = !canEdit || (activePage?.is_fixed ?? false);
 
   return (
@@ -526,6 +614,10 @@ export function ProjectRequirementsClient({
             </div>
           </div>
           <div className="flex shrink-0 flex-nowrap items-center gap-2 sm:gap-3">
+            <Button type="button" variant="default" size="sm" className="shrink-0 self-center rounded-lg gap-1" onClick={openPreview}>
+              <ExternalLink className="h-4 w-4" />
+              プレビュー
+            </Button>
             {canEdit ? (
               <Button
                 type="button"

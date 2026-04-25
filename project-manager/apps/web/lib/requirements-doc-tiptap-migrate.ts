@@ -28,7 +28,15 @@ function migratePage(p: RequirementsDocBodyParsed["pages"][number]): Requirement
   const dates = baseDates(p);
 
   if (p.inputMode === "table") {
-    return { ...p, ...dates };
+    const labels = p.content.columnLabels.length > 0 ? p.content.columnLabels : ["項目"];
+    const rows = p.content.rows.map((row) => {
+      const nextCells = labels.map((_, idx) => {
+        const value = row.cells[idx];
+        return typeof value === "string" ? value : "";
+      });
+      return { ...row, cells: nextCells };
+    });
+    return { ...p, ...dates, content: { ...p.content, columnLabels: labels, rows } };
   }
 
   if (p.inputMode === "sitemap") {

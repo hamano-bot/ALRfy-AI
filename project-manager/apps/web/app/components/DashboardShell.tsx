@@ -74,6 +74,7 @@ function isActivePath(pathname: string, href: string): boolean {
 
 export function DashboardShell({ children }: DashboardShellProps) {
   const pathname = usePathname();
+  const isRequirementsPrintPreview = pathname?.includes("/requirements/print-preview") ?? false;
   const { apps: portalApps } = usePortalApps();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isAiOpen, setIsAiOpen] = useState(false);
@@ -235,6 +236,14 @@ export function DashboardShell({ children }: DashboardShellProps) {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  if (isRequirementsPrintPreview) {
+    return (
+      <div className="h-full min-h-0 bg-[var(--background)] text-[var(--foreground)]">
+        <main className="requirements-print-shell-main h-full min-h-0 overflow-auto">{children}</main>
+      </div>
+    );
+  }
 
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-[var(--background)] text-[var(--foreground)]" data-theme={theme}>

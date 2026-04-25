@@ -1,17 +1,28 @@
 import { z } from "zod";
 import { sitemapContentSchema } from "@/lib/requirements-sitemap-schema";
 
-const cellTriple = z.tuple([z.string().max(8192), z.string().max(8192), z.string().max(8192)]);
-
 const tableRowSchema = z.object({
   id: z.string().min(1).max(128),
-  cells: cellTriple,
+  cells: z.array(z.string().max(8192)).min(1).max(12),
 });
 
-const tableContentSchema = z.object({
-  columnLabels: z.tuple([z.string().max(64), z.string().max(64), z.string().max(64)]),
-  rows: z.array(tableRowSchema).max(500),
-});
+const tableContentSchema = z
+  .object({
+    columnLabels: z.array(z.string().max(64)).min(1).max(12),
+    rows: z.array(tableRowSchema).max(500),
+  })
+  .superRefine((value, ctx) => {
+    const width = value.columnLabels.length;
+    value.rows.forEach((row, idx) => {
+      if (row.cells.length !== width) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["rows", idx, "cells"],
+          message: "cells length must match columnLabels length",
+        });
+      }
+    });
+  });
 
 /** 旧プレーンテキスト保存と TipTap JSON の両方を許容（normalize で doc に統一） */
 const richtextContentSchema = z.union([

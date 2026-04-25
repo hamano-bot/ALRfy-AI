@@ -16,7 +16,7 @@ function newRowId(): string {
   return `row-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-const DEFAULT_LABELS: [string, string, string] = ["項目", "内容", "備考"];
+const DEFAULT_LABELS = ["項目", "内容", "備考"] as const;
 
 export function defaultRichtextContent(): RequirementsPageContentRichtext {
   return { doc: EMPTY_TIPTAP_DOC };
@@ -25,14 +25,14 @@ export function defaultRichtextContent(): RequirementsPageContentRichtext {
 export function defaultTableContent(): RequirementsPageContentTable {
   return {
     columnLabels: [...DEFAULT_LABELS],
-    rows: [{ id: newRowId(), cells: ["", "", ""] }],
+    rows: [{ id: newRowId(), cells: DEFAULT_LABELS.map(() => "") }],
   };
 }
 
 export function defaultSplitContent(): RequirementsPageContentSplit {
   return {
     editorDoc: EMPTY_TIPTAP_DOC,
-    columnLabels: [...DEFAULT_LABELS],
+    columnLabels: [...DEFAULT_LABELS] as [string, string, string],
     rows: [{ id: newRowId(), cells: ["", "", ""] }],
   };
 }
@@ -55,7 +55,12 @@ export function defaultContentForMode(mode: RequirementsInputMode): Requirements
 }
 
 export function emptyTableRow(): RequirementsTableRow {
-  return { id: newRowId(), cells: ["", "", ""] };
+  return { id: newRowId(), cells: DEFAULT_LABELS.map(() => "") };
+}
+
+export function emptyTableRowByColumnCount(columnCount: number): RequirementsTableRow {
+  const size = Math.max(1, Math.min(12, columnCount));
+  return { id: newRowId(), cells: Array.from({ length: size }, () => "") };
 }
 
 /** 入力方式変更時はコンテンツを初期化する（計画どおり） */

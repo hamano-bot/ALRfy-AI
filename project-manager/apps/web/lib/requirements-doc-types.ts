@@ -12,11 +12,11 @@ export type RequirementsPageContentRichtext = {
 
 export type RequirementsTableRow = {
   id: string;
-  cells: [string, string, string];
+  cells: string[];
 };
 
 export type RequirementsPageContentTable = {
-  columnLabels: [string, string, string];
+  columnLabels: string[];
   rows: RequirementsTableRow[];
 };
 
