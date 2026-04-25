@@ -26,12 +26,13 @@ import { downloadHearingRowsExcel } from "@/lib/hearing-excel-export";
 import { hearingFieldIds } from "@/lib/hearing-form-ids";
 import { buildRedmineIssueUrl, buildRedmineProjectUrl } from "@/lib/redmine-url";
 import { UNSAVED_LEAVE_CONFIRM_MESSAGE } from "@/lib/unsaved-navigation";
+import { useEditHistoryState } from "@/lib/use-edit-history-state";
 import { cn } from "@/lib/utils";
 import { formatDateDisplayYmd } from "@/lib/format-date-display";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, GripVertical, Pencil, X } from "lucide-react";
+import { ChevronLeft, GripVertical, Pencil, Redo2, Trash2, Undo2 } from "lucide-react";
 import {
   type MouseEvent,
   useCallback,
@@ -69,6 +70,10 @@ function hearingSheetStateFingerprint(
   sheetStatus: "draft" | "finalized" | "archived",
 ): string {
   return JSON.stringify({ templateId, status: sheetStatus, rows });
+}
+
+function hearingRowsEquals(a: HearingSheetRow[], b: HearingSheetRow[]): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
 }
 
 function hearingRowsHaveAnyContent(rows: HearingSheetRow[]): boolean {
@@ -218,7 +223,12 @@ export function ProjectHearingSheetClient({
   canEdit,
 }: ProjectHearingSheetClientProps) {
   const router = useRouter();
-  const [rows, setRows] = useState<HearingSheetRow[]>(initialRows);
+  const rowsHistory = useEditHistoryState<HearingSheetRow[]>(initialRows, {
+    equals: hearingRowsEquals,
+    maxSize: 300,
+  });
+  const rows = rowsHistory.present;
+  const setRows = rowsHistory.setPresent;
   const [status, setStatus] = useState(initialStatus);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -287,9 +297,9 @@ export function ProjectHearingSheetClient({
   }, []);
 
   useEffect(() => {
-    setRows(sanitizeHearingRowsFromExcelImport(initialRows));
+    rowsHistory.reset(sanitizeHearingRowsFromExcelImport(initialRows));
     setStatus(initialStatus);
-  }, [initialRows, initialStatus]);
+  }, [rowsHistory.reset, initialRows, initialStatus]);
 
   useEffect(() => {
     let cancelled = false;
@@ -386,6 +396,39 @@ export function ProjectHearingSheetClient({
     }, AUTO_SAVE_INTERVAL_MS);
     return () => window.clearInterval(id);
   }, [canEdit]);
+
+  useEffect(() => {
+    if (!canEdit) {
+      return;
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) {
+        return;
+      }
+      const key = e.key.toLowerCase();
+      if (key === "z" && e.shiftKey) {
+        if (rowsHistory.canRedo) {
+          e.preventDefault();
+          rowsHistory.redo();
+        }
+        return;
+      }
+      if (key === "z") {
+        if (rowsHistory.canUndo) {
+          e.preventDefault();
+          rowsHistory.undo();
+        }
+        return;
+      }
+      if (key === "y" && rowsHistory.canRedo) {
+        e.preventDefault();
+        rowsHistory.redo();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [canEdit, rowsHistory]);
 
   const adviceRowIds = useMemo(
     () => collectAdviceRowIds(adviceSuggestions, rows),
@@ -666,7 +709,7 @@ export function ProjectHearingSheetClient({
             hearing_sheet?: { body_json?: unknown; status?: string };
           };
           if (j.success && j.hearing_sheet?.body_json !== undefined && j.hearing_sheet.body_json !== null) {
-            setRows(sanitizeHearingRowsFromExcelImport(normalizeHearingRows(j.hearing_sheet.body_json)));
+            rowsHistory.reset(sanitizeHearingRowsFromExcelImport(normalizeHearingRows(j.hearing_sheet.body_json)));
             const st = j.hearing_sheet.status;
             if (st === "draft" || st === "finalized" || st === "archived") {
               setStatus(st);
@@ -684,7 +727,7 @@ export function ProjectHearingSheetClient({
         setSaving(false);
       }
     },
-    [canEdit, projectId, resolvedTemplateId, status, router],
+    [canEdit, projectId, resolvedTemplateId, status, router, rowsHistory],
   );
 
   const performSave = useCallback(async (): Promise<boolean> => {
@@ -897,6 +940,32 @@ export function ProjectHearingSheetClient({
             </div>
           </div>
           <div className="flex shrink-0 flex-nowrap items-center gap-2 sm:gap-3">
+            {canEdit ? (
+              <>
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  className="shrink-0 self-center rounded-lg"
+                  disabled={!rowsHistory.canUndo}
+                  onClick={rowsHistory.undo}
+                  aria-label="ひとつ前に戻す"
+                >
+                  <Undo2 className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  className="shrink-0 self-center rounded-lg"
+                  disabled={!rowsHistory.canRedo}
+                  onClick={rowsHistory.redo}
+                  aria-label="やり直す"
+                >
+                  <Redo2 className="h-4 w-4" />
+                </Button>
+              </>
+            ) : null}
             {/*
             <div className="flex items-center gap-2">
               <Label
@@ -1332,7 +1401,7 @@ export function ProjectHearingSheetClient({
                                     title="行を削除"
                                     onClick={() => setDeleteConfirmRowId(row.id)}
                                   >
-                                    <X className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+                                    <Trash2 className="h-4 w-4" strokeWidth={2.2} aria-hidden />
                                   </Button>
                                 </div>
                               </div>

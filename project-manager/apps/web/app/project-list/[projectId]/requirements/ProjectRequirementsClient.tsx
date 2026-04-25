@@ -1,12 +1,13 @@
 "use client";
 
-import { ExternalLink, GripVertical, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronLeft, ExternalLink, GripVertical, Plus, Redo2, RotateCcw, Trash2, Undo2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from "react";
 import { ThemeDateField } from "@/app/components/ThemeDateField";
 import { Button } from "@/app/components/ui/button";
 import { Card, CardContent } from "@/app/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/app/components/ui/dialog";
 import { Input } from "@/app/components/ui/input";
 import { Label } from "@/app/components/ui/label";
 import {
@@ -17,14 +18,16 @@ import {
   SelectValue,
 } from "@/app/components/ui/select";
 import { RequirementsSitemapEditor } from "@/app/components/requirements/RequirementsSitemapEditor";
+import { RequirementsTableImportExcelDialog } from "@/app/components/requirements/RequirementsTableImportExcelDialog";
 import { RequirementsTiptapField } from "@/app/components/requirements/RequirementsTiptapField";
-import {
-  emptyTableRowByColumnCount,
-  pageWithNewInputMode,
-} from "@/lib/requirements-doc-content-defaults";
+import { HearingAutoTextarea } from "@/app/project-list/[projectId]/hearing/HearingAutoTextarea";
+import { GeminiMarkIcon } from "@/app/project-list/[projectId]/hearing/GeminiMarkIcon";
+import { HearingUrlClipRow } from "@/app/project-list/[projectId]/hearing/HearingUrlClipRow";
+import { defaultRichtextContent, emptyTableRowByColumnCount, pageWithNewInputMode } from "@/lib/requirements-doc-content-defaults";
 import { requirementsDocFingerprint } from "@/lib/requirements-doc-fingerprint";
 import {
   insertionIndexFromPointerYForStrings,
+  reorderVisiblePage,
   reorderVisiblePageToInsertionIndex,
 } from "@/lib/requirements-doc-reorder";
 import type {
@@ -35,11 +38,17 @@ import type {
   RequirementsPageContentTable,
 } from "@/lib/requirements-doc-types";
 import { UNSAVED_LEAVE_CONFIRM_MESSAGE } from "@/lib/unsaved-navigation";
+import { useEditHistoryState } from "@/lib/use-edit-history-state";
 import { cn } from "@/lib/utils";
 import { requirementsPrintPreviewChannelName } from "@/lib/requirements-print-preview-channel";
 
 const AUTO_SAVE_INTERVAL_MS = 120_000;
 const DND_MIME = "application/x-alrfy-req-page";
+const RIGHT_SIDEBAR_COLLAPSED_LS_KEY = "pm-requirements-right-sidebar-collapsed";
+
+function requirementsBodyEquals(a: RequirementsDocBody, b: RequirementsDocBody): boolean {
+  return requirementsDocFingerprint(a) === requirementsDocFingerprint(b);
+}
 
 type ProjectRequirementsClientProps = {
   projectId: number;
@@ -50,6 +59,13 @@ type ProjectRequirementsClientProps = {
 
 function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+function newPageId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `req-page-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 function withSaveDatesForPage(body: RequirementsDocBody, pageId: string): RequirementsDocBody {
@@ -81,12 +97,50 @@ function RequirementsTableEditor({
   readOnly,
   onChange,
   allowColumnEdit = true,
+  onImportExcel,
+  compactLayout = false,
 }: {
   content: RequirementsPageContentTable;
   readOnly: boolean;
   onChange: (c: RequirementsPageContentTable) => void;
   allowColumnEdit?: boolean;
+  onImportExcel?: () => void;
+  compactLayout?: boolean;
 }) {
+  const columnDragIdRef = useRef<string | null>(null);
+  const [draggingColumnId, setDraggingColumnId] = useState<string | null>(null);
+  const [columnDropIndicatorIndex, setColumnDropIndicatorIndex] = useState<number | null>(null);
+  const [draggingRowId, setDraggingRowId] = useState<string | null>(null);
+  const [rowDropIndicatorIndex, setRowDropIndicatorIndex] = useState<number | null>(null);
+  const rowDragIdRef = useRef<string | null>(null);
+  const tbodyRef = useRef<HTMLTableSectionElement | null>(null);
+  const rowListRef = useRef(content.rows.map((row) => row.id));
+  rowListRef.current = content.rows.map((row) => row.id);
+  const colListRef = useRef(content.columnLabels.map((_, ci) => `col-${ci}`));
+  colListRef.current = content.columnLabels.map((_, ci) => `col-${ci}`);
+  const insertionIndexFromPointerXForStrings = (
+    list: string[],
+    colElements: HTMLElement[],
+    clientX: number,
+    dragId: string,
+  ): number => {
+    if (list.length === 0) {
+      return 0;
+    }
+    for (let i = 0; i < list.length; i++) {
+      const el = colElements[i];
+      if (!el) {
+        break;
+      }
+      const r = el.getBoundingClientRect();
+      const mid = r.left + r.width / 2;
+      if (clientX < mid) {
+        return list.slice(0, i).filter((x) => x !== dragId).length;
+      }
+    }
+    return list.filter((x) => x !== dragId).length;
+  };
+
   const setLabels = (i: number, v: string) => {
     const columnLabels = [...content.columnLabels];
     columnLabels[i] = v;
@@ -111,7 +165,7 @@ function RequirementsTableEditor({
 
   const addColumn = () => {
     const current = content.columnLabels.length;
-    if (current >= 12) {
+    if (current >= 6) {
       return;
     }
     const columnLabels = [...content.columnLabels, `列${current + 1}`];
@@ -121,7 +175,7 @@ function RequirementsTableEditor({
 
   const removeColumn = (colIndex: number) => {
     const current = content.columnLabels.length;
-    if (current <= 1 || !allowColumnEdit) {
+    if (colIndex === 0 || current <= 1 || !allowColumnEdit) {
       return;
     }
     const columnLabels = content.columnLabels.filter((_, idx) => idx !== colIndex);
@@ -136,52 +190,248 @@ function RequirementsTableEditor({
     onChange({ ...content, rows: content.rows.filter((_, ri) => ri !== rowIndex) });
   };
 
+  const reorderRows = (rowId: string, newIndex: number) => {
+    const without = content.rows.filter((r) => r.id !== rowId);
+    const row = content.rows.find((r) => r.id === rowId);
+    if (!row) {
+      return;
+    }
+    const i = Math.max(0, Math.min(newIndex, without.length));
+    const rows = [...without.slice(0, i), row, ...without.slice(i)];
+    onChange({ ...content, rows });
+  };
+
+  const reorderColumns = (fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) {
+      return;
+    }
+    const labelsWithout = content.columnLabels.filter((_, idx) => idx !== fromIndex);
+    const movedLabel = content.columnLabels[fromIndex];
+    if (movedLabel === undefined) {
+      return;
+    }
+    const safeIndex = Math.max(0, Math.min(toIndex, labelsWithout.length));
+    const columnLabels = [...labelsWithout.slice(0, safeIndex), movedLabel, ...labelsWithout.slice(safeIndex)];
+    const rows = content.rows.map((row) => {
+      const cellsWithout = row.cells.filter((_, idx) => idx !== fromIndex);
+      const movedCell = row.cells[fromIndex] ?? "";
+      const cells = [...cellsWithout.slice(0, safeIndex), movedCell, ...cellsWithout.slice(safeIndex)];
+      return { ...row, cells };
+    });
+    onChange({ ...content, columnLabels, rows });
+  };
+
+  const clearRowDrag = () => {
+    rowDragIdRef.current = null;
+    setDraggingRowId(null);
+    setRowDropIndicatorIndex(null);
+  };
+
+  const clearColumnDrag = () => {
+    columnDragIdRef.current = null;
+    setDraggingColumnId(null);
+    setColumnDropIndicatorIndex(null);
+  };
+
   return (
     <div className="space-y-3">
-      <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.max(content.columnLabels.length, 1)}, minmax(0, 1fr))` }}>
-        {content.columnLabels.map((label, ci) => (
-          <div key={ci} className="space-y-1">
-            <Label className="text-[10px]">列{ci + 1}</Label>
-            <div className="flex items-center gap-1">
-              <Input value={label} onChange={(e) => setLabels(ci, e.target.value)} disabled={readOnly} className="text-xs" />
-              {allowColumnEdit ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 px-2 text-[10px]"
-                  disabled={readOnly || content.columnLabels.length <= 1}
-                  onClick={() => removeColumn(ci)}
-                >
-                  削除
-                </Button>
-              ) : null}
-            </div>
-          </div>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Label>表組</Label>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button type="button" variant="default" size="sm" disabled={readOnly} onClick={addRow}>
+            行を追加
+          </Button>
+          {onImportExcel ? (
+            <Button type="button" variant="default" size="sm" className="inline-flex items-center gap-1.5" disabled={readOnly} onClick={onImportExcel}>
+              <GeminiMarkIcon className="h-4 w-4 shrink-0" />
+              Excel を取り込む
+            </Button>
+          ) : null}
+          {allowColumnEdit && content.columnLabels.length < 6 ? (
+            <Button type="button" variant="default" size="sm" disabled={readOnly} onClick={addColumn}>
+              列を追加
+            </Button>
+          ) : null}
+        </div>
       </div>
-      <div className="overflow-x-auto rounded-md border border-[color:color-mix(in_srgb,var(--border)_88%,transparent)]">
-        <table className="w-full min-w-[520px] border-collapse text-sm">
-          <tbody>
+      <div className={cn("rounded-md border border-[color:color-mix(in_srgb,var(--border)_88%,transparent)]", compactLayout ? "overflow-x-hidden" : "overflow-x-auto")}>
+        <table className={cn("w-full table-fixed border-collapse text-sm", compactLayout ? "min-w-0" : "min-w-[760px]")}>
+          <colgroup>
+            <col style={{ width: compactLayout ? "1.75rem" : "2.25rem" }} />
+            {content.columnLabels.map((_, ci) => (
+              <col key={`col-${ci}`} style={{ width: `${100 / Math.max(content.columnLabels.length, 1)}%` }} />
+            ))}
+            <col style={{ width: compactLayout ? "2.5rem" : "3.5rem" }} />
+          </colgroup>
+          <thead>
+            <tr className="border-b border-[color:color-mix(in_srgb,var(--border)_80%,transparent)]">
+              <th className="w-9 p-1">
+                <span className="sr-only">行並び替え</span>
+              </th>
+              {content.columnLabels.map((label, ci) => (
+                <th
+                  key={`header-${ci}`}
+                  data-req-table-col
+                  draggable={!readOnly && allowColumnEdit}
+                  onDragStart={(e) => {
+                    if (readOnly || !allowColumnEdit) {
+                      return;
+                    }
+                    const id = `col-${ci}`;
+                    columnDragIdRef.current = id;
+                    setDraggingColumnId(id);
+                    setColumnDropIndicatorIndex(null);
+                    e.dataTransfer.effectAllowed = "move";
+                    e.dataTransfer.setData("text/plain", id);
+                  }}
+                  onDragEnd={clearColumnDrag}
+                  onDragOver={(e) => {
+                    if (columnDragIdRef.current === null) {
+                      return;
+                    }
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                    const rowEl = e.currentTarget.parentElement;
+                    const colEls = [...(rowEl?.querySelectorAll<HTMLElement>("[data-req-table-col]") ?? [])];
+                    const idx = insertionIndexFromPointerXForStrings(colListRef.current, colEls, e.clientX, columnDragIdRef.current);
+                    setColumnDropIndicatorIndex(idx);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const dragId = columnDragIdRef.current;
+                    if (!dragId) {
+                      clearColumnDrag();
+                      return;
+                    }
+                    const fromIndex = Number.parseInt(dragId.replace("col-", ""), 10);
+                    const rowEl = e.currentTarget.parentElement;
+                    const colEls = [...(rowEl?.querySelectorAll<HTMLElement>("[data-req-table-col]") ?? [])];
+                    const toIndex = insertionIndexFromPointerXForStrings(colListRef.current, colEls, e.clientX, dragId);
+                    reorderColumns(fromIndex, toIndex);
+                    clearColumnDrag();
+                  }}
+                  className={cn(
+                    "relative p-1 align-top",
+                    draggingColumnId === `col-${ci}` && "opacity-60",
+                    columnDropIndicatorIndex === ci &&
+                      "before:pointer-events-none before:absolute before:bottom-0 before:left-0 before:top-0 before:z-[1] before:w-[3px] before:-translate-x-1/2 before:rounded-full before:bg-[color:color-mix(in_srgb,var(--accent)_90%,transparent)]",
+                    columnDropIndicatorIndex === content.columnLabels.length &&
+                      ci === content.columnLabels.length - 1 &&
+                      "after:pointer-events-none after:absolute after:bottom-0 after:right-0 after:top-0 after:z-[1] after:w-[3px] after:translate-x-1/2 after:rounded-full after:bg-[color:color-mix(in_srgb,var(--accent)_90%,transparent)]",
+                  )}
+                >
+                  <div className="space-y-1">
+                    <Label className="text-[10px]">列{ci + 1}</Label>
+                    <div className="flex items-center gap-1">
+                      {allowColumnEdit ? (
+                        <span
+                          className={cn("inline-flex text-[var(--muted)]", !readOnly && "cursor-grab active:cursor-grabbing")}
+                          title="ドラッグして列を並び替え"
+                        >
+                          <GripVertical className="h-4 w-4 -rotate-90" />
+                        </span>
+                      ) : null}
+                      <Input value={label} onChange={(e) => setLabels(ci, e.target.value)} disabled={readOnly} className="text-xs" />
+                      {allowColumnEdit && ci > 0 ? (
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          className="h-8 w-8 border-0 bg-transparent p-0 text-red-600 shadow-none hover:bg-[color:color-mix(in_srgb,rgb(239_68_68)_12%,transparent)] hover:text-red-700"
+                          disabled={readOnly || content.columnLabels.length <= 1 || ci === 0}
+                          onClick={() => removeColumn(ci)}
+                          aria-label={`列${ci + 1}を削除`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                </th>
+              ))}
+              <th className="w-14 p-1 align-middle">
+                <span className="sr-only">行削除</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody
+            ref={tbodyRef}
+            onDragOver={(e) => {
+              if (rowDragIdRef.current === null || !tbodyRef.current) {
+                return;
+              }
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "move";
+              const rowEls = [...tbodyRef.current.querySelectorAll<HTMLElement>("tr[data-req-table-row]")];
+              const idx = insertionIndexFromPointerYForStrings(rowListRef.current, rowEls, e.clientY, rowDragIdRef.current);
+              setRowDropIndicatorIndex(idx);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              const dragId = rowDragIdRef.current;
+              if (!dragId || !tbodyRef.current) {
+                clearRowDrag();
+                return;
+              }
+              const rowEls = [...tbodyRef.current.querySelectorAll<HTMLElement>("tr[data-req-table-row]")];
+              const idx = insertionIndexFromPointerYForStrings(rowListRef.current, rowEls, e.clientY, dragId);
+              reorderRows(dragId, idx);
+              clearRowDrag();
+            }}
+          >
             {content.rows.map((row, ri) => (
-              <tr key={row.id} className="border-b border-[color:color-mix(in_srgb,var(--border)_80%,transparent)]">
+              <tr
+                key={row.id}
+                data-req-table-row
+                draggable={!readOnly}
+                onDragStart={(e) => {
+                  if (readOnly) {
+                    return;
+                  }
+                  rowDragIdRef.current = row.id;
+                  setDraggingRowId(row.id);
+                  setRowDropIndicatorIndex(null);
+                  e.dataTransfer.effectAllowed = "move";
+                  e.dataTransfer.setData("text/plain", row.id);
+                }}
+                onDragEnd={clearRowDrag}
+                className={cn(
+                  "relative border-b border-[color:color-mix(in_srgb,var(--border)_80%,transparent)]",
+                  draggingRowId === row.id && "opacity-60",
+                  rowDropIndicatorIndex === ri &&
+                    "before:pointer-events-none before:absolute before:inset-x-1 before:top-0 before:z-[1] before:h-[3px] before:-translate-y-1/2 before:rounded-full before:bg-[color:color-mix(in_srgb,var(--accent)_90%,transparent)]",
+                  rowDropIndicatorIndex === content.rows.length &&
+                    ri === content.rows.length - 1 &&
+                    "after:pointer-events-none after:absolute after:inset-x-1 after:bottom-0 after:z-[1] after:h-[3px] after:translate-y-1/2 after:rounded-full after:bg-[color:color-mix(in_srgb,var(--accent)_90%,transparent)]",
+                )}
+              >
+                <td className="w-9 p-1 align-middle">
+                  <span className={cn("inline-flex text-[var(--muted)]", !readOnly && "cursor-grab active:cursor-grabbing")} title="ドラッグして行を並び替え">
+                    <GripVertical className="h-4 w-4" />
+                  </span>
+                </td>
                 {content.columnLabels.map((_, ci) => (
                   <td key={ci} className="p-1 align-top">
-                    <textarea
-                      value={row.cells[ci]}
-                      onChange={(e) => setCell(ri, ci, e.target.value)}
-                      disabled={readOnly}
-                      rows={3}
-                      className="modern-scrollbar w-full resize-y rounded border border-transparent bg-[color:color-mix(in_srgb,var(--surface)_96%,transparent)] px-2 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[color:color-mix(in_srgb,var(--accent)_45%,transparent)]"
-                    />
+                    <div className={cn("flex flex-col gap-0.5", compactLayout ? "min-w-0" : "min-w-[10rem]")}>
+                      <HearingAutoTextarea
+                        value={row.cells[ci] ?? ""}
+                        onChange={(e) => setCell(ri, ci, e.target.value)}
+                        readOnly={readOnly}
+                        className={cn(
+                          "modern-scrollbar bg-[color:color-mix(in_srgb,var(--surface)_96%,transparent)] px-2 py-1.5",
+                          compactLayout ? "text-xs" : "text-sm",
+                        )}
+                      />
+                      <HearingUrlClipRow text={row.cells[ci] ?? ""} />
+                    </div>
                   </td>
                 ))}
-                <td className="w-10 p-1 align-middle">
+                <td className="w-14 p-1 align-middle">
                   <Button
                     type="button"
-                    variant="ghost"
+                    variant="destructive"
                     size="sm"
-                    className="h-8 w-8 p-0 text-[var(--muted)] hover:text-red-600"
+                    className="h-8 w-8 border-0 bg-transparent p-0 text-red-600 shadow-none hover:bg-[color:color-mix(in_srgb,rgb(239_68_68)_12%,transparent)] hover:text-red-700"
                     disabled={readOnly || content.rows.length <= 1}
                     onClick={() => removeRow(ri)}
                     aria-label="行を削除"
@@ -191,27 +441,35 @@ function RequirementsTableEditor({
                 </td>
               </tr>
             ))}
+            <tr className="border-b border-[color:color-mix(in_srgb,var(--border)_70%,transparent)] bg-[color:color-mix(in_srgb,var(--surface)_98%,transparent)]">
+              <td colSpan={content.columnLabels.length + 2} className="px-1 py-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button type="button" variant="default" size="sm" disabled={readOnly} onClick={addRow}>
+                    行を追加
+                  </Button>
+                  {onImportExcel ? (
+                    <Button
+                      type="button"
+                      variant="default"
+                      size="sm"
+                      className="inline-flex items-center gap-1.5"
+                      disabled={readOnly}
+                      onClick={onImportExcel}
+                    >
+                      <GeminiMarkIcon className="h-4 w-4 shrink-0" />
+                      Excel を取り込む
+                    </Button>
+                  ) : null}
+                  {allowColumnEdit && content.columnLabels.length < 6 ? (
+                    <Button type="button" variant="default" size="sm" disabled={readOnly} onClick={addColumn}>
+                      列を追加
+                    </Button>
+                  ) : null}
+                </div>
+              </td>
+            </tr>
           </tbody>
         </table>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" variant="ghost" size="sm" disabled={readOnly} onClick={addRow} className="gap-1">
-          <Plus className="h-4 w-4" />
-          行を追加
-        </Button>
-        {allowColumnEdit ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={readOnly || content.columnLabels.length >= 12}
-            onClick={addColumn}
-            className="gap-1"
-          >
-            <Plus className="h-4 w-4" />
-            列を追加
-          </Button>
-        ) : null}
       </div>
     </div>
   );
@@ -234,9 +492,9 @@ function RequirementsSplitEditor({
   };
 
   return (
-    <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[5fr_3fr] lg:items-start lg:gap-4">
+    <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4">
       <div className="space-y-1.5 min-h-0 lg:min-h-[320px]">
-        <Label htmlFor="split-editor">本文エリア（約 5/8）</Label>
+        <Label htmlFor="split-editor">本文エリア</Label>
         <RequirementsTiptapField
           id="split-editor"
           projectId={projectId}
@@ -247,11 +505,12 @@ function RequirementsSplitEditor({
         />
       </div>
       <div className="space-y-1.5 min-h-0 border-t border-[color:color-mix(in_srgb,var(--border)_70%,transparent)] pt-4 lg:border-t-0 lg:border-l lg:pl-4 lg:pt-0">
-        <Label>表（約 3/8）</Label>
+        <Label>表</Label>
         <RequirementsTableEditor
           content={tablePart}
           readOnly={readOnly}
           allowColumnEdit={false}
+          compactLayout
           onChange={(t) =>
             onChange({
               ...content,
@@ -279,13 +538,18 @@ export function ProjectRequirementsClient({
   initialBody,
 }: ProjectRequirementsClientProps) {
   const router = useRouter();
-  const [body, setBody] = useState<RequirementsDocBody>(initialBody);
+  const history = useEditHistoryState(initialBody, {
+    equals: requirementsBodyEquals,
+    maxSize: 250,
+  });
+  const body = history.present;
+  const setBody = history.setPresent;
   const [savedFingerprint, setSavedFingerprint] = useState(() => requirementsDocFingerprint(initialBody));
 
   useEffect(() => {
-    setBody(initialBody);
+    history.reset(initialBody);
     setSavedFingerprint(requirementsDocFingerprint(initialBody));
-  }, [initialBody]);
+  }, [history.reset, initialBody]);
 
   const visiblePages = useMemo(() => body.pages.filter((p) => !p.deleted), [body.pages]);
   const deletedPages = useMemo(() => body.pages.filter((p) => p.deleted), [body.pages]);
@@ -293,9 +557,16 @@ export function ProjectRequirementsClient({
   visiblePagesRef.current = visiblePages;
 
   const [activePageId, setActivePageId] = useState(() => visiblePages[0]?.id ?? "");
+  const [pendingNewPageId, setPendingNewPageId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDeleted, setShowDeleted] = useState(false);
+  const [isLg, setIsLg] = useState(false);
+  const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false);
+  const [rightAsideExpandEntrance, setRightAsideExpandEntrance] = useState(false);
+  const [tableImportOpen, setTableImportOpen] = useState(false);
+  const [modeChangeDialogOpen, setModeChangeDialogOpen] = useState(false);
+  const [pendingModeChange, setPendingModeChange] = useState<RequirementsInputMode | null>(null);
   const [dropIndicatorIndex, setDropIndicatorIndex] = useState<number | null>(null);
   const [draggingPageId, setDraggingPageId] = useState<string | null>(null);
   const dndSourceIdRef = useRef<string | null>(null);
@@ -311,6 +582,10 @@ export function ProjectRequirementsClient({
   );
 
   useEffect(() => {
+    if (pendingNewPageId && activePageId === pendingNewPageId) {
+      // 新規ページ追加直後に body 反映待ちの場合、先頭ページへのフォールバックを抑止する。
+      return;
+    }
     if (activePageId && visiblePages.some((p) => p.id === activePageId)) {
       return;
     }
@@ -318,7 +593,17 @@ export function ProjectRequirementsClient({
     if (first) {
       setActivePageId(first);
     }
-  }, [activePageId, visiblePages]);
+  }, [activePageId, visiblePages, pendingNewPageId]);
+
+  useEffect(() => {
+    if (!pendingNewPageId) {
+      return;
+    }
+    if (body.pages.some((p) => p.id === pendingNewPageId)) {
+      setActivePageId(pendingNewPageId);
+      setPendingNewPageId(null);
+    }
+  }, [body.pages, pendingNewPageId]);
 
   const saveBody = useCallback(
     async (next: RequirementsDocBody): Promise<boolean> => {
@@ -359,7 +644,7 @@ export function ProjectRequirementsClient({
           if (j.success && j.requirements?.body_json !== undefined && j.requirements.body_json !== null) {
             const { normalizeRequirementsDocBody } = await import("@/lib/requirements-doc-normalize");
             const normalized = normalizeRequirementsDocBody(j.requirements.body_json);
-            setBody(normalized);
+            history.reset(normalized);
             setSavedFingerprint(requirementsDocFingerprint(normalized));
           }
         } catch {
@@ -374,7 +659,7 @@ export function ProjectRequirementsClient({
         setSaving(false);
       }
     },
-    [canEdit, projectId, router],
+    [canEdit, projectId, router, history],
   );
 
   const performSave = useCallback(async (): Promise<boolean> => {
@@ -417,6 +702,80 @@ export function ProjectRequirementsClient({
     }, AUTO_SAVE_INTERVAL_MS);
     return () => window.clearInterval(id);
   }, [canEdit]);
+
+  useEffect(() => {
+    if (!canEdit) {
+      return;
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) {
+        return;
+      }
+      const key = e.key.toLowerCase();
+      if (key === "z" && e.shiftKey) {
+        if (history.canRedo) {
+          e.preventDefault();
+          history.redo();
+        }
+        return;
+      }
+      if (key === "z") {
+        if (history.canUndo) {
+          e.preventDefault();
+          history.undo();
+        }
+        return;
+      }
+      if (key === "y" && history.canRedo) {
+        e.preventDefault();
+        history.redo();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [canEdit, history]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const media = window.matchMedia("(min-width: 1024px)");
+    const sync = () => setIsLg(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const raw = window.localStorage.getItem(RIGHT_SIDEBAR_COLLAPSED_LS_KEY);
+    setRightSidebarCollapsed(raw === "1");
+  }, []);
+
+  const persistSidebarCollapsed = useCallback((next: boolean) => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    try {
+      window.localStorage.setItem(RIGHT_SIDEBAR_COLLAPSED_LS_KEY, next ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const toggleRightSidebarCollapsed = useCallback(() => {
+    setRightSidebarCollapsed((prev) => {
+      const next = !prev;
+      persistSidebarCollapsed(next);
+      if (isLg && prev) {
+        setRightAsideExpandEntrance(true);
+      }
+      return next;
+    });
+  }, [isLg, persistSidebarCollapsed]);
 
   useEffect(() => {
     const channel = new BroadcastChannel(requirementsPrintPreviewChannelName(projectId));
@@ -474,9 +833,44 @@ export function ProjectRequirementsClient({
       if (activePage.inputMode === mode) {
         return;
       }
-      replacePage(pageWithNewInputMode(activePage, mode));
+      setPendingModeChange(mode);
+      setModeChangeDialogOpen(true);
     },
-    [activePage, canEdit, replacePage],
+    [activePage, canEdit],
+  );
+
+  const closeModeChangeDialog = useCallback(() => {
+    setModeChangeDialogOpen(false);
+    setPendingModeChange(null);
+  }, []);
+
+  const runModeChange = useCallback(
+    (withBackup: boolean) => {
+      if (!activePage || !pendingModeChange || !canEdit || activePage.is_fixed) {
+        closeModeChangeDialog();
+        return;
+      }
+      const switched = pageWithNewInputMode(activePage, pendingModeChange);
+      setBody((prev) => {
+        const nextPages = prev.pages.map((p) => (p.id === activePage.id ? switched : p));
+        if (!withBackup) {
+          return { ...prev, pages: nextPages };
+        }
+        const backupId = newPageId();
+        const backupTitle = `${activePage.title || activePage.pageType || "ページ"}（バックアップ）`;
+        const backupPage: RequirementsPage = {
+          ...activePage,
+          id: backupId,
+          title: backupTitle,
+          is_fixed: false,
+          deleted: false,
+        };
+        return { ...prev, pages: [...nextPages, backupPage] };
+      });
+      setActivePageId(activePage.id);
+      closeModeChangeDialog();
+    },
+    [activePage, pendingModeChange, canEdit, closeModeChangeDialog, setBody],
   );
 
   const clearPageDrag = useCallback(() => {
@@ -572,6 +966,37 @@ export function ProjectRequirementsClient({
     await performSave();
   }, [performSave]);
 
+  const addPageToBottom = useCallback(() => {
+    if (!canEdit) {
+      return;
+    }
+    const pageId = newPageId();
+    const page: RequirementsPage = {
+      id: pageId,
+      pageType: "custom",
+      title: "新規",
+      createdOn: null,
+      updatedOn: null,
+      inputMode: "richtext",
+      is_fixed: false,
+      deleted: false,
+      content: defaultRichtextContent(),
+    };
+    setBody((prev) => ({ ...prev, pages: [...prev.pages, page] }));
+    setPendingNewPageId(pageId);
+    setActivePageId(pageId);
+  }, [canEdit, setBody]);
+
+  const movePageByArrow = useCallback(
+    (pageId: string, direction: "up" | "down") => {
+      if (!canEdit) {
+        return;
+      }
+      setBody((prev) => reorderVisiblePage(prev, pageId, direction));
+    },
+    [canEdit, setBody],
+  );
+
   const openPreview = useCallback(() => {
     const qs = new URLSearchParams();
     if (activePageId) {
@@ -589,6 +1014,38 @@ export function ProjectRequirementsClient({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5">
+      <Dialog
+        open={modeChangeDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeModeChangeDialog();
+            return;
+          }
+          setModeChangeDialogOpen(true);
+        }}
+      >
+        <DialogContent className="max-w-lg" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>入力方式を変更しますか？</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm leading-relaxed text-[var(--foreground)]">
+            入力方式を変更すると、現在の入力内容は新しい入力方式に引き継がれません。安全のため、次のいずれかを選択してください。
+          </p>
+          <div className="mt-4 flex flex-col gap-2">
+            <Button type="button" variant="default" onClick={() => runModeChange(true)}>
+              複製（バックアップ）して新しい入力形式で入力する
+            </Button>
+            <Button type="button" variant="destructive" onClick={() => runModeChange(false)}>
+              既に入力されている値を破棄して新しい入力形式で入力する
+            </Button>
+          </div>
+          <div className="mt-2 flex justify-end">
+            <Button type="button" variant="ghost" onClick={closeModeChangeDialog}>
+              キャンセル
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <section className="surface-card pm-page-hero relative shrink-0 overflow-hidden px-5">
         <div className="pointer-events-none absolute -top-10 right-0 h-36 w-36 rounded-full bg-[color:color-mix(in_srgb,var(--accent)_22%,transparent)] blur-3xl" />
         <div className="relative flex h-full min-h-0 items-center justify-between gap-3">
@@ -614,6 +1071,32 @@ export function ProjectRequirementsClient({
             </div>
           </div>
           <div className="flex shrink-0 flex-nowrap items-center gap-2 sm:gap-3">
+            {canEdit ? (
+              <>
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  className="shrink-0 self-center rounded-lg"
+                  disabled={!history.canUndo}
+                  onClick={history.undo}
+                  aria-label="ひとつ前に戻す"
+                >
+                  <Undo2 className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  className="shrink-0 self-center rounded-lg"
+                  disabled={!history.canRedo}
+                  onClick={history.redo}
+                  aria-label="やり直す"
+                >
+                  <Redo2 className="h-4 w-4" />
+                </Button>
+              </>
+            ) : null}
             <Button type="button" variant="default" size="sm" className="shrink-0 self-center rounded-lg gap-1" onClick={openPreview}>
               <ExternalLink className="h-4 w-4" />
               プレビュー
@@ -715,6 +1198,16 @@ export function ProjectRequirementsClient({
                   />
                 </div>
 
+                {activePage.inputMode === "table" ? (
+                  <RequirementsTableImportExcelDialog
+                    open={tableImportOpen}
+                    onOpenChange={setTableImportOpen}
+                    current={activePage.content}
+                    canEdit={!readOnly}
+                    onApply={(next) => replacePage({ ...activePage, content: next })}
+                  />
+                ) : null}
+
                 {activePage.inputMode === "richtext" ? (
                   <div className="space-y-1.5">
                     <Label htmlFor="req-body">本文</Label>
@@ -737,10 +1230,10 @@ export function ProjectRequirementsClient({
 
                 {activePage.inputMode === "table" ? (
                   <div className="space-y-1.5">
-                    <Label>表組</Label>
                     <RequirementsTableEditor
                       content={activePage.content}
                       readOnly={readOnly}
+                      onImportExcel={() => setTableImportOpen(true)}
                       onChange={(c) => replacePage({ ...activePage, content: c })}
                     />
                   </div>
@@ -787,10 +1280,83 @@ export function ProjectRequirementsClient({
           </Card>
         </div>
 
-        <aside className="mt-6 flex min-w-0 w-full flex-col gap-4 lg:mt-0 lg:w-[236px] lg:shrink-0 lg:self-start lg:sticky lg:top-4">
+        <aside
+          className={cn(
+            "mt-6 flex min-w-0 w-full flex-col gap-4 lg:mt-0 lg:shrink-0 lg:self-start lg:sticky lg:top-4",
+            "motion-safe:transition-[width] motion-safe:duration-200 motion-safe:ease-out",
+            rightSidebarCollapsed ? "lg:w-11 lg:overflow-hidden" : "lg:w-[236px]",
+          )}
+        >
+          {rightSidebarCollapsed ? (
+            <div className="relative flex h-8 w-full items-start justify-center">
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                className="group h-8 w-8 shrink-0 p-0 shadow-sm"
+                onClick={toggleRightSidebarCollapsed}
+                aria-expanded={!rightSidebarCollapsed}
+                aria-label={rightSidebarCollapsed ? "右ペインを展開" : "右ペインを折りたたむ"}
+              >
+                <ChevronLeft
+                  className={[
+                    "h-3.5 w-3.5 shrink-0 text-[var(--foreground)] transition-[transform,color] duration-200 ease-out motion-reduce:transition-none",
+                    "group-hover:text-[color:color-mix(in_srgb,var(--accent)_78%,var(--foreground)_22%)] motion-safe:group-hover:scale-110",
+                    "rotate-0",
+                  ].join(" ")}
+                  aria-hidden
+                  strokeWidth={2.25}
+                />
+              </Button>
+            </div>
+          ) : (
           <Card className="min-h-0 overflow-hidden">
-            <CardContent className="flex flex-col gap-1 p-3" onDragLeave={onPageListDragLeave}>
-              <p className="mb-2 text-xs font-medium text-[var(--muted)]">ページ</p>
+            <CardContent
+              className={cn(
+                "flex flex-col gap-1 p-3",
+                !rightSidebarCollapsed && rightAsideExpandEntrance && "pm-hearing-right-aside-content-enter",
+              )}
+              onDragLeave={onPageListDragLeave}
+              onAnimationEnd={() => {
+                if (rightAsideExpandEntrance) {
+                  setRightAsideExpandEntrance(false);
+                }
+              }}
+            >
+              <div className="mb-2 flex items-center justify-between gap-2">
+                {!rightSidebarCollapsed ? (
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-medium text-[var(--muted)]">ページ</p>
+                    {canEdit ? (
+                      <Button type="button" variant="default" size="sm" className="h-7 gap-1 px-2 text-[10px]" onClick={addPageToBottom}>
+                        <Plus className="h-3.5 w-3.5" />
+                        追加
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : (
+                  <span className="sr-only">ページ</span>
+                )}
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  className="group h-8 w-8 shrink-0 p-0 shadow-sm"
+                  onClick={toggleRightSidebarCollapsed}
+                  aria-expanded={!rightSidebarCollapsed}
+                  aria-label={rightSidebarCollapsed ? "右ペインを展開" : "右ペインを折りたたむ"}
+                >
+                  <ChevronLeft
+                    className={[
+                      "h-3.5 w-3.5 shrink-0 text-[var(--foreground)] transition-[transform,color] duration-200 ease-out motion-reduce:transition-none",
+                      "group-hover:text-[color:color-mix(in_srgb,var(--accent)_78%,var(--foreground)_22%)] motion-safe:group-hover:scale-110",
+                      "rotate-180",
+                    ].join(" ")}
+                    aria-hidden
+                    strokeWidth={2.25}
+                  />
+                </Button>
+              </div>
               <div
                 ref={pageListRef}
                 className="flex flex-col gap-1"
@@ -798,6 +1364,8 @@ export function ProjectRequirementsClient({
                 onDrop={canEdit ? onPageListDrop : undefined}
               >
               {visiblePages.map((p, vi) => {
+                const canMoveUp = vi > 0 && p.pageType !== "cover" && visiblePages[vi - 1]?.pageType !== "cover";
+                const canMoveDown = vi < visiblePages.length - 1 && p.pageType !== "cover" && visiblePages[vi + 1]?.pageType !== "cover";
                 const isLastRow = vi === visiblePages.length - 1;
                 const insertAfter =
                   dropIndicatorIndex !== null &&
@@ -843,6 +1411,32 @@ export function ProjectRequirementsClient({
                     <span className="line-clamp-2">{p.title || p.pageType}</span>
                     {p.is_fixed ? <span className="mt-0.5 block text-[10px] text-[var(--muted)]">FIX</span> : null}
                   </button>
+                  {canEdit ? (
+                    <div className="mr-1 flex shrink-0 items-center gap-0.5">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 text-[var(--muted)] hover:text-[var(--foreground)]"
+                        disabled={!canMoveUp}
+                        onClick={() => movePageByArrow(p.id, "up")}
+                        aria-label="ページを上へ移動"
+                      >
+                        <ArrowUp className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 text-[var(--muted)] hover:text-[var(--foreground)]"
+                        disabled={!canMoveDown}
+                        onClick={() => movePageByArrow(p.id, "down")}
+                        aria-label="ページを下へ移動"
+                      >
+                        <ArrowDown className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
                 );
               })}
@@ -881,6 +1475,7 @@ export function ProjectRequirementsClient({
               ) : null}
             </CardContent>
           </Card>
+          )}
         </aside>
       </div>
     </div>

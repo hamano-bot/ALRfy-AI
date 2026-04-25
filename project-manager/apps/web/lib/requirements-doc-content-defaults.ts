@@ -59,7 +59,7 @@ export function emptyTableRow(): RequirementsTableRow {
 }
 
 export function emptyTableRowByColumnCount(columnCount: number): RequirementsTableRow {
-  const size = Math.max(1, Math.min(12, columnCount));
+  const size = Math.max(1, Math.min(6, columnCount));
   return { id: newRowId(), cells: Array.from({ length: size }, () => "") };
 }
 

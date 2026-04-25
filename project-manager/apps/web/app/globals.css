@@ -928,6 +928,16 @@ body {
   padding: 1rem 0 1.5rem;
 }
 
+.requirements-print-preview-root * {
+  scrollbar-width: none;
+}
+
+.requirements-print-preview-root *::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
 .requirements-print-canvas-wrap {
   padding-inline: clamp(0.75rem, 2vw, 1.25rem);
   min-width: 0;
@@ -946,8 +956,9 @@ body {
 }
 
 .requirements-print-floating-nav.is-collapsed {
-  width: auto;
+  width: min(141.6px, calc(100vw - 1rem));
   max-width: calc(100vw - 1rem);
+  padding: 0.4rem;
 }
 
 .requirements-print-floating-head {
@@ -955,13 +966,8 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 0.65rem;
-  cursor: grab;
   user-select: none;
   padding: 0.2rem 0.25rem;
-}
-
-.requirements-print-floating-head:active {
-  cursor: grabbing;
 }
 
 .requirements-print-floating-title {
@@ -970,6 +976,26 @@ body {
   gap: 0.4rem;
   font-size: 0.78rem;
   color: var(--muted);
+}
+
+.requirements-print-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.4rem;
+  color: var(--foreground);
+  cursor: grab;
+  flex: 0 0 auto;
+}
+
+.requirements-print-drag-handle:active {
+  cursor: grabbing;
+}
+
+.requirements-print-drag-handle:hover {
+  background: color-mix(in srgb, var(--foreground) 10%, transparent);
 }
 
 .requirements-print-toggle-btn {
@@ -991,11 +1017,44 @@ body {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
   gap: 0.45rem;
 }
 
 .requirements-print-floating-nav.is-collapsed .requirements-print-controls {
-  margin-top: 0;
+  margin-top: 0.25rem;
+  justify-content: center;
+}
+
+.requirements-print-floating-nav.is-collapsed .requirements-print-floating-title {
+  display: none;
+}
+
+.requirements-print-floating-nav.is-collapsed .requirements-print-floating-head {
+  justify-content: space-between;
+  padding: 0;
+}
+
+.requirements-print-btn-print {
+  flex-basis: 100%;
+  width: calc((4.75rem * 2) + 0.45rem);
+  justify-content: center;
+}
+.requirements-print-control-btn {
+  min-width: 4.75rem;
+}
+
+.requirements-print-floating-nav.is-collapsed .requirements-print-control-btn {
+  min-width: 2rem;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  justify-content: center;
+  gap: 0;
+}
+
+.requirements-print-floating-nav.is-collapsed .requirements-print-btn-print {
+  width: calc((2rem * 2) + 0.45rem);
 }
 
 .requirements-print-sheet {
@@ -1093,6 +1152,18 @@ body {
   max-width: 100%;
   max-height: 120mm;
   object-fit: contain;
+}
+
+.requirements-print-raw-html {
+  width: 100%;
+  margin: 0.45rem 0 0.65rem;
+}
+
+.requirements-print-raw-html iframe {
+  width: 100%;
+  max-width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
 }
 
 .requirements-print-image-wrap {

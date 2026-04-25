@@ -439,6 +439,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
         </div>
       </DashboardSidebarOpenProvider>
 
+      {/*
       <Button
         type="button"
         variant="accent"
@@ -451,6 +452,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
       <p className="fixed bottom-9 right-5 z-[70] text-[11px] text-[var(--muted)]" translate="no">
         Ctrl / ⌘ + K
       </p>
+      */}
 
       <Sheet open={isAiOpen} onOpenChange={setIsAiOpen}>
         {isAiOpen ? (

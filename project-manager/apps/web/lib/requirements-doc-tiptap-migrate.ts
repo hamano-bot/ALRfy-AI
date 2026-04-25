@@ -28,7 +28,8 @@ function migratePage(p: RequirementsDocBodyParsed["pages"][number]): Requirement
   const dates = baseDates(p);
 
   if (p.inputMode === "table") {
-    const labels = p.content.columnLabels.length > 0 ? p.content.columnLabels : ["項目"];
+    const sourceLabels = p.content.columnLabels.length > 0 ? p.content.columnLabels : ["項目", "内容", "備考"];
+    const labels = sourceLabels.slice(0, 6);
     const rows = p.content.rows.map((row) => {
       const nextCells = labels.map((_, idx) => {
         const value = row.cells[idx];

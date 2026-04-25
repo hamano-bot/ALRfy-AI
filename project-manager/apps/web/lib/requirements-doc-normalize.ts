@@ -13,11 +13,49 @@ function ensureCoverFirst(pages: RequirementsPage[]): RequirementsPage[] {
   return [cover, ...rest];
 }
 
+function coerceLegacyWideTableColumns(raw: unknown): unknown {
+  if (!raw || typeof raw !== "object") {
+    return raw;
+  }
+  const src = raw as { pages?: unknown[] };
+  if (!Array.isArray(src.pages)) {
+    return raw;
+  }
+  const pages = src.pages.map((page) => {
+    if (!page || typeof page !== "object") {
+      return page;
+    }
+    const p = page as { inputMode?: unknown; content?: unknown };
+    if (p.inputMode !== "table" || !p.content || typeof p.content !== "object") {
+      return page;
+    }
+    const content = p.content as { columnLabels?: unknown; rows?: unknown };
+    const labels = Array.isArray(content.columnLabels) ? content.columnLabels.slice(0, 6) : content.columnLabels;
+    const rows = Array.isArray(content.rows)
+      ? content.rows.map((row) => {
+          if (!row || typeof row !== "object") {
+            return row;
+          }
+          const r = row as { cells?: unknown };
+          if (!Array.isArray(r.cells)) {
+            return row;
+          }
+          return { ...r, cells: r.cells.slice(0, 6) };
+        })
+      : content.rows;
+    return { ...p, content: { ...content, columnLabels: labels, rows } };
+  });
+  return { ...(raw as Record<string, unknown>), pages };
+}
+
 /**
  * API から来た body_json を検証し、不正または空なら既定の14ページを返す。
  */
 export function normalizeRequirementsDocBody(raw: unknown): RequirementsDocBody {
-  const parsed = requirementsDocBodySchema.safeParse(raw);
+  let parsed = requirementsDocBodySchema.safeParse(raw);
+  if (!parsed.success) {
+    parsed = requirementsDocBodySchema.safeParse(coerceLegacyWideTableColumns(raw));
+  }
   if (!parsed.success) {
     return createDefaultRequirementsBody();
   }

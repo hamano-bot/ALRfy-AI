@@ -127,18 +127,29 @@ export function RequirementsSitemapImportExcelDialog({ open, onOpenChange, curre
               先頭シートを読み取り、Gemini でサイトマップ JSON に変換します。シート内容は Google に送信されます。
             </p>
             <div className="space-y-2">
-              <Label>ファイル（.xlsx / .xls）</Label>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx,.xls"
-                className="block w-full text-sm"
-                disabled={readOnly || loading}
-                onChange={(e) => {
-                  const f = e.target.files?.[0] ?? null;
-                  setFile(f);
-                }}
-              />
+              <Label htmlFor="sitemap-import-file">ファイル（.xlsx / .xls）</Label>
+              <div className="rounded-xl border border-[color:color-mix(in_srgb,var(--border)_88%,transparent)] bg-[var(--edit-mode-surface)] p-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <input
+                    ref={fileInputRef}
+                    id="sitemap-import-file"
+                    type="file"
+                    accept=".xlsx,.xls"
+                    className="sr-only"
+                    disabled={readOnly || loading}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] ?? null;
+                      setFile(f);
+                    }}
+                  />
+                  <Button type="button" variant="accent" disabled={readOnly || loading} onClick={() => fileInputRef.current?.click()}>
+                    ファイルを選択
+                  </Button>
+                  <span className="min-w-0 flex-1 truncate text-sm text-[var(--foreground)]">
+                    {file ? file.name : "選択されていません"}
+                  </span>
+                </div>
+              </div>
             </div>
             <div className="space-y-2">
               <Label>取り込み後</Label>
@@ -179,10 +190,10 @@ export function RequirementsSitemapImportExcelDialog({ open, onOpenChange, curre
               </p>
             ) : null}
             <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={loading}>
+              <Button type="button" variant="default" onClick={() => onOpenChange(false)} disabled={loading}>
                 キャンセル
               </Button>
-              <Button type="button" disabled={!file || readOnly || loading} onClick={() => void runImport()}>
+              <Button type="button" variant="accent" disabled={!file || readOnly || loading} onClick={() => void runImport()}>
                 {loading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -207,13 +218,13 @@ export function RequirementsSitemapImportExcelDialog({ open, onOpenChange, curre
               ルート画面名: <strong>{preview?.root.screenName}</strong> / 直下の子: {preview?.root.children.length ?? 0} 件
             </p>
             <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="ghost" onClick={() => setStep("pick")}>
+              <Button type="button" variant="default" onClick={() => setStep("pick")}>
                 戻る
               </Button>
-              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+              <Button type="button" variant="default" onClick={() => onOpenChange(false)}>
                 キャンセル
               </Button>
-              <Button type="button" onClick={apply}>
+              <Button type="button" variant="accent" onClick={apply}>
                 エディタに反映
               </Button>
             </div>

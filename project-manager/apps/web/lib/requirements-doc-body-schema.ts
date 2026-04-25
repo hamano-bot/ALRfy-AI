@@ -3,12 +3,12 @@ import { sitemapContentSchema } from "@/lib/requirements-sitemap-schema";
 
 const tableRowSchema = z.object({
   id: z.string().min(1).max(128),
-  cells: z.array(z.string().max(8192)).min(1).max(12),
+  cells: z.array(z.string().max(8192)).min(1).max(6),
 });
 
 const tableContentSchema = z
   .object({
-    columnLabels: z.array(z.string().max(64)).min(1).max(12),
+    columnLabels: z.array(z.string().max(64)).min(1).max(6),
     rows: z.array(tableRowSchema).max(500),
   })
   .superRefine((value, ctx) => {

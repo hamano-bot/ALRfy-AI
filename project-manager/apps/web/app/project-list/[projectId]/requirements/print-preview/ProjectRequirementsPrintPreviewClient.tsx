@@ -280,6 +280,14 @@ function renderTipTapNode(node: JSONContent, key: string): ReactNode {
         </div>
       );
     }
+    case "requirementsRawHtmlBlock": {
+      const attrs = (typeof node.attrs === "object" && node.attrs !== null ? node.attrs : {}) as Record<string, unknown>;
+      const html = typeof attrs.html === "string" ? attrs.html : "";
+      if (html.trim() === "") {
+        return null;
+      }
+      return <div key={key} className="requirements-print-raw-html" dangerouslySetInnerHTML={{ __html: html }} />;
+    }
     default:
       return children.length > 0 ? <Fragment key={key}>{children}</Fragment> : null;
   }
@@ -573,11 +581,16 @@ export function ProjectRequirementsPrintPreviewClient({
         className={cn("requirements-print-floating-nav requirements-print-no-print", !popupOpen && "is-collapsed")}
         style={{ left: `${panelPos.x}px`, top: `${panelPos.y}px` }}
       >
-        <div className="requirements-print-floating-head" onPointerDown={beginDrag}>
-          <span className="requirements-print-floating-title">
+        <div className="requirements-print-floating-head">
+          <button
+            type="button"
+            className="requirements-print-drag-handle"
+            onPointerDown={beginDrag}
+            aria-label="パネルを移動"
+          >
             <Move className="h-3.5 w-3.5" />
-            ページ一覧
-          </span>
+          </button>
+          <span className="requirements-print-floating-title">ページ一覧</span>
           <button
             type="button"
             className="requirements-print-toggle-btn"
@@ -589,17 +602,23 @@ export function ProjectRequirementsPrintPreviewClient({
         </div>
 
         <div className="requirements-print-controls">
-          <Button type="button" variant="default" size="sm" onClick={goPrev}>
+          <Button type="button" variant="default" size="sm" className="requirements-print-control-btn" onClick={goPrev}>
             <ChevronLeft className="h-4 w-4" />
-            前へ
+            {popupOpen ? "前へ" : null}
           </Button>
-          <Button type="button" variant="default" size="sm" onClick={goNext}>
-            次へ
+          <Button type="button" variant="default" size="sm" className="requirements-print-control-btn" onClick={goNext}>
+            {popupOpen ? "次へ" : null}
             <ChevronRight className="h-4 w-4" />
           </Button>
-          <Button type="button" variant="accent" size="sm" onClick={() => window.print()}>
+          <Button
+            type="button"
+            variant="accent"
+            size="sm"
+            className="requirements-print-control-btn requirements-print-btn-print"
+            onClick={() => window.print()}
+          >
             <Printer className="h-4 w-4" />
-            印刷
+            {popupOpen ? "印刷" : null}
           </Button>
         </div>
 
