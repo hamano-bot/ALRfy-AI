@@ -24,6 +24,7 @@ import { formatSiteTypeLabel } from "@/lib/portal-my-projects";
 import type { PortalProjectDetail } from "@/lib/portal-project";
 import { downloadHearingRowsExcel } from "@/lib/hearing-excel-export";
 import { hearingFieldIds } from "@/lib/hearing-form-ids";
+import { hearingPrintPreviewChannelName } from "@/lib/hearing-print-preview-channel";
 import { buildRedmineIssueUrl, buildRedmineProjectUrl } from "@/lib/redmine-url";
 import { UNSAVED_LEAVE_CONFIRM_MESSAGE } from "@/lib/unsaved-navigation";
 import { useEditHistoryState } from "@/lib/use-edit-history-state";
@@ -32,7 +33,7 @@ import { formatDateDisplayYmd } from "@/lib/format-date-display";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, GripVertical, Pencil, Redo2, Trash2, Undo2 } from "lucide-react";
+import { ChevronLeft, ExternalLink, FileSpreadsheet, GripVertical, Pencil, Redo2, Trash2, Undo2 } from "lucide-react";
 import {
   type MouseEvent,
   useCallback,
@@ -252,6 +253,7 @@ export function ProjectHearingSheetClient({
   const [issueEditTarget, setIssueEditTarget] = useState<{ rowId: string; index: number } | null>(null);
   const [issueEditDraft, setIssueEditDraft] = useState("");
   const [userRedmineBase, setUserRedmineBase] = useState<string | null>(null);
+  const previewChannelRef = useRef<BroadcastChannel | null>(null);
 
   const sidebarMenuExpanded = useDashboardSidebarOpen();
   /** lg でヒアリング右パネル展開時: 担当は「上の行と同じ」幅に寄せ、期限は全角2文字分だけ狭める */
@@ -442,6 +444,24 @@ export function ProjectHearingSheetClient({
     return rows.filter((r) => r.row_status.trim() !== "完了");
   }, [rows, hideCompletedRows]);
 
+  useEffect(() => {
+    const channelName = hearingPrintPreviewChannelName(projectId);
+    const channel = new BroadcastChannel(channelName);
+    previewChannelRef.current = channel;
+    return () => {
+      previewChannelRef.current = null;
+      channel.close();
+    };
+  }, [projectId]);
+
+  useEffect(() => {
+    previewChannelRef.current?.postMessage({
+      rows,
+      hideCompletedRows,
+      projectName: project.name,
+    });
+  }, [rows, hideCompletedRows, project.name]);
+
   /** 担当サジェスト用: シート内の担当の出現回数降順（空除外） */
   const assigneeSuggestions = useMemo(() => {
     const counts = new Map<string, number>();
@@ -457,6 +477,19 @@ export function ProjectHearingSheetClient({
   }, [rows]);
 
   const dragRowsEnabled = canEdit && !hideCompletedRows;
+
+  const openPreview = useCallback(() => {
+    const qs = new URLSearchParams();
+    if (hideCompletedRows) {
+      qs.set("hide_completed", "1");
+    }
+    const suffix = qs.toString();
+    window.open(
+      `/project-list/${projectId}/hearing/print-preview${suffix ? `?${suffix}` : ""}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+  }, [projectId, hideCompletedRows]);
 
   const setRowRef = useCallback((id: string) => (el: HTMLTableRowElement | null) => {
     if (el) {
@@ -940,6 +973,16 @@ export function ProjectHearingSheetClient({
             </div>
           </div>
           <div className="flex shrink-0 flex-nowrap items-center gap-2 sm:gap-3">
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              className="inline-flex shrink-0 items-center gap-1.5 self-center rounded-lg"
+              onClick={() => void downloadHearingRowsExcel(rows, project.name, project.client_name)}
+            >
+              <FileSpreadsheet className="h-4 w-4 shrink-0 text-emerald-500" />
+              Excel出力
+            </Button>
             {canEdit ? (
               <>
                 <Button
@@ -998,6 +1041,18 @@ export function ProjectHearingSheetClient({
             {canEdit ? (
               <Button
                 type="button"
+                variant="default"
+                size="sm"
+                className="shrink-0 self-center rounded-lg gap-1"
+                onClick={openPreview}
+              >
+                <ExternalLink className="h-4 w-4" />
+                プレビュー
+              </Button>
+            ) : null}
+            {canEdit ? (
+              <Button
+                type="button"
                 variant="accent"
                 size="sm"
                 className="shrink-0 self-center rounded-lg"
@@ -1038,14 +1093,6 @@ export function ProjectHearingSheetClient({
                 </div>
               </div>
               <div className="flex flex-wrap justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="default"
-                  size="sm"
-                  onClick={() => void downloadHearingRowsExcel(rows, project.name, project.client_name)}
-                >
-                  Excel出力
-                </Button>
                 {canEdit ? (
                   <>
                     <Button

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp, ChevronLeft, ExternalLink, GripVertical, Plus, Redo2, RotateCcw, Trash2, Undo2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronLeft, ExternalLink, FileSpreadsheet, GripVertical, Plus, Redo2, RotateCcw, Trash2, Undo2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from "react";
@@ -30,6 +30,7 @@ import {
   reorderVisiblePage,
   reorderVisiblePageToInsertionIndex,
 } from "@/lib/requirements-doc-reorder";
+import { downloadRequirementsPreviewExcel } from "@/lib/requirements-excel-export";
 import type {
   RequirementsDocBody,
   RequirementsInputMode,
@@ -1071,6 +1072,21 @@ export function ProjectRequirementsClient({
             </div>
           </div>
           <div className="flex shrink-0 flex-nowrap items-center gap-2 sm:gap-3">
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              className="inline-flex shrink-0 items-center gap-1.5 self-center rounded-lg"
+              onClick={() => {
+                void downloadRequirementsPreviewExcel(body, projectName).catch((e: unknown) => {
+                  const msg = e instanceof Error ? e.message : "Excel出力に失敗しました。";
+                  setError(msg);
+                });
+              }}
+            >
+              <FileSpreadsheet className="h-4 w-4 shrink-0 text-emerald-500" />
+              Excel出力
+            </Button>
             {canEdit ? (
               <>
                 <Button

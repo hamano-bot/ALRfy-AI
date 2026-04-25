@@ -75,6 +75,7 @@ function isActivePath(pathname: string, href: string): boolean {
 export function DashboardShell({ children }: DashboardShellProps) {
   const pathname = usePathname();
   const isRequirementsPrintPreview = pathname?.includes("/requirements/print-preview") ?? false;
+  const isHearingPrintPreview = pathname?.includes("/hearing/print-preview") ?? false;
   const { apps: portalApps } = usePortalApps();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isAiOpen, setIsAiOpen] = useState(false);
@@ -237,7 +238,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  if (isRequirementsPrintPreview) {
+  if (isRequirementsPrintPreview || isHearingPrintPreview) {
     return (
       <div className="h-full min-h-0 bg-[var(--background)] text-[var(--foreground)]">
         <main className="requirements-print-shell-main h-full min-h-0 overflow-auto">{children}</main>

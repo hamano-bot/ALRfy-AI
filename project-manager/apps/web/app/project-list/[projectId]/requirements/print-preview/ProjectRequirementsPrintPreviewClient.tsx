@@ -538,7 +538,7 @@ export function ProjectRequirementsPrintPreviewClient({
     };
   }, []);
 
-  const beginDrag = (e: ReactPointerEvent<HTMLDivElement>) => {
+  const beginDrag = (e: ReactPointerEvent<HTMLElement>) => {
     const rect = e.currentTarget.parentElement?.getBoundingClientRect();
     if (!rect) {
       return;
