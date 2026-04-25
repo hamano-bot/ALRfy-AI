@@ -1,5 +1,12 @@
 [
   {
+    "id": "gh-d3f606d-modqfkis",
+    "datetime": "2026-04-25 11:40:32",
+    "version": "push-d3f606d",
+    "title": "関連機能を中心に、Merge branch 'main' of https://github.com/hamano-bot/ALRfy-AIを実施しました",
+    "summary": ""
+  },
+  {
     "id": "gh-3078c5f-mo6tvhbu",
     "datetime": "2026-04-20 15:42:29",
     "version": "push-3078c5f",
@@ -131,12 +138,5 @@
     "version": "v0.0.7",
     "title": "レスポンシブ調整",
     "summary": "モバイル表示でサイドメニューの挙動を調整しました。"
-  },
-  {
-    "id": "u5",
-    "datetime": "2026-04-13 20:20:00",
-    "version": "v0.0.6",
-    "title": "ブランドテキスト導入",
-    "summary": "ALRfy-AIのヘッダー文言と配色演出を追加しました。"
   }
 ]
