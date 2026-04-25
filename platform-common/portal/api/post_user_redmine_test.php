@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__, 2) . '/auth/bootstrap.php';
+require_once dirname(__DIR__, 2) . '/auth/redmine_secret.php';
 require_once dirname(__DIR__) . '/includes/redmine_http.php';
 require_once dirname(__DIR__) . '/includes/user_redmine_schema.php';
 
@@ -66,8 +67,7 @@ if ($baseUrl === null || $key === null) {
             $baseUrl = $t === '' ? null : $t;
         }
         if ($key === null && isset($row['redmine_api_key']) && is_string($row['redmine_api_key'])) {
-            $t = trim($row['redmine_api_key']);
-            $key = $t === '' ? null : $t;
+            $key = platformRedmineApiKeyDecrypt($row['redmine_api_key']);
         }
     }
 }

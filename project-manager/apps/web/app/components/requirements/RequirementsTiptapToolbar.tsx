@@ -1,9 +1,10 @@
 "use client";
 
 import type { Editor } from "@tiptap/core";
+import type { JSONContent } from "@tiptap/core";
 import { useEditorState } from "@tiptap/react";
 import type { ChangeEvent, ReactNode } from "react";
-import { forwardRef, useCallback, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import {
   AlignCenter,
   AlignLeft,
@@ -39,6 +40,7 @@ import {
   Circle,
   Square,
   ChevronDown,
+  BookTemplate,
 } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
 import {
@@ -53,6 +55,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/app/components/ui/dialog";
 import { Input } from "@/app/components/ui/input";
 import { Label } from "@/app/components/ui/label";
+import { copyTextToClipboard, copyTextToClipboardSync } from "@/lib/clipboard-write";
 import { REQUIREMENTS_IMAGE_UPLOAD_MAX_BYTES } from "@/lib/requirements-image-upload-constants";
 import { uploadProjectRequirementsImage } from "@/lib/requirements-image-upload-client";
 import type { RequirementsImageAlign, RequirementsImageValign } from "@/lib/tiptap-requirements-image";
@@ -110,6 +113,19 @@ function formatHtmlReadable(html: string): string {
     }
   }
   return lines.join("\n");
+}
+
+/**
+ * ソースモーダル「コピー」の対象文字列。
+ * - HTML タブ表示中: モーダル内の HTML ソース全文（`htmlDraft`）
+ * - JSON タブ表示中: モーダル内の JSON ソース全文（`jsonDraft`）
+ */
+function getSourceModalClipboardText(
+  tab: "html" | "json",
+  htmlDraft: string,
+  jsonDraft: string,
+): string {
+  return tab === "html" ? htmlDraft : jsonDraft;
 }
 
 /**
@@ -186,12 +202,78 @@ const FONT_FAMILY_OPTIONS: { value: string; label: string }[] = [
   { value: '"Courier New", Courier, monospace', label: "Courier" },
 ];
 
+type RequirementsEditorTemplate = {
+  id: string;
+  name: string;
+  doc: JSONContent;
+  updatedAt: number;
+};
+
+const REQUIREMENTS_TEMPLATE_STORAGE_KEY = "alrfy-requirements-editor-templates-v1";
+
+function createTemplateId(): string {
+  const c = globalThis.crypto;
+  if (c && typeof c.randomUUID === "function") {
+    return c.randomUUID();
+  }
+  return `tmpl-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function loadRequirementsTemplates(): RequirementsEditorTemplate[] {
+  try {
+    const raw = window.localStorage.getItem(REQUIREMENTS_TEMPLATE_STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    const templates: RequirementsEditorTemplate[] = [];
+    for (const item of parsed) {
+      if (!item || typeof item !== "object") {
+        continue;
+      }
+      const rec = item as Partial<RequirementsEditorTemplate>;
+      if (
+        typeof rec.id === "string" &&
+        typeof rec.name === "string" &&
+        rec.name.trim() !== "" &&
+        rec.doc &&
+        typeof rec.updatedAt === "number"
+      ) {
+        templates.push({
+          id: rec.id,
+          name: rec.name.trim(),
+          doc: rec.doc,
+          updatedAt: rec.updatedAt,
+        });
+      }
+    }
+    return templates.sort((a, b) => b.updatedAt - a.updatedAt);
+  } catch {
+    return [];
+  }
+}
+
+function persistRequirementsTemplates(templates: RequirementsEditorTemplate[]): void {
+  try {
+    window.localStorage.setItem(REQUIREMENTS_TEMPLATE_STORAGE_KEY, JSON.stringify(templates));
+  } catch {
+    /* ignore */
+  }
+}
+
+export type RequirementsTiptapNoticeOptions = { title?: string };
+
 type RequirementsTiptapToolbarProps = {
   editor: Editor | null;
   projectId: number;
   readOnly: boolean;
   showOutline: boolean;
   onToggleOutline: () => void;
+  /** ブラウザ alert の代わりにテーマ付きダイアログで表示する */
+  onShowNotice: (message: string, options?: RequirementsTiptapNoticeOptions) => void;
 };
 
 /** 右クリックメニューなどツールバー外から同じ操作を呼ぶ用 */
@@ -238,7 +320,7 @@ function ToolbarSep() {
 }
 
 export const RequirementsTiptapToolbar = forwardRef<RequirementsTiptapToolbarHandle, RequirementsTiptapToolbarProps>(function RequirementsTiptapToolbar(
-  { editor, projectId, readOnly, showOutline, onToggleOutline },
+  { editor, projectId, readOnly, showOutline, onToggleOutline, onShowNotice },
   ref,
 ) {
   const ui = useEditorState({
@@ -317,6 +399,81 @@ export const RequirementsTiptapToolbar = forwardRef<RequirementsTiptapToolbarHan
   const [sourceTab, setSourceTab] = useState<"html" | "json">("html");
   const [sourceDraftHtml, setSourceDraftHtml] = useState("");
   const [sourceDraftJson, setSourceDraftJson] = useState("");
+  const [sourceCopyFeedback, setSourceCopyFeedback] = useState(false);
+  const sourceCopyFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [templateSaveOpen, setTemplateSaveOpen] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [templates, setTemplates] = useState<RequirementsEditorTemplate[]>([]);
+
+  const reloadTemplates = useCallback(() => {
+    setTemplates(loadRequirementsTemplates());
+  }, []);
+
+  const closeTemplateSaveDialog = useCallback(() => {
+    setTemplateSaveOpen(false);
+    setTemplateName("");
+  }, []);
+
+  const openTemplateSaveDialog = useCallback(() => {
+    if (!editor || readOnly || !editor.isEditable) {
+      return;
+    }
+    setTemplateName("");
+    setTemplateSaveOpen(true);
+  }, [editor, readOnly]);
+
+  const applyTemplateById = useCallback(
+    (templateId: string) => {
+      if (!editor || readOnly || !editor.isEditable) {
+        return;
+      }
+      const found = templates.find((t) => t.id === templateId);
+      if (!found) {
+        return;
+      }
+      editor.chain().focus().setContent(found.doc).run();
+    },
+    [editor, readOnly, templates],
+  );
+
+  const saveCurrentAsTemplate = useCallback(() => {
+    if (!editor || readOnly || !editor.isEditable) {
+      return;
+    }
+    const trimmed = templateName.trim();
+    if (trimmed === "") {
+      onShowNotice("テンプレート名を入力してください。", { title: "テンプレート" });
+      return;
+    }
+    const next: RequirementsEditorTemplate = {
+      id: createTemplateId(),
+      name: trimmed,
+      doc: editor.getJSON(),
+      updatedAt: Date.now(),
+    };
+    const prev = loadRequirementsTemplates();
+    const sameName = prev.find((t) => t.name === trimmed);
+    const merged = sameName
+      ? prev.map((t) => (t.id === sameName.id ? { ...next, id: sameName.id } : t))
+      : [next, ...prev];
+    persistRequirementsTemplates(merged);
+    reloadTemplates();
+    closeTemplateSaveDialog();
+  }, [editor, readOnly, templateName, reloadTemplates, closeTemplateSaveDialog, onShowNotice]);
+
+  useEffect(() => {
+    reloadTemplates();
+  }, [reloadTemplates]);
+
+  useEffect(() => {
+    if (!sourceOpen) {
+      setSourceCopyFeedback(false);
+      if (sourceCopyFeedbackTimerRef.current) {
+        clearTimeout(sourceCopyFeedbackTimerRef.current);
+        sourceCopyFeedbackTimerRef.current = null;
+      }
+    }
+  }, [sourceOpen]);
 
   const closeImageUrlDialog = useCallback(() => {
     setImageUrlOpen(false);
@@ -471,9 +628,9 @@ export const RequirementsTiptapToolbar = forwardRef<RequirementsTiptapToolbarHan
       }
       setSourceOpen(false);
     } catch {
-      window.alert("HTML / JSON を解析できません。記述を確認してください。");
+      onShowNotice("HTML / JSON を解析できません。記述を確認してください。", { title: "ソースコード" });
     }
-  }, [editor, sourceTab, sourceDraftHtml, sourceDraftJson]);
+  }, [editor, sourceTab, sourceDraftHtml, sourceDraftJson, onShowNotice]);
 
   const onToolbarImageFile = useCallback(
     async (e: ChangeEvent<HTMLInputElement>) => {
@@ -486,14 +643,16 @@ export const RequirementsTiptapToolbar = forwardRef<RequirementsTiptapToolbarHan
         return;
       }
       if (file.size > REQUIREMENTS_IMAGE_UPLOAD_MAX_BYTES) {
-        window.alert(`画像は ${REQUIREMENTS_IMAGE_UPLOAD_MAX_BYTES / 1024 / 1024}MB 以下にしてください。`);
+        onShowNotice(`画像は ${REQUIREMENTS_IMAGE_UPLOAD_MAX_BYTES / 1024 / 1024}MB 以下にしてください。`, {
+          title: "画像のアップロード",
+        });
         return;
       }
       setUploadingImage(true);
       try {
         const result = await uploadProjectRequirementsImage(projectId, file);
         if (!result.ok) {
-          window.alert(result.message);
+          onShowNotice(result.message, { title: "画像のアップロード" });
           return;
         }
         const baseName = file.name.replace(/\.[^/.]+$/, "") || "image";
@@ -502,7 +661,7 @@ export const RequirementsTiptapToolbar = forwardRef<RequirementsTiptapToolbarHan
         setUploadingImage(false);
       }
     },
-    [editor, projectId, readOnly],
+    [editor, projectId, readOnly, onShowNotice],
   );
 
   if (!editor || ui === null) {
@@ -660,22 +819,48 @@ export const RequirementsTiptapToolbar = forwardRef<RequirementsTiptapToolbarHan
               >
                 JSON
               </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="ml-auto h-8 text-xs"
-                onClick={async () => {
-                  const text = sourceTab === "html" ? sourceDraftHtml : sourceDraftJson;
-                  try {
-                    await navigator.clipboard.writeText(text);
-                  } catch {
-                    window.alert("コピーに失敗しました。");
-                  }
-                }}
-              >
-                コピー
-              </Button>
+              <div className="ml-auto flex flex-col items-end gap-0.5">
+                {sourceCopyFeedback ? (
+                  <span className="pointer-events-none text-xs text-[var(--muted)]" aria-live="polite">
+                    コピーしました
+                  </span>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={() => {
+                    const text = getSourceModalClipboardText(sourceTab, sourceDraftHtml, sourceDraftJson);
+                    const flashCopyOk = () => {
+                      if (sourceCopyFeedbackTimerRef.current) {
+                        clearTimeout(sourceCopyFeedbackTimerRef.current);
+                      }
+                      setSourceCopyFeedback(true);
+                      sourceCopyFeedbackTimerRef.current = setTimeout(() => {
+                        setSourceCopyFeedback(false);
+                        sourceCopyFeedbackTimerRef.current = null;
+                      }, 500);
+                    };
+                    if (copyTextToClipboardSync(text)) {
+                      flashCopyOk();
+                      return;
+                    }
+                    void copyTextToClipboard(text).then((ok) => {
+                      if (ok) {
+                        flashCopyOk();
+                      } else {
+                        onShowNotice(
+                          "コピーに失敗しました。ブラウザの権限設定を確認するか、テキストを手動で選択してコピーしてください。",
+                          { title: "コピー" },
+                        );
+                      }
+                    });
+                  }}
+                >
+                  コピー
+                </Button>
+              </div>
             </div>
           </div>
           <div className="min-h-0 flex-1 px-6 pb-4 pt-4">
@@ -698,6 +883,39 @@ export const RequirementsTiptapToolbar = forwardRef<RequirementsTiptapToolbarHan
             </Button>
             <Button type="button" size="sm" onClick={applySourceDraft}>
               適用
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={templateSaveOpen} onOpenChange={(open) => (open ? setTemplateSaveOpen(true) : closeTemplateSaveDialog())}>
+        <DialogContent className="gap-4">
+          <DialogHeader>
+            <DialogTitle>テンプレートとして保存</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="requirements-template-name">テンプレート名</Label>
+            <Input
+              id="requirements-template-name"
+              type="text"
+              autoComplete="off"
+              placeholder="例: 要件定義の基本構成"
+              value={templateName}
+              onChange={(e) => setTemplateName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  saveCurrentAsTemplate();
+                }
+              }}
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button type="button" variant="ghost" size="sm" onClick={closeTemplateSaveDialog}>
+              キャンセル
+            </Button>
+            <Button type="button" size="sm" onClick={saveCurrentAsTemplate}>
+              保存
             </Button>
           </div>
         </DialogContent>
@@ -747,6 +965,34 @@ export const RequirementsTiptapToolbar = forwardRef<RequirementsTiptapToolbarHan
         >
           <Upload className="h-4 w-4" />
         </ToolbarButton>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 shrink-0 gap-1 px-2 text-[var(--muted)]"
+              disabled={disabled}
+              title="テンプレート"
+            >
+              <BookTemplate className="h-4 w-4" />
+              <span className="text-[11px]">テンプレ</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="min-w-[260px]">
+            <DropdownMenuItem onSelect={openTemplateSaveDialog}>現在の内容をテンプレート保存</DropdownMenuItem>
+            <DropdownMenuSeparator />
+            {templates.length === 0 ? (
+              <DropdownMenuItem disabled>保存済みテンプレートはありません</DropdownMenuItem>
+            ) : (
+              templates.map((t) => (
+                <DropdownMenuItem key={t.id} onSelect={() => applyTemplateById(t.id)}>
+                  挿入: {t.name}
+                </DropdownMenuItem>
+              ))
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         <ToolbarSep />
 

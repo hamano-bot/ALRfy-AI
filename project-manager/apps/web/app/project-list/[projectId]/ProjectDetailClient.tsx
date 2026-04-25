@@ -92,7 +92,8 @@ export function ProjectDetailClient({ projectId, initialProject, canEdit }: Proj
           initialDetail={project}
           onEditDirtyChange={setEditFormDirty}
           onEditCancel={leaveEditMode}
-          onEditSaved={() => {
+          onEditSaved={(savedProject) => {
+            setProject(savedProject);
             leaveEditMode();
             router.refresh();
           }}

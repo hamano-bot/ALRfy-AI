@@ -47,6 +47,28 @@ function normalizeTitle(title) {
     .trim();
 }
 
+function stripFileNameLikeTokens(text) {
+  return String(text ?? "")
+    .replace(/\b[\w./-]+\.(?:tsx?|jsx?|mjs|cjs|json|md|yml|yaml|css|scss|php|sql)\b/gi, "")
+    .replace(/（\s*[^）]*\.(?:tsx?|jsx?|mjs|cjs|json|md|yml|yaml|css|scss|php|sql)\s*[^）]*）/gi, "")
+    .replace(/\(\s*[^)]*\.(?:tsx?|jsx?|mjs|cjs|json|md|yml|yaml|css|scss|php|sql)\s*[^)]*\)/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function buildPurposeHints(context) {
+  const hints = [];
+  const seen = new Set();
+  for (const file of context.changedFiles) {
+    const purpose = describeFilePurpose(file);
+    if (!purpose || seen.has(purpose)) continue;
+    seen.add(purpose);
+    hints.push(purpose);
+    if (hints.length >= 3) break;
+  }
+  return hints;
+}
+
 function toDateTimeJst(value) {
   const date = value ? new Date(value) : new Date();
   const formatter = new Intl.DateTimeFormat("sv-SE", {
@@ -83,11 +105,12 @@ function collectPushContext(payload) {
 }
 
 function fallbackSummary(context) {
-  const primaryFile = context.changedFiles[0] ?? "";
-  const purpose = describeFilePurpose(primaryFile);
-  const headline = context.headMessage.split("\n")[0]?.trim() || "機能改善";
+  const hints = buildPurposeHints(context);
+  const cleanedHeadline = stripFileNameLikeTokens(context.headMessage.split("\n")[0] ?? "");
+  const headline = cleanedHeadline || "機能改善";
+  const purposeText = hints.length > 0 ? hints.join("・") : "関連機能";
   return {
-    title: normalizeTitle(`${headline}（${purpose}）の品質向上をしました`).slice(0, 128),
+    title: normalizeTitle(`${purposeText}を中心に、${headline}を実施しました`).slice(0, 128),
     summary: "",
   };
 }
@@ -106,7 +129,8 @@ async function summarizeInJapanese(context) {
     "- titleは必ず日本語で書く",
     "- titleに「更新：」「更新:」などのラベル前置きは付けない",
     "- titleには、何を更新したかと、なぜ更新したか(目的)を1文で含める",
-    "- ファイル名が含まれる場合は、日本語で用途を括弧補足する（例: SystemUpdatesCard.tsx（システム更新履歴に表示される内容））",
+    "- ファイル名・拡張子・パス（例: *.tsx, app/...）はtitleに含めない",
+    "- 「（関連機能）の品質向上をしました」の定型句は使わない",
     "- titleは24〜56文字目安",
     "- summaryは空文字にする",
     "- 誇張しない。実際の変更だけを書く",
@@ -160,7 +184,7 @@ async function summarizeInJapanese(context) {
   try {
     const normalized = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/, "").trim();
     const parsed = JSON.parse(normalized);
-    const title = normalizeTitle(String(parsed.title ?? ""));
+    const title = normalizeTitle(stripFileNameLikeTokens(String(parsed.title ?? "")));
     const summary = String(parsed.summary ?? "").trim();
     if (!title) {
       return fallbackSummary(context);

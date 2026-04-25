@@ -223,6 +223,39 @@ function platformRedmineCreateIssue(string $baseUrl, string $apiKey, array $issu
     $res = platformRedminePostJson($baseUrl, $apiKey, '/issues.json', ['issue' => $issueFields]);
     if (!$res['ok'] || !is_array($res['data'])) {
         $err = 'Redmine へのチケット作成に失敗しました（HTTP ' . $res['http_code'] . '）。';
+        $details = null;
+        if (is_array($res['data'])) {
+            $errors = $res['data']['errors'] ?? null;
+            if (is_array($errors)) {
+                $messages = [];
+                foreach ($errors as $e) {
+                    if (is_string($e)) {
+                        $t = trim($e);
+                        if ($t !== '') {
+                            $messages[] = $t;
+                        }
+                    }
+                }
+                if ($messages !== []) {
+                    $details = implode(' / ', $messages);
+                }
+            }
+            if ($details === null && isset($res['data']['error']) && is_string($res['data']['error'])) {
+                $t = trim($res['data']['error']);
+                if ($t !== '') {
+                    $details = $t;
+                }
+            }
+        }
+        if ($details === null) {
+            $raw = trim((string)($res['raw'] ?? ''));
+            if ($raw !== '' && $raw !== '[]' && $raw !== '{}') {
+                $details = mb_substr($raw, 0, 300);
+            }
+        }
+        if ($details !== null) {
+            $err .= ' 理由: ' . $details;
+        }
         return ['ok' => false, 'http_code' => $res['http_code'], 'issue' => null, 'error' => $err];
     }
     $issue = $res['data']['issue'] ?? null;

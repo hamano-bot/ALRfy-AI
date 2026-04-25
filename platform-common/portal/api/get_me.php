@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__, 2) . '/auth/bootstrap.php';
 require_once dirname(__DIR__, 2) . '/auth/permission_helper.php';
+require_once dirname(__DIR__, 2) . '/auth/redmine_secret.php';
 
 header('Content-Type: application/json; charset=UTF-8');
 
@@ -62,7 +63,8 @@ try {
     }
 
     $rb = is_array($user) && isset($user['redmine_base_url']) && is_string($user['redmine_base_url']) ? trim($user['redmine_base_url']) : '';
-    $rk = is_array($user) && isset($user['redmine_api_key']) && is_string($user['redmine_api_key']) ? trim($user['redmine_api_key']) : '';
+    $storedKey = is_array($user) && isset($user['redmine_api_key']) && is_string($user['redmine_api_key']) ? $user['redmine_api_key'] : null;
+    $rk = platformRedmineApiKeyDecrypt($storedKey);
     $redmineConfigured = $rb !== '' && $rk !== '';
     $redminePublic = [
         'configured' => $redmineConfigured,

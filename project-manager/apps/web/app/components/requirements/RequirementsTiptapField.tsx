@@ -25,8 +25,12 @@ import { RequirementsTiptapTableBubbleMenu } from "@/app/components/requirements
 
 import {
   RequirementsTiptapToolbar,
+  type RequirementsTiptapNoticeOptions,
   type RequirementsTiptapToolbarHandle,
 } from "@/app/components/requirements/RequirementsTiptapToolbar";
+
+import { Button } from "@/app/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/app/components/ui/dialog";
 
 import { EMPTY_TIPTAP_DOC } from "@/lib/tiptap-json";
 
@@ -105,6 +109,24 @@ export function RequirementsTiptapField({
   const toolbarRef = useRef<RequirementsTiptapToolbarHandle | null>(null);
 
   const [slashImageBusy, setSlashImageBusy] = useState(false);
+
+  const [notice, setNotice] = useState<{ open: boolean; title: string; message: string }>({
+    open: false,
+    title: "",
+    message: "",
+  });
+
+  const showNotice = useCallback((message: string, options?: RequirementsTiptapNoticeOptions) => {
+    setNotice({
+      open: true,
+      title: options?.title ?? "お知らせ",
+      message,
+    });
+  }, []);
+
+  const closeNotice = useCallback(() => {
+    setNotice((n) => ({ ...n, open: false }));
+  }, []);
 
   const OUTLINE_LS_KEY = "alrfy-requirements-outline-visible";
 
@@ -391,7 +413,7 @@ export function RequirementsTiptapField({
 
         if (!result.ok) {
 
-          window.alert(result.message);
+          showNotice(result.message, { title: "画像のアップロード" });
 
           return;
 
@@ -409,7 +431,7 @@ export function RequirementsTiptapField({
 
     },
 
-    [editor, projectId, readOnly],
+    [editor, projectId, readOnly, showNotice],
 
   );
 
@@ -460,7 +482,26 @@ export function RequirementsTiptapField({
         readOnly={readOnly}
         showOutline={showOutline}
         onToggleOutline={toggleOutline}
+        onShowNotice={showNotice}
       />
+
+      <Dialog open={notice.open} onOpenChange={(open) => !open && closeNotice()}>
+        <DialogContent
+          className="z-[160] gap-4 sm:max-w-md"
+          overlayClassName="z-[159]"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>{notice.title}</DialogTitle>
+            <DialogDescription className="whitespace-pre-wrap">{notice.message}</DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end pt-1">
+            <Button type="button" size="sm" onClick={closeNotice}>
+              OK
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
 

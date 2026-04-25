@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ThemeDateField } from "@/app/components/ThemeDateField";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
@@ -11,7 +11,7 @@ import {
   portalProjectCreateBodySchema,
   portalProjectPatchBodySchema,
 } from "@/lib/portal-project-create-body";
-import type { PortalProjectDetail } from "@/lib/portal-project";
+import { parsePortalProjectSuccess, type PortalProjectDetail } from "@/lib/portal-project";
 import { PROJECT_ROLE_LABEL_JA } from "@/lib/project-role-labels";
 import { projectEditFormFingerprintFromDetail, projectEditFormFingerprintFromFormState } from "@/lib/project-edit-form-fingerprint";
 import { UNSAVED_LEAVE_CONFIRM_MESSAGE } from "@/lib/unsaved-navigation";
@@ -27,6 +27,19 @@ const SITE_TYPES = [
   { value: "owned_media", label: "オウンドメディア" },
   { value: "other", label: "その他" },
 ] as const;
+
+type SiteTypeFormValue = (typeof SITE_TYPES)[number]["value"] | "";
+
+function siteTypeFromDetail(raw: string | null | undefined): SiteTypeFormValue {
+  if (typeof raw !== "string") {
+    return "";
+  }
+  const t = raw.trim();
+  if (t === "") {
+    return "";
+  }
+  return SITE_TYPES.some((s) => s.value === t) ? (t as (typeof SITE_TYPES)[number]["value"]) : "";
+}
 
 function norm(s: string): string {
   return s.trim().toLowerCase();
@@ -446,7 +459,7 @@ export type ProjectCreateFormProps = {
   editProjectId?: number;
   initialDetail?: PortalProjectDetail;
   onEditCancel?: () => void;
-  onEditSaved?: () => void;
+  onEditSaved?: (savedProject: PortalProjectDetail) => void;
   /** 編集モードでフォームが初期値から変わったか（離脱確認用） */
   onEditDirtyChange?: (dirty: boolean) => void;
 };
@@ -469,8 +482,16 @@ export function ProjectCreateForm({
 
   const [name, setName] = useState("");
   const [clientName, setClientName] = useState("");
-  const [siteType, setSiteType] = useState<(typeof SITE_TYPES)[number]["value"] | "">("");
-  const [siteTypeOther, setSiteTypeOther] = useState("");
+  const [siteType, setSiteType] = useState<SiteTypeFormValue>(() =>
+    mode === "edit" && initialDetail !== undefined && editProjectId !== undefined
+      ? siteTypeFromDetail(initialDetail.site_type)
+      : "",
+  );
+  const [siteTypeOther, setSiteTypeOther] = useState(() =>
+    mode === "edit" && initialDetail !== undefined && editProjectId !== undefined
+      ? (initialDetail.site_type_other ?? "")
+      : "",
+  );
   const [isRenewal, setIsRenewal] = useState(false);
   const [renewalUrls, setRenewalUrls] = useState<string[]>([""]);
   const [kickoff, setKickoff] = useState("");
@@ -537,16 +558,23 @@ export function ProjectCreateForm({
     void load();
   }, [isEditMode]);
 
-  useEffect(() => {
+  // 編集モードの初期値は描画前に同期する（useEffect だと Radix Select が空 value で
+  // マウントしたあと DB 値の更新を取りこぼし、サイト種別だけ未選択に見えることがある）。
+  useLayoutEffect(() => {
     if (!isEditMode || !initialDetail) {
       setEditFormHydrated(false);
+      return;
+    }
+    // 編集中の再レンダーで initialDetail が再評価されても、
+    // ユーザー入力中の state（site_type / participants など）を上書きしない。
+    if (editFormHydrated) {
       return;
     }
     setEditFormHydrated(false);
     const d = initialDetail;
     setName(d.name);
     setClientName(d.client_name ?? "");
-    setSiteType((d.site_type ?? "") as (typeof SITE_TYPES)[number]["value"] | "");
+    setSiteType(siteTypeFromDetail(d.site_type));
     setSiteTypeOther(d.site_type_other ?? "");
     setIsRenewal(d.is_renewal);
     setRenewalUrls(d.renewal_urls.length > 0 ? d.renewal_urls : [""]);
@@ -617,7 +645,7 @@ export function ProjectCreateForm({
     })();
 
     setEditFormHydrated(true);
-  }, [isEditMode, initialDetail]);
+  }, [isEditMode, initialDetail, editFormHydrated]);
 
   const editFingerprintBaseline = useMemo(
     () => (isEditMode && initialDetail ? projectEditFormFingerprintFromDetail(initialDetail) : null),
@@ -969,7 +997,8 @@ export function ProjectCreateForm({
           body: JSON.stringify(patchParsed.data),
         });
         const text = await res.text();
-        if (!res.ok) {
+        const savedProject = parsePortalProjectSuccess(text);
+        if (!res.ok || !savedProject) {
           try {
             const j = JSON.parse(text) as { message?: string };
             setFormError(j.message ?? `更新に失敗しました（${res.status}）`);
@@ -978,7 +1007,7 @@ export function ProjectCreateForm({
           }
           return;
         }
-        onEditSaved?.();
+        onEditSaved?.(savedProject);
         router.refresh();
       } catch {
         setFormError("通信に失敗しました。");

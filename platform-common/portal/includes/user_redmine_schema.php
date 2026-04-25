@@ -29,6 +29,25 @@ function ensureUserRedmineColumns(PDO $pdo): void
         return is_numeric($n) && (int) $n > 0;
     };
 
+    $columnLength = static function (string $column) use ($pdo, $db): ?int {
+        $stmt = $pdo->prepare(
+            'SELECT CHARACTER_MAXIMUM_LENGTH
+             FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = :schema AND TABLE_NAME = :table AND COLUMN_NAME = :column
+             LIMIT 1'
+        );
+        $stmt->execute([
+            ':schema' => $db,
+            ':table' => 'users',
+            ':column' => $column,
+        ]);
+        $value = $stmt->fetchColumn();
+        if ($value === false || $value === null) {
+            return null;
+        }
+        return is_numeric($value) ? (int)$value : null;
+    };
+
     if (!$hasColumn('redmine_base_url')) {
         $pdo->exec(
             "ALTER TABLE `users` ADD COLUMN `redmine_base_url` VARCHAR(512) NULL DEFAULT NULL COMMENT 'Redmine オリジン'"
@@ -36,7 +55,14 @@ function ensureUserRedmineColumns(PDO $pdo): void
     }
     if (!$hasColumn('redmine_api_key')) {
         $pdo->exec(
-            "ALTER TABLE `users` ADD COLUMN `redmine_api_key` VARCHAR(255) NULL DEFAULT NULL COMMENT 'Redmine REST API キー'"
+            "ALTER TABLE `users` ADD COLUMN `redmine_api_key` VARCHAR(1024) NULL DEFAULT NULL COMMENT 'Redmine REST API キー（暗号化保存）'"
         );
+    } else {
+        $len = $columnLength('redmine_api_key');
+        if ($len !== null && $len < 1024) {
+            $pdo->exec(
+                "ALTER TABLE `users` MODIFY COLUMN `redmine_api_key` VARCHAR(1024) NULL DEFAULT NULL COMMENT 'Redmine REST API キー（暗号化保存）'"
+            );
+        }
     }
 }

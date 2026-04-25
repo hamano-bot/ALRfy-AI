@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__, 2) . '/auth/bootstrap.php';
+require_once dirname(__DIR__, 2) . '/auth/redmine_secret.php';
 require_once dirname(__DIR__) . '/includes/project_registration_schema.php';
 require_once dirname(__DIR__) . '/includes/redmine_http.php';
 require_once dirname(__DIR__) . '/includes/user_redmine_schema.php';
@@ -146,7 +147,8 @@ try {
 }
 
 $userBase = is_array($uRow) && isset($uRow['redmine_base_url']) && is_string($uRow['redmine_base_url']) ? trim($uRow['redmine_base_url']) : '';
-$userKey = is_array($uRow) && isset($uRow['redmine_api_key']) && is_string($uRow['redmine_api_key']) ? trim($uRow['redmine_api_key']) : '';
+$storedUserKey = is_array($uRow) && isset($uRow['redmine_api_key']) && is_string($uRow['redmine_api_key']) ? $uRow['redmine_api_key'] : null;
+$userKey = platformRedmineApiKeyDecrypt($storedUserKey);
 
 if ($userBase === '' || $userKey === '') {
     http_response_code(403);

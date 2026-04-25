@@ -4,7 +4,7 @@ USE `minutes_record_db`;
 -- users に列が無い環境向け（既に同名列がある場合は手動でスキップ）
 ALTER TABLE `users`
   ADD COLUMN `redmine_base_url` VARCHAR(512) NULL DEFAULT NULL COMMENT 'Redmine オリジン',
-  ADD COLUMN `redmine_api_key` VARCHAR(255) NULL DEFAULT NULL COMMENT 'Redmine REST API キー';
+  ADD COLUMN `redmine_api_key` VARCHAR(1024) NULL DEFAULT NULL COMMENT 'Redmine REST API キー（暗号化保存）';
 
 CREATE TABLE IF NOT EXISTS `project_misc_links` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

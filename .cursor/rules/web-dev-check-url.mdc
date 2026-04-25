@@ -1,0 +1,11 @@
+---
+description: Use fixed dev URL for web app verification
+alwaysApply: true
+---
+
+# Web App Display Check URL
+
+- For `project-manager/apps/web` startup and display checks, always use:
+  - `http://dev-alrfy-ai.com:8001/`
+- Do not use `http://localhost:3000/` or other ports as the primary verification URL.
+- When launching dev server for checks, prefer external-host binding on port `8001` (e.g. LAN mode).

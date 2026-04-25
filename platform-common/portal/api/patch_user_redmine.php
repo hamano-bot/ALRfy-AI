@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__, 2) . '/auth/bootstrap.php';
+require_once dirname(__DIR__, 2) . '/auth/redmine_secret.php';
 require_once dirname(__DIR__) . '/includes/user_redmine_schema.php';
 
 header('Content-Type: application/json; charset=UTF-8');
@@ -99,6 +100,31 @@ try {
 }
 
 try {
+    $encryptedApiKey = null;
+    if (!$apiKeyUnset && $apiKey !== null) {
+        try {
+            $encryptedApiKey = platformRedmineApiKeyEncrypt($apiKey);
+        } catch (RuntimeException $e) {
+            error_log('[platform-common/patch_user_redmine encrypt] ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'message' => '暗号化キーが未設定のため保存できません。環境変数 REDMINE_API_KEY_ENCRYPTION_KEY(_B64) を設定してください。',
+                'code' => 'redmine_key_encryption_not_configured',
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        if (mb_strlen($encryptedApiKey) > 1024) {
+            http_response_code(400);
+            echo json_encode([
+                'success' => false,
+                'message' => 'redmine_api_key が長すぎるため暗号化後に保存できません。',
+                'code' => 'redmine_api_key_too_long_for_cipher',
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+    }
+
     if ($apiKeyUnset) {
         $stmt = $pdo->prepare(
             'UPDATE users SET redmine_base_url = :base WHERE id = :id'
@@ -113,7 +139,7 @@ try {
         );
         $stmt->execute([
             ':base' => $baseUrl,
-            ':key' => $apiKey,
+            ':key' => $apiKey === null ? null : $encryptedApiKey,
             ':id' => $userId,
         ]);
     }
@@ -131,7 +157,8 @@ $sel = $pdo->prepare('SELECT redmine_base_url, redmine_api_key FROM users WHERE 
 $sel->execute([':id' => $userId]);
 $row = $sel->fetch();
 $b = is_array($row) && isset($row['redmine_base_url']) && is_string($row['redmine_base_url']) ? trim($row['redmine_base_url']) : '';
-$k = is_array($row) && isset($row['redmine_api_key']) && is_string($row['redmine_api_key']) ? trim($row['redmine_api_key']) : '';
+$storedKey = is_array($row) && isset($row['redmine_api_key']) && is_string($row['redmine_api_key']) ? $row['redmine_api_key'] : null;
+$k = platformRedmineApiKeyDecrypt($storedKey);
 $configured = $b !== '' && $k !== '';
 
 echo json_encode([
