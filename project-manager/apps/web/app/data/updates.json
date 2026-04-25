@@ -1,5 +1,12 @@
 [
   {
+    "id": "gh-14aa3ff-moe74mtf",
+    "datetime": "2026-04-25 19:27:13",
+    "version": "push-14aa3ff",
+    "title": "関連機能を中心に、要件定義書のサイトマップ専用機能の追加を実施しました",
+    "summary": ""
+  },
+  {
     "id": "gh-d3f606d-modqfkis",
     "datetime": "2026-04-25 11:40:32",
     "version": "push-d3f606d",
@@ -131,12 +138,5 @@
     "version": "v0.0.8",
     "title": "テーマ基盤調整",
     "summary": "themeフォールバックの下地を整理しました。"
-  },
-  {
-    "id": "u4",
-    "datetime": "2026-04-14 09:45:00",
-    "version": "v0.0.7",
-    "title": "レスポンシブ調整",
-    "summary": "モバイル表示でサイドメニューの挙動を調整しました。"
   }
 ]
