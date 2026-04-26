@@ -9,9 +9,11 @@ export function projectToAdvicePayload(project: PortalProjectDetail): HearingAdv
     client_name: project.client_name,
     site_type: project.site_type,
     site_type_other: project.site_type_other,
+    project_category: project.project_category,
     is_renewal: project.is_renewal,
     kickoff_date: project.kickoff_date,
     release_due_date: project.release_due_date,
+    is_released: project.is_released,
     renewal_urls: [...project.renewal_urls],
   };
 }

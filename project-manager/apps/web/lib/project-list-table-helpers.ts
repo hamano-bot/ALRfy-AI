@@ -15,8 +15,10 @@ export type ProjectListSortDir = "asc" | "desc";
 
 export type ProjectListRoleFilter = "owner" | "editor" | "viewer";
 
-/** 詳細検索「区分」: すべて / リニューアル案件のみ / 新規案件のみ */
-export type ProjectListRenewalFilter = "all" | "renewal" | "new";
+/** 詳細検索「区分」: すべて / 新規 / リニューアル / 改修 */
+export type ProjectListCategoryFilter = "all" | "new" | "renewal" | "improvement";
+/** 詳細検索「リリース済み」: すべて / リリース済み / 未リリース */
+export type ProjectListReleasedFilter = "all" | "released" | "unreleased";
 
 export type ProjectListAppliedFilters = {
   /** 数値の完全一致（空なら無視） */
@@ -25,8 +27,10 @@ export type ProjectListAppliedFilters = {
   clientQuery: string;
   /** 空 = すべて選択 */
   siteTypes: string[];
-  /** リニューアル（区分）の絞り込み */
-  renewalFilter: ProjectListRenewalFilter;
+  /** 区分（新規/リニューアル/改修）の絞り込み */
+  categoryFilter: ProjectListCategoryFilter;
+  /** リリース済みの絞り込み */
+  releasedFilter: ProjectListReleasedFilter;
   kickoffFrom: string;
   kickoffTo: string;
   releaseFrom: string;
@@ -40,7 +44,8 @@ export const EMPTY_PROJECT_LIST_FILTERS: ProjectListAppliedFilters = {
   nameQuery: "",
   clientQuery: "",
   siteTypes: [],
-  renewalFilter: "all",
+  categoryFilter: "all",
+  releasedFilter: "all",
   kickoffFrom: "",
   kickoffTo: "",
   releaseFrom: "",
@@ -59,19 +64,31 @@ export function ensureProjectListFilters(f: Partial<ProjectListAppliedFilters> |
     (r): r is ProjectListRoleFilter => r === "owner" || r === "editor" || r === "viewer",
   );
   const siteTypes = Array.isArray(f.siteTypes) ? f.siteTypes.filter((s): s is string => typeof s === "string") : [];
-  const legacy = f as Partial<ProjectListAppliedFilters> & { renewalYesOnly?: boolean };
-  let renewalFilter: ProjectListRenewalFilter = "all";
-  if (legacy.renewalFilter === "all" || legacy.renewalFilter === "renewal" || legacy.renewalFilter === "new") {
-    renewalFilter = legacy.renewalFilter;
+  const legacy = f as Partial<ProjectListAppliedFilters> & { renewalYesOnly?: boolean; renewalFilter?: unknown };
+  let categoryFilter: ProjectListCategoryFilter = "all";
+  if (
+    legacy.categoryFilter === "all" ||
+    legacy.categoryFilter === "new" ||
+    legacy.categoryFilter === "renewal" ||
+    legacy.categoryFilter === "improvement"
+  ) {
+    categoryFilter = legacy.categoryFilter;
+  } else if (legacy.renewalFilter === "all" || legacy.renewalFilter === "renewal" || legacy.renewalFilter === "new") {
+    categoryFilter = legacy.renewalFilter;
   } else if (legacy.renewalYesOnly === true) {
-    renewalFilter = "renewal";
+    categoryFilter = "renewal";
+  }
+  let releasedFilter: ProjectListReleasedFilter = "all";
+  if (legacy.releasedFilter === "all" || legacy.releasedFilter === "released" || legacy.releasedFilter === "unreleased") {
+    releasedFilter = legacy.releasedFilter;
   }
   return {
     idQuery: typeof f.idQuery === "string" ? f.idQuery : "",
     nameQuery: typeof f.nameQuery === "string" ? f.nameQuery : "",
     clientQuery: typeof f.clientQuery === "string" ? f.clientQuery : "",
     siteTypes,
-    renewalFilter,
+    categoryFilter,
+    releasedFilter,
     kickoffFrom: typeof f.kickoffFrom === "string" ? f.kickoffFrom : "",
     kickoffTo: typeof f.kickoffTo === "string" ? f.kickoffTo : "",
     releaseFrom: typeof f.releaseFrom === "string" ? f.releaseFrom : "",
@@ -157,6 +174,42 @@ export function uniqueClientsOwnerFirst(rows: PortalMyProjectRow[]): string[] {
     .map(([c]) => c);
 }
 
+export type GroupedClientSuggest = {
+  ownerCandidates: string[];
+  otherCandidates: string[];
+};
+
+/** クライアント候補を owner 由来 / その他 に分ける（検索語は部分一致） */
+export function groupedClientsOwnerFirst(rows: PortalMyProjectRow[], query: string): GroupedClientSuggest {
+  const roleByClient = new Map<string, boolean>();
+  for (const p of rows) {
+    const c = safeText(p.client_name).trim();
+    if (!c) {
+      continue;
+    }
+    const isOwner = safeText(p.role).trim().toLowerCase() === "owner";
+    const prev = roleByClient.get(c);
+    if (prev === undefined || isOwner) {
+      roleByClient.set(c, isOwner);
+    }
+  }
+  const q = query.trim().toLowerCase();
+  const ownerCandidates: string[] = [];
+  const otherCandidates: string[] = [];
+  const all = [...roleByClient.entries()].sort((a, b) => a[0].localeCompare(b[0], "ja"));
+  for (const [clientName, isOwner] of all) {
+    if (q !== "" && !clientName.toLowerCase().includes(q)) {
+      continue;
+    }
+    if (isOwner) {
+      ownerCandidates.push(clientName);
+    } else {
+      otherCandidates.push(clientName);
+    }
+  }
+  return { ownerCandidates, otherCandidates };
+}
+
 function dateInRange(value: string | null, from: string, to: string): boolean {
   if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     if (from || to) {
@@ -177,6 +230,7 @@ export function filterProjectRows(
   rows: PortalMyProjectRow[],
   filters: ProjectListAppliedFilters,
   ownerOnly: boolean,
+  excludeReleased: boolean,
 ): PortalMyProjectRow[] {
   const filtersSafe = ensureProjectListFilters(filters);
   const idTrim = filtersSafe.idQuery.trim();
@@ -186,6 +240,9 @@ export function filterProjectRows(
   return rows.filter((p) => {
     const rowRole = safeText(p.role).trim().toLowerCase();
     if (ownerOnly && rowRole !== "owner") {
+      return false;
+    }
+    if (excludeReleased && p.is_released) {
       return false;
     }
 
@@ -216,10 +273,13 @@ export function filterProjectRows(
       }
     }
 
-    if (filtersSafe.renewalFilter === "renewal" && !p.is_renewal) {
+    if (filtersSafe.categoryFilter !== "all" && p.project_category !== filtersSafe.categoryFilter) {
       return false;
     }
-    if (filtersSafe.renewalFilter === "new" && p.is_renewal) {
+    if (filtersSafe.releasedFilter === "released" && !p.is_released) {
+      return false;
+    }
+    if (filtersSafe.releasedFilter === "unreleased" && p.is_released) {
       return false;
     }
 
@@ -263,7 +323,7 @@ export function sortProjectRows(
         break;
       }
       case "is_renewal":
-        cmp = (a.is_renewal ? 1 : 0) - (b.is_renewal ? 1 : 0);
+        cmp = a.project_category.localeCompare(b.project_category, "ja");
         break;
       case "kickoff_date":
         cmp = (a.kickoff_date ?? "").localeCompare(b.kickoff_date ?? "");

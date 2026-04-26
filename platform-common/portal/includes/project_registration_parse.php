@@ -28,7 +28,7 @@ function projectRegistrationParseOptionalDate(mixed $v): string|false|null
 /**
  * POST / PATCH 共通: 案件登録 JSON を検証し正規化する。
  *
- * @return array{ok:true, name:string, client_name:?string, site_type:?string, site_type_other:?string, is_renewal:bool, renewal_urls:list<array{url:string,sort_order:int}>, kickoff_date:?string, release_due_date:?string, redmine_rows:list<array{redmine_project_id:int,redmine_base_url:?string,redmine_project_name:?string,sort_order:int}>, misc_links:list<array{label:string,url:string,sort_order:int}>, participant_map:array<int,string>}|array{ok:false, status:int, message:string}
+ * @return array{ok:true, name:string, client_name:?string, site_type:?string, site_type_other:?string, project_category:string, is_renewal:bool, is_released:bool, renewal_urls:list<array{url:string,sort_order:int}>, kickoff_date:?string, release_due_date:?string, redmine_rows:list<array{redmine_project_id:int,redmine_base_url:?string,redmine_project_name:?string,sort_order:int}>, misc_links:list<array{label:string,url:string,sort_order:int}>, participant_map:array<int,string>}|array{ok:false, status:int, message:string}
  */
 function projectRegistrationParsePayload(array $payload): array
 {
@@ -90,8 +90,21 @@ function projectRegistrationParsePayload(array $payload): array
         $siteTypeOther = null;
     }
 
-    $isRenewal = false;
-    if (isset($payload['is_renewal'])) {
+    $projectCategoryAllowed = [
+        'new' => true,
+        'renewal' => true,
+        'improvement' => true,
+    ];
+    $projectCategory = 'new';
+    if (array_key_exists('project_category', $payload)) {
+        if (!is_string($payload['project_category']) || !isset($projectCategoryAllowed[$payload['project_category']])) {
+            return ['ok' => false, 'status' => 400, 'message' => 'project_category が不正です。'];
+        }
+        $projectCategory = $payload['project_category'];
+    }
+
+    $isRenewal = $projectCategory === 'renewal';
+    if (!array_key_exists('project_category', $payload) && isset($payload['is_renewal'])) {
         if (is_bool($payload['is_renewal'])) {
             $isRenewal = $payload['is_renewal'];
         } elseif (is_int($payload['is_renewal'])) {
@@ -100,6 +113,20 @@ function projectRegistrationParsePayload(array $payload): array
             $isRenewal = $payload['is_renewal'] === '1' || strtolower($payload['is_renewal']) === 'true';
         } else {
             return ['ok' => false, 'status' => 400, 'message' => 'is_renewal が不正です。'];
+        }
+        $projectCategory = $isRenewal ? 'renewal' : 'new';
+    }
+
+    $isReleased = false;
+    if (isset($payload['is_released'])) {
+        if (is_bool($payload['is_released'])) {
+            $isReleased = $payload['is_released'];
+        } elseif (is_int($payload['is_released'])) {
+            $isReleased = $payload['is_released'] === 1;
+        } elseif (is_string($payload['is_released'])) {
+            $isReleased = $payload['is_released'] === '1' || strtolower($payload['is_released']) === 'true';
+        } else {
+            return ['ok' => false, 'status' => 400, 'message' => 'is_released が不正です。'];
         }
     }
 
@@ -259,7 +286,9 @@ function projectRegistrationParsePayload(array $payload): array
         'client_name' => $clientName,
         'site_type' => $siteType,
         'site_type_other' => $siteTypeOther,
+        'project_category' => $projectCategory,
         'is_renewal' => $isRenewal,
+        'is_released' => $isReleased,
         'renewal_urls' => $renewalUrls,
         'kickoff_date' => $kickoffDate,
         'release_due_date' => $releaseDueDate,

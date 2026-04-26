@@ -1,7 +1,7 @@
 -- 要件エディタ用テンプレート（ログインユーザ単位。公開は全ログインユーザが参照可）
--- 適用例: mysql ... minutes_record_db < 20260425_requirements_editor_templates.sql
+-- 適用例: mysql ... alrfy_ai_db_dev < 20260425_requirements_editor_templates.sql
 
-USE `minutes_record_db`;
+USE `alrfy_ai_db_dev`;
 
 CREATE TABLE IF NOT EXISTS `requirements_editor_templates` (
   `id` CHAR(36) NOT NULL COMMENT 'UUID',

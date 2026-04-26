@@ -1,10 +1,10 @@
 -- ============================================================
--- platform-common ACL + ポータル apps（minutes_record_db 共有）
--- 適用: mysql クライアントで minutes_record_db を選択して実行
+-- platform-common ACL + ポータル apps（alrfy_ai_db_dev 共有）
+-- 適用: mysql クライアントで alrfy_ai_db_dev を選択して実行
 -- 期待: users テーブルは既存（議事録 init 済み）
 -- ============================================================
 
-USE `minutes_record_db`;
+USE `alrfy_ai_db_dev`;
 
 -- ------------------------------------------------------------
 -- projects（案件・プロダクト単位の論理コンテナ）

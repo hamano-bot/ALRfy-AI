@@ -1,7 +1,7 @@
 -- 案件要件定義ドキュメント（1:1）。ensureProjectRegistrationSchema でも補完される。
--- 適用例: mysql ... minutes_record_db < 20260419_project_requirements.sql
+-- 適用例: mysql ... alrfy_ai_db_dev < 20260419_project_requirements.sql
 
-USE `minutes_record_db`;
+USE `alrfy_ai_db_dev`;
 
 CREATE TABLE IF NOT EXISTS `project_requirements` (
   `project_id` INT UNSIGNED NOT NULL,

@@ -32,6 +32,7 @@ import {
   type ProjectListSortDir,
 } from "@/lib/project-list-table-helpers";
 import {
+  formatProjectCategoryLabelJa,
   formatProjectRoleLabelJa,
   formatSiteTypeLabel,
   SITE_TYPE_LABEL_JA,
@@ -125,6 +126,7 @@ export function ProjectListTable({ initialProjects }: Props) {
   );
 
   const [ownerOnly, setOwnerOnly] = useState(true);
+  const [excludeReleased, setExcludeReleased] = useState(true);
   const [appliedFilters, setAppliedFilters] = useEnsuredFiltersState();
   const [draftFilters, setDraftFilters] = useEnsuredFiltersState();
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -196,8 +198,8 @@ export function ProjectListTable({ initialProjects }: Props) {
   }, [initialRows, draftFilters.clientQuery]);
 
   const filtered = useMemo(
-    () => filterProjectRows(initialRows, appliedFilters, ownerOnly),
-    [initialRows, appliedFilters, ownerOnly],
+    () => filterProjectRows(initialRows, appliedFilters, ownerOnly, excludeReleased),
+    [initialRows, appliedFilters, ownerOnly, excludeReleased],
   );
 
   const rows = useMemo(() => sortProjectRows(filtered, sortColumn, sortDir), [filtered, sortColumn, sortDir]);
@@ -259,6 +261,19 @@ export function ProjectListTable({ initialProjects }: Props) {
             />
             <Label htmlFor="project-list-owner-only" className="cursor-pointer text-sm text-[var(--foreground)]">
               オーナーのみ
+            </Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="project-list-exclude-released"
+              name="project-list-exclude-released"
+              checked={excludeReleased}
+              onChange={(e) => setExcludeReleased(e.target.checked)}
+              className={checkboxClass}
+            />
+            <Label htmlFor="project-list-exclude-released" className="cursor-pointer text-sm text-[var(--foreground)]">
+              リリース済みを除く
             </Label>
           </div>
         </div>
@@ -444,8 +459,8 @@ export function ProjectListTable({ initialProjects }: Props) {
                       id="pm-flt-renewal-all"
                       name="pm-project-list-renewal-filter"
                       className={radioClass}
-                      checked={draftFilters.renewalFilter === "all"}
-                      onChange={() => setDraftFilters((f) => ({ ...f, renewalFilter: "all" }))}
+                      checked={draftFilters.categoryFilter === "all"}
+                      onChange={() => setDraftFilters((f) => ({ ...f, categoryFilter: "all" }))}
                     />
                     すべて
                   </label>
@@ -455,8 +470,8 @@ export function ProjectListTable({ initialProjects }: Props) {
                       id="pm-flt-renewal-renewal"
                       name="pm-project-list-renewal-filter"
                       className={radioClass}
-                      checked={draftFilters.renewalFilter === "renewal"}
-                      onChange={() => setDraftFilters((f) => ({ ...f, renewalFilter: "renewal" }))}
+                      checked={draftFilters.categoryFilter === "renewal"}
+                      onChange={() => setDraftFilters((f) => ({ ...f, categoryFilter: "renewal" }))}
                     />
                     リニューアル
                   </label>
@@ -466,10 +481,63 @@ export function ProjectListTable({ initialProjects }: Props) {
                       id="pm-flt-renewal-new"
                       name="pm-project-list-renewal-filter"
                       className={radioClass}
-                      checked={draftFilters.renewalFilter === "new"}
-                      onChange={() => setDraftFilters((f) => ({ ...f, renewalFilter: "new" }))}
+                      checked={draftFilters.categoryFilter === "new"}
+                      onChange={() => setDraftFilters((f) => ({ ...f, categoryFilter: "new" }))}
                     />
                     新規
+                  </label>
+                  <label className="flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap">
+                    <input
+                      type="radio"
+                      id="pm-flt-renewal-improvement"
+                      name="pm-project-list-renewal-filter"
+                      className={radioClass}
+                      checked={draftFilters.categoryFilter === "improvement"}
+                      onChange={() => setDraftFilters((f) => ({ ...f, categoryFilter: "improvement" }))}
+                    />
+                    改修
+                  </label>
+                </div>
+              </div>
+              <div className="min-w-0 space-y-1.5">
+                <span className="block text-sm font-medium leading-none text-[var(--foreground)]">リリース済み</span>
+                <div
+                  className="flex min-w-0 flex-row flex-wrap items-center gap-x-4 gap-y-2 text-sm text-[var(--foreground)]"
+                  role="radiogroup"
+                  aria-label="リリース済み"
+                >
+                  <label className="flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap">
+                    <input
+                      type="radio"
+                      id="pm-flt-released-all"
+                      name="pm-project-list-released-filter"
+                      className={radioClass}
+                      checked={draftFilters.releasedFilter === "all"}
+                      onChange={() => setDraftFilters((f) => ({ ...f, releasedFilter: "all" }))}
+                    />
+                    すべて
+                  </label>
+                  <label className="flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap">
+                    <input
+                      type="radio"
+                      id="pm-flt-released-released"
+                      name="pm-project-list-released-filter"
+                      className={radioClass}
+                      checked={draftFilters.releasedFilter === "released"}
+                      onChange={() => setDraftFilters((f) => ({ ...f, releasedFilter: "released" }))}
+                    />
+                    リリース済み
+                  </label>
+                  <label className="flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap">
+                    <input
+                      type="radio"
+                      id="pm-flt-released-unreleased"
+                      name="pm-project-list-released-filter"
+                      className={radioClass}
+                      checked={draftFilters.releasedFilter === "unreleased"}
+                      onChange={() => setDraftFilters((f) => ({ ...f, releasedFilter: "unreleased" }))}
+                    />
+                    未リリース
                   </label>
                 </div>
               </div>
@@ -673,7 +741,7 @@ export function ProjectListTable({ initialProjects }: Props) {
                       <td className="max-w-[12rem] truncate px-3 py-3 text-[var(--muted)]" title={formatSiteTypeLabel(p.site_type, p.site_type_other)}>
                         {formatSiteTypeLabel(p.site_type, p.site_type_other)}
                       </td>
-                      <td className="px-3 py-3 text-[var(--muted)]">{p.is_renewal ? "リニューアル" : "新規"}</td>
+                      <td className="px-3 py-3 text-[var(--muted)]">{formatProjectCategoryLabelJa(p.project_category)}</td>
                       <td className="whitespace-nowrap px-3 py-3 font-mono text-xs text-[var(--muted)] tabular-nums">
                         {formatDateDisplayYmd(p.kickoff_date)}
                       </td>

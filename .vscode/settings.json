@@ -11,8 +11,8 @@
             "server": "127.0.0.1",
             "port": 3308,
             "driver": "MySQL",
-            "database": "minutes_record_db",
-            "name": "localdb",
+            "database": "alrfy_ai_db_dev",
+            "name": "ALRfy-AI-DB",
             "username": "root",
             "password": "password"
         },
@@ -26,8 +26,8 @@
             "server": "localhost",
             "port": 3308,
             "driver": "MySQL",
-            "name": "localdb",
-            "database": "minutes_record_db",
+            "name": "ALRfy-AI-DB",
+            "database": "alrfy_ai_db_dev",
             "username": "root",
             "askForPassword": true
         }

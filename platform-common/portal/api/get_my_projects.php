@@ -37,7 +37,7 @@ try {
         $stmt = $pdo->prepare(
             'SELECT p.id, p.name, p.slug,
                     p.client_name, p.site_type, p.site_type_other,
-                    p.is_renewal, p.kickoff_date, p.release_due_date,
+                    p.project_category, p.is_renewal, p.kickoff_date, p.release_due_date, p.is_released,
                     pm.role
              FROM project_members pm
              INNER JOIN projects p ON p.id = pm.project_id
@@ -59,6 +59,7 @@ try {
                 $cn = $row['client_name'] ?? null;
                 $st = $row['site_type'] ?? null;
                 $sto = $row['site_type_other'] ?? null;
+                $cat = $row['project_category'] ?? null;
                 $kick = $row['kickoff_date'] ?? null;
                 $rel = $row['release_due_date'] ?? null;
                 $projects[] = [
@@ -69,9 +70,11 @@ try {
                     'client_name' => is_string($cn) && $cn !== '' ? $cn : null,
                     'site_type' => is_string($st) && $st !== '' ? $st : null,
                     'site_type_other' => is_string($sto) && $sto !== '' ? $sto : null,
+                    'project_category' => is_string($cat) && $cat !== '' ? $cat : ((int)($row['is_renewal'] ?? 0) === 1 ? 'renewal' : 'new'),
                     'is_renewal' => (int)($row['is_renewal'] ?? 0) === 1,
                     'kickoff_date' => is_string($kick) && $kick !== '' ? $kick : null,
                     'release_due_date' => is_string($rel) && $rel !== '' ? $rel : null,
+                    'is_released' => (int)($row['is_released'] ?? 0) === 1,
                 ];
             }
         }

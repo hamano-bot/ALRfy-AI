@@ -1,5 +1,5 @@
 -- ユーザー別 Redmine 設定（議事録 users 拡張）+ 案件の各種リンク
-USE `minutes_record_db`;
+USE `alrfy_ai_db_dev`;
 
 -- users に列が無い環境向け（既に同名列がある場合は手動でスキップ）
 ALTER TABLE `users`

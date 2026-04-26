@@ -20,7 +20,7 @@ import { createEmptyHearingRow, hearingBodyFromRows, normalizeHearingRows } from
 import type { HearingRowRedmineTicket, HearingSheetRow } from "@/lib/hearing-sheet-types";
 import { getDefaultRowsForTemplate } from "@/lib/hearing-sheet-template-rows";
 import { type HearingTemplateId } from "@/lib/hearing-sheet-template-matrix";
-import { formatSiteTypeLabel } from "@/lib/portal-my-projects";
+import { formatProjectCategoryLabelJa, formatSiteTypeLabel } from "@/lib/portal-my-projects";
 import type { PortalProjectDetail } from "@/lib/portal-project";
 import { downloadHearingRowsExcel } from "@/lib/hearing-excel-export";
 import { hearingFieldIds } from "@/lib/hearing-form-ids";
@@ -821,7 +821,7 @@ export function ProjectHearingSheetClient({
           <ReadOnlyField label="案件名">{project.name}</ReadOnlyField>
           <ReadOnlyField label="クライアント">{displayText(project.client_name)}</ReadOnlyField>
           <ReadOnlyField label="サイト種別">{formatSiteTypeLabel(project.site_type, project.site_type_other)}</ReadOnlyField>
-          <ReadOnlyField label="区分">{project.is_renewal ? "リニューアル" : "新規"}</ReadOnlyField>
+          <ReadOnlyField label="区分">{formatProjectCategoryLabelJa(project.project_category)}</ReadOnlyField>
           <ReadOnlyField label="キックオフ日">{formatDateDisplayYmd(project.kickoff_date)}</ReadOnlyField>
           <ReadOnlyField label="リリース予定日">{formatDateDisplayYmd(project.release_due_date)}</ReadOnlyField>
         </div>

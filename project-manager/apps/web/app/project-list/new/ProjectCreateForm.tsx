@@ -11,6 +11,8 @@ import {
   portalProjectCreateBodySchema,
   portalProjectPatchBodySchema,
 } from "@/lib/portal-project-create-body";
+import { groupedClientsOwnerFirst } from "@/lib/project-list-table-helpers";
+import type { PortalMyProjectRow } from "@/lib/portal-my-projects";
 import { parsePortalProjectSuccess, type PortalProjectDetail } from "@/lib/portal-project";
 import { PROJECT_ROLE_LABEL_JA } from "@/lib/project-role-labels";
 import { projectEditFormFingerprintFromDetail, projectEditFormFingerprintFromFormState } from "@/lib/project-edit-form-fingerprint";
@@ -29,6 +31,7 @@ const SITE_TYPES = [
 ] as const;
 
 type SiteTypeFormValue = (typeof SITE_TYPES)[number]["value"] | "";
+type ProjectCategoryFormValue = "new" | "renewal" | "improvement";
 
 function siteTypeFromDetail(raw: string | null | undefined): SiteTypeFormValue {
   if (typeof raw !== "string") {
@@ -482,6 +485,8 @@ export function ProjectCreateForm({
 
   const [name, setName] = useState("");
   const [clientName, setClientName] = useState("");
+  const [clientSuggestOpen, setClientSuggestOpen] = useState(false);
+  const [clientSuggestRows, setClientSuggestRows] = useState<PortalMyProjectRow[]>([]);
   const [siteType, setSiteType] = useState<SiteTypeFormValue>(() =>
     mode === "edit" && initialDetail !== undefined && editProjectId !== undefined
       ? siteTypeFromDetail(initialDetail.site_type)
@@ -492,7 +497,11 @@ export function ProjectCreateForm({
       ? (initialDetail.site_type_other ?? "")
       : "",
   );
-  const [isRenewal, setIsRenewal] = useState(false);
+  const [projectCategory, setProjectCategory] = useState<ProjectCategoryFormValue>(() =>
+    mode === "edit" && initialDetail !== undefined && editProjectId !== undefined ? initialDetail.project_category : "new",
+  );
+  const isRenewal = projectCategory === "renewal";
+  const [isReleased, setIsReleased] = useState(false);
   const [renewalUrls, setRenewalUrls] = useState<string[]>([""]);
   const [kickoff, setKickoff] = useState("");
   const [releaseDue, setReleaseDue] = useState("");
@@ -509,6 +518,7 @@ export function ProjectCreateForm({
   const [addViewerInput, setAddViewerInput] = useState("");
 
   const [formError, setFormError] = useState<string | null>(null);
+  const [formWarning, setFormWarning] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   /** 編集モードで initialDetail から state を流し込み終わるまで dirty にしない */
   const [editFormHydrated, setEditFormHydrated] = useState(false);
@@ -523,6 +533,7 @@ export function ProjectCreateForm({
   const [dropIndicator, setDropIndicator] = useState<{ zone: "owner" | "editor" | "viewer"; index: number } | null>(null);
   const dropIndicatorRef = useRef(dropIndicator);
   dropIndicatorRef.current = dropIndicator;
+  const clientSuggestRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isEditMode) {
@@ -558,6 +569,47 @@ export function ProjectCreateForm({
     void load();
   }, [isEditMode]);
 
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (!clientSuggestRef.current?.contains(t)) {
+        setClientSuggestOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/portal/my-projects", { credentials: "include", cache: "no-store" });
+        const data = (await res.json()) as { success?: boolean; projects?: PortalMyProjectRow[] };
+        if (cancelled) {
+          return;
+        }
+        if (res.ok && data.success && Array.isArray(data.projects)) {
+          setClientSuggestRows(data.projects);
+        } else {
+          setClientSuggestRows([]);
+        }
+      } catch {
+        if (!cancelled) {
+          setClientSuggestRows([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const groupedClientSuggest = useMemo(
+    () => groupedClientsOwnerFirst(clientSuggestRows, clientName),
+    [clientSuggestRows, clientName],
+  );
+
   // 編集モードの初期値は描画前に同期する（useEffect だと Radix Select が空 value で
   // マウントしたあと DB 値の更新を取りこぼし、サイト種別だけ未選択に見えることがある）。
   useLayoutEffect(() => {
@@ -576,7 +628,8 @@ export function ProjectCreateForm({
     setClientName(d.client_name ?? "");
     setSiteType(siteTypeFromDetail(d.site_type));
     setSiteTypeOther(d.site_type_other ?? "");
-    setIsRenewal(d.is_renewal);
+    setProjectCategory(d.project_category);
+    setIsReleased(d.is_released);
     setRenewalUrls(d.renewal_urls.length > 0 ? d.renewal_urls : [""]);
     setKickoff(d.kickoff_date ?? "");
     setReleaseDue(d.release_due_date ?? "");
@@ -659,7 +712,9 @@ export function ProjectCreateForm({
         clientName,
         siteType,
         siteTypeOther,
+        projectCategory,
         isRenewal,
+        isReleased,
         renewalUrls,
         kickoff,
         releaseDue,
@@ -674,7 +729,9 @@ export function ProjectCreateForm({
       clientName,
       siteType,
       siteTypeOther,
+      projectCategory,
       isRenewal,
+      isReleased,
       renewalUrls,
       kickoff,
       releaseDue,
@@ -927,6 +984,7 @@ export function ProjectCreateForm({
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setFormError(null);
+    setFormWarning(null);
     if (!siteType) {
       setFormError("サイト種別を選択してください。");
       return;
@@ -942,12 +1000,51 @@ export function ProjectCreateForm({
         return;
       }
     }
+    const notationCheckInput = {
+      project_name: name.trim(),
+      client_name: clientName.trim() === "" ? null : clientName.trim(),
+      misc_links: miscLinks
+        .map((m) => ({ label: m.label.trim(), url: m.url.trim() }))
+        .filter((m) => m.label !== "" && m.url !== ""),
+    };
+    try {
+      const notationRes = await fetch("/api/project/notation-check", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(notationCheckInput),
+      });
+      const notationText = await notationRes.text();
+      let notationJson: { success?: boolean; message?: string; blockingIssues?: string[]; warnings?: string[] } | null = null;
+      try {
+        notationJson = JSON.parse(notationText) as { success?: boolean; message?: string; blockingIssues?: string[]; warnings?: string[] };
+      } catch {
+        notationJson = null;
+      }
+      if (!notationRes.ok || notationJson?.success !== true) {
+        setFormError(notationJson?.message ?? "表記ゆれチェックに失敗しました。");
+        return;
+      }
+      if (Array.isArray(notationJson.blockingIssues) && notationJson.blockingIssues.length > 0) {
+        setFormError(notationJson.blockingIssues.join(" / "));
+        return;
+      }
+      if (Array.isArray(notationJson.warnings) && notationJson.warnings.length > 0) {
+        setFormWarning(notationJson.warnings.join(" / "));
+      }
+    } catch {
+      setFormError("表記ゆれチェックに失敗しました。");
+      return;
+    }
+
     const parsed = portalProjectCreateBodySchema.safeParse({
       name: name.trim(),
       client_name: clientName.trim() === "" ? null : clientName.trim(),
       site_type: siteType,
       site_type_other: siteType === "other" ? siteTypeOther.trim() : null,
+      project_category: projectCategory,
       is_renewal: isRenewal,
+      is_released: isReleased,
       renewal_urls: isRenewal ? renewalUrls.map((u) => u.trim()).filter(Boolean) : [],
       kickoff_date: kickoff.trim() === "" ? null : kickoff.trim(),
       release_due_date: releaseDue.trim() === "" ? null : releaseDue.trim(),
@@ -1081,7 +1178,67 @@ export function ProjectCreateForm({
         </div>
         <div className="space-y-1">
           <Label htmlFor={`${idPrefix}-client`}>クライアント名</Label>
-          <Input id={`${idPrefix}-client`} className="mt-1 w-1/2 max-w-full" value={clientName} onChange={(e) => setClientName(e.target.value)} />
+          <div ref={clientSuggestRef} className="relative mt-1 w-1/2 max-w-full">
+            <Input
+              id={`${idPrefix}-client`}
+              className="w-full"
+              autoComplete="off"
+              value={clientName}
+              onChange={(e) => {
+                setClientName(e.target.value);
+                setClientSuggestOpen(true);
+              }}
+              onFocus={() => setClientSuggestOpen(true)}
+            />
+            {clientSuggestOpen ? (
+              <div className="absolute left-0 right-0 top-full z-[140] mt-1 max-h-64 overflow-y-auto rounded-lg border border-[color:color-mix(in_srgb,var(--border)_90%,transparent)] bg-[var(--surface)] shadow-lg">
+                {groupedClientSuggest.ownerCandidates.length === 0 && groupedClientSuggest.otherCandidates.length === 0 ? (
+                  <p className="px-3 py-2 text-xs text-[var(--muted)]">候補がありません</p>
+                ) : (
+                  <>
+                    {groupedClientSuggest.ownerCandidates.length > 0 ? (
+                      <div className="border-b border-[color:color-mix(in_srgb,var(--border)_70%,transparent)] px-3 py-1.5 text-[10px] font-semibold tracking-wide text-[var(--muted)]">
+                        オーナー案件由来
+                      </div>
+                    ) : null}
+                    {groupedClientSuggest.ownerCandidates.map((c) => (
+                      <button
+                        key={`owner-${c}`}
+                        type="button"
+                        className="block w-full px-3 py-2 text-left text-sm text-[var(--foreground)] hover:bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          setClientName(c);
+                          setClientSuggestOpen(false);
+                        }}
+                      >
+                        {c}
+                      </button>
+                    ))}
+                    {groupedClientSuggest.otherCandidates.length > 0 ? (
+                      <div className="border-y border-[color:color-mix(in_srgb,var(--border)_70%,transparent)] px-3 py-1.5 text-[10px] font-semibold tracking-wide text-[var(--muted)]">
+                        その他
+                      </div>
+                    ) : null}
+                    {groupedClientSuggest.otherCandidates.map((c) => (
+                      <button
+                        key={`other-${c}`}
+                        type="button"
+                        className="block w-full px-6 py-2 text-left text-sm text-[var(--foreground)] hover:bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          setClientName(c);
+                          setClientSuggestOpen(false);
+                        }}
+                      >
+                        {c}
+                      </button>
+                    ))}
+                  </>
+                )}
+              </div>
+            ) : null}
+          </div>
         </div>
         <div className="space-y-1">
           <Label htmlFor={`${idPrefix}-site-type`}>
@@ -1128,24 +1285,35 @@ export function ProjectCreateForm({
           <Label className="flex cursor-pointer items-center gap-2 text-[var(--foreground)]">
             <input
               id="pm-project-create-renewal-new"
-              name="pm-project-create-renewal"
+              name="pm-project-create-category"
               type="radio"
               className="accent-[var(--accent)]"
-              checked={!isRenewal}
-              onChange={() => setIsRenewal(false)}
+              checked={projectCategory === "new"}
+              onChange={() => setProjectCategory("new")}
             />
             新規
           </Label>
           <Label className="flex cursor-pointer items-center gap-2 text-[var(--foreground)]">
             <input
               id="pm-project-create-renewal-renewal"
-              name="pm-project-create-renewal"
+              name="pm-project-create-category"
               type="radio"
               className="accent-[var(--accent)]"
-              checked={isRenewal}
-              onChange={() => setIsRenewal(true)}
+              checked={projectCategory === "renewal"}
+              onChange={() => setProjectCategory("renewal")}
             />
             リニューアル
+          </Label>
+          <Label className="flex cursor-pointer items-center gap-2 text-[var(--foreground)]">
+            <input
+              id="pm-project-create-renewal-improvement"
+              name="pm-project-create-category"
+              type="radio"
+              className="accent-[var(--accent)]"
+              checked={projectCategory === "improvement"}
+              onChange={() => setProjectCategory("improvement")}
+            />
+            改修
           </Label>
         </div>
         {isRenewal ? (
@@ -1177,6 +1345,17 @@ export function ProjectCreateForm({
       <section className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:gap-8">
         <ThemeDateField className="min-w-[12.5rem] max-w-full sm:w-auto" label="キックオフ日" value={kickoff} onChange={setKickoff} />
         <ThemeDateField className="min-w-[12.5rem] max-w-full sm:w-auto" label="リリース予定日" value={releaseDue} onChange={setReleaseDue} />
+        <Label className="mt-6 flex cursor-pointer items-center gap-2 text-sm text-[var(--foreground)] sm:mt-7">
+          <input
+            id={`${idPrefix}-is-released`}
+            name={`${idPrefix}-is-released`}
+            type="checkbox"
+            className="accent-[var(--accent)]"
+            checked={isReleased}
+            onChange={(e) => setIsReleased(e.target.checked)}
+          />
+          リリース済み
+        </Label>
       </section>
 
       <section className="space-y-3">
@@ -1379,6 +1558,11 @@ export function ProjectCreateForm({
       {formError ? (
         <p className="text-sm text-red-500" role="alert">
           {formError}
+        </p>
+      ) : null}
+      {formWarning ? (
+        <p className="text-sm text-amber-600" role="status">
+          {formWarning}
         </p>
       ) : null}
 

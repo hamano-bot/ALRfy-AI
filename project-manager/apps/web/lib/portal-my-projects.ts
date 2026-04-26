@@ -13,9 +13,11 @@ export type PortalMyProjectRow = {
   client_name: string | null;
   site_type: string | null;
   site_type_other: string | null;
+  project_category: "new" | "renewal" | "improvement";
   is_renewal: boolean;
   kickoff_date: string | null;
   release_due_date: string | null;
+  is_released: boolean;
 };
 
 /** 一覧表示用（`site_type` の DB 値 → 短い日本語ラベル） */
@@ -37,6 +39,16 @@ export function formatSiteTypeLabel(siteType: string | null, siteTypeOther: stri
     return `その他（${siteTypeOther.trim()}）`;
   }
   return SITE_TYPE_LABEL_JA[siteType] ?? siteType;
+}
+
+export function formatProjectCategoryLabelJa(category: PortalMyProjectRow["project_category"]): string {
+  if (category === "renewal") {
+    return "リニューアル";
+  }
+  if (category === "improvement") {
+    return "改修";
+  }
+  return "新規";
 }
 
 export { formatProjectRoleLabelJa, PROJECT_ROLE_LABEL_JA } from "@/lib/project-role-labels";
@@ -113,6 +125,10 @@ export function parseMyProjectsSuccess(text: string): PortalMyProjectRow[] | nul
       } else if (typeof o.is_renewal === "number") {
         isRenewal = o.is_renewal === 1;
       }
+      let projectCategory: PortalMyProjectRow["project_category"] = isRenewal ? "renewal" : "new";
+      if (o.project_category === "new" || o.project_category === "renewal" || o.project_category === "improvement") {
+        projectCategory = o.project_category;
+      }
       const kickoffDate =
         typeof o.kickoff_date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(o.kickoff_date)
           ? o.kickoff_date
@@ -121,6 +137,7 @@ export function parseMyProjectsSuccess(text: string): PortalMyProjectRow[] | nul
         typeof o.release_due_date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(o.release_due_date)
           ? o.release_due_date
           : null;
+      const isReleased = o.is_released === true || o.is_released === 1;
       out.push({
         id,
         name,
@@ -129,9 +146,11 @@ export function parseMyProjectsSuccess(text: string): PortalMyProjectRow[] | nul
         client_name: clientName,
         site_type: siteType,
         site_type_other: siteTypeOther,
+        project_category: projectCategory,
         is_renewal: isRenewal,
         kickoff_date: kickoffDate,
         release_due_date: releaseDueDate,
+        is_released: isReleased,
       });
     }
     return out;

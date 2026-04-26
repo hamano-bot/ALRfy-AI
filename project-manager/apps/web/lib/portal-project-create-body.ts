@@ -9,6 +9,7 @@ const siteTypeEnum = z.enum([
   "product_portal",
   "other",
 ]);
+const projectCategoryEnum = z.enum(["new", "renewal", "improvement"]);
 
 const dateOrNull = z
   .union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/), z.literal(""), z.null()])
@@ -39,7 +40,9 @@ export const portalProjectCreateBodySchema = z
     client_name: z.union([z.string().max(255), z.null()]).optional(),
     site_type: z.union([siteTypeEnum, z.null()]).optional(),
     site_type_other: z.union([z.string().max(255), z.null()]).optional(),
+    project_category: projectCategoryEnum.optional(),
     is_renewal: z.boolean().optional(),
+    is_released: z.boolean().optional(),
     renewal_urls: z.array(z.string()).optional(),
     kickoff_date: dateOrNull,
     release_due_date: dateOrNull,

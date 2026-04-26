@@ -11,9 +11,11 @@ export const MOCK_PROJECT: PortalProjectDetail = {
   client_name: "テストクライアント",
   site_type: "other",
   site_type_other: "テストテストテストテスト123456",
+  project_category: "renewal",
   is_renewal: true,
   kickoff_date: "2026-05-01",
   release_due_date: "2026-05-15",
+  is_released: false,
   renewal_urls: ["https://nextjs.org/docs/messages/version-staleness"],
   redmine_links: [
     {

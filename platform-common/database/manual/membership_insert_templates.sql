@@ -3,7 +3,7 @@
 --
 -- 前提:
 --   - migrations/20260417_platform_acl_and_apps.sql 適用済み
---   - 対象 DB: minutes_record_db（議事録と共有）
+--   - 対象 DB: alrfy_ai_db_dev（議事録と共有）
 --   - role は permission_helper.php と一致: owner | editor | viewer
 --
 -- 使い方:
@@ -19,7 +19,7 @@
 -- メールで project_members だけ付与する頻繁な運用は ../scripts/grant-project-members.ps1（または .sh）を参照。
 -- ============================================================
 
-USE `minutes_record_db`;
+USE `alrfy_ai_db_dev`;
 
 -- ------------------------------------------------------------
 -- 参照用 SELECT（実行前の確認）

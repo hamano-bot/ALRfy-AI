@@ -1,4 +1,4 @@
-# ACL データベース（共有 `minutes_record_db`）
+# ACL データベース（共有 `alrfy_ai_db_dev`）
 
 `auth/permission_helper.php` と `portal/api/*.php` が参照するテーブルを、議事録と同じ MySQL データベースに配置する。マイグレーション SQL は **platform-common 側**のみに置き、議事録アプリの PHP は変更しない。
 
@@ -30,14 +30,14 @@
 
 ```bash
 # Docker の MySQL が 127.0.0.1:3308 の例
-mysql -h 127.0.0.1 -P 3308 -u root -p minutes_record_db < platform-common/database/migrations/20260417_platform_acl_and_apps.sql
+mysql -h 127.0.0.1 -P 3308 -u root -p alrfy_ai_db_dev < platform-common/database/migrations/20260417_platform_acl_and_apps.sql
 ```
 
 **Windows / PowerShell 注意:** パイプで SQL を流すと UTF-8 のコメントが化けて MySQL が構文エラーになることがあります。その場合はコンテナにファイルをコピーしてから実行してください。
 
 ```powershell
-docker cp platform-common/database/migrations/20260417_platform_acl_and_apps.sql minutes-db-dev:/tmp/acl_migration.sql
-docker exec minutes-db-dev sh -c "mysql -uroot -proot --default-character-set=utf8mb4 minutes_record_db < /tmp/acl_migration.sql"
+docker cp platform-common/database/migrations/20260417_platform_acl_and_apps.sql ALRfy-AI-DB:/tmp/acl_migration.sql
+docker exec ALRfy-AI-DB sh -c "mysql -uroot -proot --default-character-set=utf8mb4 alrfy_ai_db_dev < /tmp/acl_migration.sql"
 ```
 
 ## `project_members` をメールで付与（手間削減）
@@ -47,9 +47,13 @@ docker exec minutes-db-dev sh -c "mysql -uroot -proot --default-character-set=ut
 | ファイル | 使い方（リポジトリルート想定） |
 |----------|----------------|
 | [database/scripts/grant-project-members.ps1](../database/scripts/grant-project-members.ps1) | `.\platform-common\database\scripts\grant-project-members.ps1 user1@example.com user2@example.com` |
-| [database/scripts/grant-project-members.sh](../database/scripts/grant-project-members.sh) | `CONTAINER=minutes-db-dev ./platform-common/database/scripts/grant-project-members.sh user1@example.com` |
+| [database/scripts/grant-project-members.sh](../database/scripts/grant-project-members.sh) | `CONTAINER=ALRfy-AI-DB ./platform-common/database/scripts/grant-project-members.sh user1@example.com` |
 
-オプション（PowerShell は同名パラメータ、sh は主に環境変数）: `ProjectId` / `PROJECT_ID`（既定 `1`）、`Role` / `ROLE`（既定 `editor`）、`Container` / `CONTAINER`（既定 `minutes-db-dev`）、MySQL パスワードは `MYSQL_ROOT_PASSWORD` または `MYSQL_PASSWORD`（未設定時は開発用 `root`）。
+オプション（PowerShell は同名パラメータ、sh は主に環境変数）: `ProjectId` / `PROJECT_ID`（既定 `1`）、`Role` / `ROLE`（既定 `editor`）、`Container` / `CONTAINER`（既定 `ALRfy-AI-DB`）、MySQL パスワードは `MYSQL_ROOT_PASSWORD` または `MYSQL_PASSWORD`（未設定時は開発用 `root`）。
+
+DB 名の運用方針:
+- 開発: `alrfy_ai_db_dev`
+- 本番: `alrfy_ai_db_pro`
 
 ## シード方針
 

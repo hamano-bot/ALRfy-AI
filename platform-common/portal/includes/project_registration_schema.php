@@ -61,6 +61,14 @@ function ensureProjectRegistrationSchema(PDO $pdo): void
             "ALTER TABLE `projects` ADD COLUMN `is_renewal` TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'リニューアル案件フラグ'"
         );
     }
+    if (!$hasColumn('projects', 'project_category')) {
+        $pdo->exec(
+            "ALTER TABLE `projects` ADD COLUMN `project_category` ENUM('new','renewal','improvement') NOT NULL DEFAULT 'new' COMMENT '案件区分' AFTER `is_renewal`"
+        );
+        $pdo->exec(
+            "UPDATE `projects` SET `project_category` = CASE WHEN `is_renewal` = 1 THEN 'renewal' ELSE 'new' END WHERE `project_category` = 'new'"
+        );
+    }
     if (!$hasColumn('projects', 'kickoff_date')) {
         $pdo->exec(
             "ALTER TABLE `projects` ADD COLUMN `kickoff_date` DATE NULL DEFAULT NULL COMMENT 'キックオフ日'"
@@ -69,6 +77,11 @@ function ensureProjectRegistrationSchema(PDO $pdo): void
     if (!$hasColumn('projects', 'release_due_date')) {
         $pdo->exec(
             "ALTER TABLE `projects` ADD COLUMN `release_due_date` DATE NULL DEFAULT NULL COMMENT 'リリース予定日'"
+        );
+    }
+    if (!$hasColumn('projects', 'is_released')) {
+        $pdo->exec(
+            "ALTER TABLE `projects` ADD COLUMN `is_released` TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'リリース済みフラグ' AFTER `release_due_date`"
         );
     }
 

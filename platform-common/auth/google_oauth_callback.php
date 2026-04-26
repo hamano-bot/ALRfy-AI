@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 /**
  * 共通Googleログインのコールバック
- * - 議事録DB（minutes_record_db）の users は email ベース（public/callback.php と同じ同期方針）
+ * - 議事録DB（alrfy_ai_db_dev）の users は email ベース（public/callback.php と同じ同期方針）
  * - user_sessions / user_preferences / project_members は未作成でも動くようフォールバック
  */
 

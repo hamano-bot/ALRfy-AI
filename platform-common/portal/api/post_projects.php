@@ -121,6 +121,40 @@ if (isset($payload['is_renewal'])) {
     }
 }
 
+$projectCategoryAllowed = [
+    'new' => true,
+    'renewal' => true,
+    'improvement' => true,
+];
+$projectCategory = 'new';
+if (array_key_exists('project_category', $payload)) {
+    if (!is_string($payload['project_category']) || !isset($projectCategoryAllowed[$payload['project_category']])) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'project_category が不正です。'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    $projectCategory = $payload['project_category'];
+}
+if (!array_key_exists('project_category', $payload)) {
+    $projectCategory = $isRenewal ? 'renewal' : 'new';
+}
+$isRenewal = $projectCategory === 'renewal';
+
+$isReleased = false;
+if (isset($payload['is_released'])) {
+    if (is_bool($payload['is_released'])) {
+        $isReleased = $payload['is_released'];
+    } elseif (is_int($payload['is_released'])) {
+        $isReleased = $payload['is_released'] === 1;
+    } elseif (is_string($payload['is_released'])) {
+        $isReleased = $payload['is_released'] === '1' || strtolower($payload['is_released']) === 'true';
+    } else {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'is_released が不正です。'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+}
+
 $renewalUrls = [];
 if (isset($payload['renewal_urls'])) {
     if (!is_array($payload['renewal_urls'])) {
@@ -435,6 +469,7 @@ try {
 }
 
 $isRenewalInt = $isRenewal ? 1 : 0;
+$isReleasedInt = $isReleased ? 1 : 0;
 
 try {
     $pdo->beginTransaction();
@@ -442,10 +477,10 @@ try {
     $insertProject = $pdo->prepare(
         'INSERT INTO projects (
             name, slug, client_name, site_type, site_type_other,
-            is_renewal, kickoff_date, release_due_date
+            project_category, is_renewal, kickoff_date, release_due_date, is_released
         ) VALUES (
             :name, :slug, :client_name, :site_type, :site_type_other,
-            :is_renewal, :kickoff_date, :release_due_date
+            :project_category, :is_renewal, :kickoff_date, :release_due_date, :is_released
         )'
     );
     $insertProject->execute([
@@ -454,9 +489,11 @@ try {
         ':client_name' => $clientName,
         ':site_type' => $siteType,
         ':site_type_other' => $siteTypeOther,
+        ':project_category' => $projectCategory,
         ':is_renewal' => $isRenewalInt,
         ':kickoff_date' => $kickoffDate,
         ':release_due_date' => $releaseDueDate,
+        ':is_released' => $isReleasedInt,
     ]);
     $projectId = (int)$pdo->lastInsertId();
     if ($projectId <= 0) {
@@ -533,7 +570,7 @@ try {
 }
 
 $verifyStmt = $pdo->prepare(
-    'SELECT id, name, slug, client_name, site_type, site_type_other, is_renewal, kickoff_date, release_due_date
+    'SELECT id, name, slug, client_name, site_type, site_type_other, project_category, is_renewal, kickoff_date, release_due_date, is_released
      FROM projects WHERE id = :id LIMIT 1'
 );
 $verifyStmt->execute([':id' => $projectId]);
@@ -552,6 +589,7 @@ $vSlug = $verified['slug'] ?? null;
 $vCn = $verified['client_name'] ?? null;
 $vSt = $verified['site_type'] ?? null;
 $vSto = $verified['site_type_other'] ?? null;
+$vCategory = $verified['project_category'] ?? null;
 $vKick = $verified['kickoff_date'] ?? null;
 $vRel = $verified['release_due_date'] ?? null;
 
@@ -565,8 +603,10 @@ echo json_encode([
         'client_name' => is_string($vCn) && $vCn !== '' ? $vCn : null,
         'site_type' => is_string($vSt) && $vSt !== '' ? $vSt : null,
         'site_type_other' => is_string($vSto) && $vSto !== '' ? $vSto : null,
+        'project_category' => is_string($vCategory) && $vCategory !== '' ? $vCategory : ((int)($verified['is_renewal'] ?? 0) === 1 ? 'renewal' : 'new'),
         'is_renewal' => (int)($verified['is_renewal'] ?? 0) === 1,
         'kickoff_date' => is_string($vKick) && $vKick !== '' ? $vKick : null,
         'release_due_date' => is_string($vRel) && $vRel !== '' ? $vRel : null,
+        'is_released' => (int)($verified['is_released'] ?? 0) === 1,
     ],
 ], JSON_UNESCAPED_UNICODE);

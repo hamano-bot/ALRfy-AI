@@ -9,13 +9,13 @@
 --   - マイグレーション 20260417_platform_acl_and_apps.sql 適用済み（projects id=1）
 --
 -- 適用例:
---   mysql -h ... -u ... -p minutes_record_db < platform-common/database/manual/grant_project_members_shiono_koga.sql
+--   mysql -h ... -u ... -p alrfy_ai_db_dev < platform-common/database/manual/grant_project_members_shiono_koga.sql
 --
 -- 毎回の付与はスクリプト推奨（docker cp 不要）:
 --   .\platform-common\database\scripts\grant-project-members.ps1 shiono@shift-jp.net m.koga@shift-jp.net
 -- ============================================================
 
-USE `minutes_record_db`;
+USE `alrfy_ai_db_dev`;
 
 INSERT INTO `project_members` (`project_id`, `user_id`, `role`)
 SELECT 1, `id`, 'editor'

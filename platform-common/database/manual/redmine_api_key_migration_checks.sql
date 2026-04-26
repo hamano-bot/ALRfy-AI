@@ -3,7 +3,7 @@
 -- 実データ更新は database/scripts/migrate-redmine-api-keys.php を使用
 -- ============================================================
 
-USE `minutes_record_db`;
+USE `alrfy_ai_db_dev`;
 
 -- 1) 移行対象（prefix なし = 旧平文）件数
 SELECT COUNT(*) AS plain_target_count

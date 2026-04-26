@@ -7,7 +7,7 @@
   .\platform-common\database\scripts\grant-project-members.ps1 user1@example.com user2@example.com
 
 .EXAMPLE
-  .\platform-common\database\scripts\grant-project-members.ps1 -Emails @('a@example.com') -ProjectId 2 -Container minutes-db
+  .\platform-common\database\scripts\grant-project-members.ps1 -Emails @('a@example.com') -ProjectId 2 -Container ALRfy-AI-DB
 #>
 param(
   [Parameter(Mandatory = $true, Position = 0, ValueFromRemainingArguments = $true)]
@@ -18,13 +18,13 @@ param(
   [ValidateSet('owner', 'editor', 'viewer')]
   [string] $Role = 'editor',
 
-  [string] $Container = 'minutes-db-dev',
+  [string] $Container = 'ALRfy-AI-DB',
 
   [string] $MysqlUser = 'root',
 
   [string] $MysqlPassword = $(if ($env:MYSQL_ROOT_PASSWORD) { $env:MYSQL_ROOT_PASSWORD } elseif ($env:MYSQL_PASSWORD) { $env:MYSQL_PASSWORD } else { 'root' }),
 
-  [string] $Database = 'minutes_record_db'
+  [string] $Database = 'alrfy_ai_db_dev'
 )
 
 function Escape-SqlLiteral {

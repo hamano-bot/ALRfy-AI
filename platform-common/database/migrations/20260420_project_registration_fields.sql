@@ -1,10 +1,10 @@
 -- ============================================================
 -- Project 新規登録用: projects 拡張 + project_renewal_urls + project_redmine_links
--- DB: minutes_record_db（20260417_platform_acl_and_apps.sql 適用済み前提）
--- 適用例: mysql ... minutes_record_db < 20260420_project_registration_fields.sql
+-- DB: alrfy_ai_db_dev（20260417_platform_acl_and_apps.sql 適用済み前提）
+-- 適用例: mysql ... alrfy_ai_db_dev < 20260420_project_registration_fields.sql
 -- ============================================================
 
-USE `minutes_record_db`;
+USE `alrfy_ai_db_dev`;
 
 -- ------------------------------------------------------------
 -- projects に登録項目列を追加

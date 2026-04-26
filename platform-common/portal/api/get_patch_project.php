@@ -54,7 +54,7 @@ function buildProjectAggregate(PDO $pdo, int $projectId): ?array
 {
     $stmt = $pdo->prepare(
         'SELECT p.id, p.name, p.slug, p.client_name, p.site_type, p.site_type_other,
-                p.is_renewal, p.kickoff_date, p.release_due_date
+                p.project_category, p.is_renewal, p.kickoff_date, p.release_due_date, p.is_released
          FROM projects p
          WHERE p.id = :id
          LIMIT 1'
@@ -174,9 +174,13 @@ function buildProjectAggregate(PDO $pdo, int $projectId): ?array
         'site_type_other' => isset($row['site_type_other']) && is_string($row['site_type_other']) && $row['site_type_other'] !== ''
             ? $row['site_type_other']
             : null,
+        'project_category' => isset($row['project_category']) && is_string($row['project_category']) && $row['project_category'] !== ''
+            ? $row['project_category']
+            : ((int)($row['is_renewal'] ?? 0) === 1 ? 'renewal' : 'new'),
         'is_renewal' => (int)($row['is_renewal'] ?? 0) === 1,
         'kickoff_date' => is_string($kick) && $kick !== '' ? $kick : null,
         'release_due_date' => is_string($rel) && $rel !== '' ? $rel : null,
+        'is_released' => (int)($row['is_released'] ?? 0) === 1,
         'renewal_urls' => $renewalUrls,
         'redmine_links' => $redmineLinks,
         'misc_links' => $miscLinks,
@@ -295,13 +299,16 @@ if ($method === 'PATCH') {
     $siteType = $parsed['site_type'];
     $siteTypeOther = $parsed['site_type_other'];
     $isRenewal = $parsed['is_renewal'];
+    $projectCategory = $parsed['project_category'];
     $renewalUrls = $parsed['renewal_urls'];
     $kickoffDate = $parsed['kickoff_date'];
     $releaseDueDate = $parsed['release_due_date'];
+    $isReleased = $parsed['is_released'];
     $redmineRows = $parsed['redmine_rows'];
     $miscLinks = $parsed['misc_links'];
 
     $isRenewalInt = $isRenewal ? 1 : 0;
+    $isReleasedInt = $isReleased ? 1 : 0;
 
     try {
         $pdo->beginTransaction();
@@ -321,9 +328,11 @@ if ($method === 'PATCH') {
                 client_name = :client_name,
                 site_type = :site_type,
                 site_type_other = :site_type_other,
+                project_category = :project_category,
                 is_renewal = :is_renewal,
                 kickoff_date = :kickoff_date,
-                release_due_date = :release_due_date
+                release_due_date = :release_due_date,
+                is_released = :is_released
              WHERE id = :id'
         );
         $upd->execute([
@@ -331,9 +340,11 @@ if ($method === 'PATCH') {
             ':client_name' => $clientName,
             ':site_type' => $siteType,
             ':site_type_other' => $siteTypeOther,
+            ':project_category' => $projectCategory,
             ':is_renewal' => $isRenewalInt,
             ':kickoff_date' => $kickoffDate,
             ':release_due_date' => $releaseDueDate,
+            ':is_released' => $isReleasedInt,
             ':id' => $projectId,
         ]);
 

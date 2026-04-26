@@ -33,9 +33,11 @@ export type PortalProjectDetail = {
   client_name: string | null;
   site_type: string | null;
   site_type_other: string | null;
+  project_category: "new" | "renewal" | "improvement";
   is_renewal: boolean;
   kickoff_date: string | null;
   release_due_date: string | null;
+  is_released: boolean;
   renewal_urls: string[];
   redmine_links: {
     redmine_project_id: number;
@@ -110,10 +112,15 @@ export function parsePortalProjectSuccess(text: string): PortalProjectDetail | n
         ? p.site_type_other.trim()
         : null;
     const isRenewal = p.is_renewal === true;
+    let projectCategory: PortalProjectDetail["project_category"] = isRenewal ? "renewal" : "new";
+    if (p.project_category === "new" || p.project_category === "renewal" || p.project_category === "improvement") {
+      projectCategory = p.project_category;
+    }
     const kickoff =
       typeof p.kickoff_date === "string" && p.kickoff_date !== "" ? p.kickoff_date : null;
     const releaseDue =
       typeof p.release_due_date === "string" && p.release_due_date !== "" ? p.release_due_date : null;
+    const isReleased = p.is_released === true || p.is_released === 1;
 
     const renewalUrls: string[] = [];
     if (Array.isArray(p.renewal_urls)) {
@@ -194,9 +201,11 @@ export function parsePortalProjectSuccess(text: string): PortalProjectDetail | n
       client_name: clientName,
       site_type: siteType,
       site_type_other: siteTypeOther,
+      project_category: projectCategory,
       is_renewal: isRenewal,
       kickoff_date: kickoff,
       release_due_date: releaseDue,
+      is_released: isReleased,
       renewal_urls: renewalUrls,
       redmine_links,
       misc_links,

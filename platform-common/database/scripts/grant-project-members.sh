@@ -5,7 +5,7 @@
 #   ./platform-common/database/scripts/grant-project-members.sh shiono@shift-jp.net m.koga@shift-jp.net
 #
 # 環境変数:
-#   CONTAINER (既定: minutes-db-dev)
+#   CONTAINER (既定: ALRfy-AI-DB)
 #   MYSQL_USER (既定: root)
 #   MYSQL_PASSWORD / MYSQL_ROOT_PASSWORD (既定: root)
 #   PROJECT_ID (既定: 1)
@@ -13,12 +13,12 @@
 
 set -euo pipefail
 
-CONTAINER="${CONTAINER:-minutes-db-dev}"
+CONTAINER="${CONTAINER:-ALRfy-AI-DB}"
 MYSQL_USER="${MYSQL_USER:-root}"
 MYSQL_PASSWORD="${MYSQL_PASSWORD:-${MYSQL_ROOT_PASSWORD:-root}}"
 PROJECT_ID="${PROJECT_ID:-1}"
 ROLE="${ROLE:-editor}"
-DATABASE="${DATABASE:-minutes_record_db}"
+DATABASE="${DATABASE:-alrfy_ai_db_dev}"
 
 case "$ROLE" in owner|editor|viewer) ;; *)
   echo "ROLE must be owner, editor, or viewer" >&2

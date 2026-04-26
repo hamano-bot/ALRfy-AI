@@ -11,9 +11,11 @@ export type HearingAdviceProjectPayload = {
   client_name: string | null;
   site_type: string | null;
   site_type_other: string | null;
+  project_category: "new" | "renewal" | "improvement";
   is_renewal: boolean;
   kickoff_date: string | null;
   release_due_date: string | null;
+  is_released: boolean;
   renewal_urls: string[];
 };
 

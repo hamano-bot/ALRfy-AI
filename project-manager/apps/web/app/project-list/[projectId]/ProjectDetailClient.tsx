@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/app/components/ui/card";
 import { displayText } from "@/lib/empty-display";
 import { formatDateDisplayYmd } from "@/lib/format-date-display";
 import { PROJECT_DOCUMENT_TEMPLATES } from "@/lib/project-document-templates";
-import { formatSiteTypeLabel } from "@/lib/portal-my-projects";
+import { formatProjectCategoryLabelJa, formatSiteTypeLabel } from "@/lib/portal-my-projects";
 import { buildRedmineProjectUrl } from "@/lib/redmine-url";
 import { getParticipantViewLine, type PortalProjectDetail } from "@/lib/portal-project";
 import { projectPageLgMainSidebarGridClassName } from "@/lib/project-page-layout";
@@ -15,7 +15,7 @@ import { PROJECT_ROLE_LABEL_JA } from "@/lib/project-role-labels";
 import { UNSAVED_LEAVE_CONFIRM_MESSAGE } from "@/lib/unsaved-navigation";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 type ProjectDetailClientProps = {
@@ -35,6 +35,8 @@ function ReadOnlyField({ label, children }: { label: string; children: React.Rea
 
 export function ProjectDetailClient({ projectId, initialProject, canEdit }: ProjectDetailClientProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [editing, setEditing] = useState(false);
   const [editFormDirty, setEditFormDirty] = useState(false);
   const [project, setProject] = useState<PortalProjectDetail>(initialProject);
@@ -42,6 +44,32 @@ export function ProjectDetailClient({ projectId, initialProject, canEdit }: Proj
   useEffect(() => {
     setProject(initialProject);
   }, [initialProject]);
+
+  const setEditModeQuery = useCallback(
+    (nextEdit: boolean) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (nextEdit) {
+        params.set("mode", "edit");
+      } else if (params.get("mode") === "edit") {
+        params.delete("mode");
+      }
+      const qs = params.toString();
+      router.replace(qs === "" ? pathname : `${pathname}?${qs}`, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
+
+  useEffect(() => {
+    const urlEditing = searchParams.get("mode") === "edit";
+    if (canEdit && urlEditing) {
+      setEditing(true);
+      return;
+    }
+    if (!urlEditing) {
+      setEditing(false);
+      setEditFormDirty(false);
+    }
+  }, [canEdit, searchParams]);
 
   useEffect(() => {
     if (!editing || !editFormDirty || !canEdit) {
@@ -58,7 +86,8 @@ export function ProjectDetailClient({ projectId, initialProject, canEdit }: Proj
   const leaveEditMode = useCallback(() => {
     setEditFormDirty(false);
     setEditing(false);
-  }, []);
+    setEditModeQuery(false);
+  }, [setEditModeQuery]);
 
   const onBackToViewClick = useCallback(() => {
     if (editFormDirty && !window.confirm(UNSAVED_LEAVE_CONFIRM_MESSAGE)) {
@@ -137,7 +166,10 @@ export function ProjectDetailClient({ projectId, initialProject, canEdit }: Proj
             variant="accent"
             size="sm"
             className="shrink-0 self-center rounded-lg"
-            onClick={() => setEditing(true)}
+            onClick={() => {
+              setEditing(true);
+              setEditModeQuery(true);
+            }}
           >
             編集
           </Button>
@@ -150,36 +182,42 @@ export function ProjectDetailClient({ projectId, initialProject, canEdit }: Proj
     <>
       <section className="space-y-4">
         <h3 className="pm-section-heading">基本情報</h3>
-        <div className="grid gap-6 sm:grid-cols-2 sm:items-start lg:gap-8">
-          <ReadOnlyField label="サイト種別">{formatSiteTypeLabel(project.site_type, project.site_type_other)}</ReadOnlyField>
-          <ReadOnlyField label="区分">
-            <>
-              <p className="text-sm leading-relaxed text-[var(--foreground)]">{project.is_renewal ? "リニューアル" : "新規"}</p>
-              {project.is_renewal && project.renewal_urls.length > 0 ? (
-                <ul className="mt-2 list-inside list-disc space-y-2 text-sm leading-relaxed text-[var(--foreground)]">
-                  {project.renewal_urls.map((u) => (
-                    <li key={u}>
-                      <a
-                        href={u}
-                        className="text-[color:color-mix(in_srgb,var(--accent)_85%,var(--foreground)_15%)] hover:underline"
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {u}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </>
-          </ReadOnlyField>
-        </div>
-      </section>
-
-      <section className="space-y-4">
-        <div className="grid gap-6 sm:grid-cols-2 sm:items-start lg:gap-8">
-          <ReadOnlyField label="キックオフ日">{formatDateDisplayYmd(project.kickoff_date)}</ReadOnlyField>
-          <ReadOnlyField label="リリース予定日">{formatDateDisplayYmd(project.release_due_date)}</ReadOnlyField>
+        <div className="grid gap-6 sm:grid-cols-5 sm:items-stretch lg:gap-8">
+          <div className="h-full">
+            <ReadOnlyField label="サイト種別">{formatSiteTypeLabel(project.site_type, project.site_type_other)}</ReadOnlyField>
+          </div>
+          <div className="h-full">
+            <ReadOnlyField label="区分">
+              <>
+                <p className="text-sm leading-relaxed text-[var(--foreground)]">{formatProjectCategoryLabelJa(project.project_category)}</p>
+                {project.is_renewal && project.renewal_urls.length > 0 ? (
+                  <ul className="mt-2 list-inside list-disc space-y-2 text-sm leading-relaxed text-[var(--foreground)]">
+                    {project.renewal_urls.map((u) => (
+                      <li key={u}>
+                        <a
+                          href={u}
+                          className="text-[color:color-mix(in_srgb,var(--accent)_85%,var(--foreground)_15%)] hover:underline"
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {u}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </>
+            </ReadOnlyField>
+          </div>
+          <div className="h-full">
+            <ReadOnlyField label="キックオフ日">{formatDateDisplayYmd(project.kickoff_date)}</ReadOnlyField>
+          </div>
+          <div className="h-full">
+            <ReadOnlyField label="リリース予定日">{formatDateDisplayYmd(project.release_due_date)}</ReadOnlyField>
+          </div>
+          <div className="h-full">
+            <ReadOnlyField label="リリース済み">{project.is_released ? "はい" : "いいえ"}</ReadOnlyField>
+          </div>
         </div>
       </section>
 

@@ -30,7 +30,8 @@ export const HEARING_TEMPLATE_LABELS: Record<HearingTemplateId, string> = {
 };
 
 export function resolveHearingTemplateId(project: PortalProjectDetail): HearingTemplateId {
-  const renewal = project.is_renewal;
+  const category = project.project_category;
+  const renewal = category === "renewal" || category === "improvement" || project.is_renewal;
   const st = project.site_type;
 
   if (st === "corporate") {

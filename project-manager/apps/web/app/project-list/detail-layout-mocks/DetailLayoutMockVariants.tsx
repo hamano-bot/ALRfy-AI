@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/app/components/ui/card";
 import { MOCK_DOCUMENT_TEMPLATES, MOCK_PROJECT } from "@/lib/detail-layout-mock-data";
 import { displayText } from "@/lib/empty-display";
 import { formatDateDisplayYmd } from "@/lib/format-date-display";
-import { formatSiteTypeLabel } from "@/lib/portal-my-projects";
+import { formatProjectCategoryLabelJa, formatSiteTypeLabel } from "@/lib/portal-my-projects";
 import { buildRedmineProjectUrl } from "@/lib/redmine-url";
 import { getParticipantViewLine, type PortalProjectDetail } from "@/lib/portal-project";
 import { PROJECT_ROLE_LABEL_JA } from "@/lib/project-role-labels";
@@ -50,7 +50,7 @@ function MetaSections({ project }: { project: PortalProjectDetail }) {
           <MockReadOnlyField label="サイト種別">{formatSiteTypeLabel(project.site_type, project.site_type_other)}</MockReadOnlyField>
           <MockReadOnlyField label="区分">
             <>
-              <p className="text-sm leading-relaxed text-[var(--foreground)]">{project.is_renewal ? "リニューアル" : "新規"}</p>
+              <p className="text-sm leading-relaxed text-[var(--foreground)]">{formatProjectCategoryLabelJa(project.project_category)}</p>
               {project.is_renewal && project.renewal_urls.length > 0 ? (
                 <ul className="mt-2 list-inside list-disc space-y-2 text-sm leading-relaxed text-[var(--foreground)]">
                   {project.renewal_urls.map((u) => (
@@ -73,9 +73,10 @@ function MetaSections({ project }: { project: PortalProjectDetail }) {
       </section>
 
       <section className="space-y-4">
-        <div className="grid gap-6 sm:grid-cols-2 sm:items-start lg:gap-8">
+        <div className="grid gap-6 sm:grid-cols-3 sm:items-start lg:gap-8">
           <MockReadOnlyField label="キックオフ日">{formatDateDisplayYmd(project.kickoff_date)}</MockReadOnlyField>
           <MockReadOnlyField label="リリース予定日">{formatDateDisplayYmd(project.release_due_date)}</MockReadOnlyField>
+          <MockReadOnlyField label="リリース済み">{project.is_released ? "はい" : "いいえ"}</MockReadOnlyField>
         </div>
       </section>
 

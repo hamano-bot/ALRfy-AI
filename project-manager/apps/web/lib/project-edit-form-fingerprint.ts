@@ -16,7 +16,9 @@ function stablePayloadFromParts(input: {
   clientName: string;
   siteType: string;
   siteTypeOther: string;
+  projectCategory: "new" | "renewal" | "improvement";
   isRenewal: boolean;
+  isReleased: boolean;
   renewalUrls: string[];
   kickoff: string;
   releaseDue: string;
@@ -32,7 +34,9 @@ function stablePayloadFromParts(input: {
     client_name: input.clientName.trim() === "" ? null : input.clientName.trim(),
     site_type: siteType,
     site_type_other: siteType === "other" ? input.siteTypeOther.trim() : null,
+    project_category: input.projectCategory,
     is_renewal: input.isRenewal,
+    is_released: input.isReleased,
     renewal_urls: input.isRenewal ? input.renewalUrls.map((u) => u.trim()).filter(Boolean) : [],
     kickoff_date: input.kickoff.trim() === "" ? null : input.kickoff.trim(),
     release_due_date: input.releaseDue.trim() === "" ? null : input.releaseDue.trim(),
@@ -89,7 +93,9 @@ export function projectEditFormFingerprintFromDetail(d: PortalProjectDetail): st
     clientName: d.client_name ?? "",
     siteType,
     siteTypeOther: d.site_type_other ?? "",
+    projectCategory: d.project_category,
     isRenewal: d.is_renewal,
+    isReleased: d.is_released,
     renewalUrls: d.renewal_urls.length > 0 ? d.renewal_urls : [""],
     kickoff: d.kickoff_date ?? "",
     releaseDue: d.release_due_date ?? "",
@@ -106,7 +112,9 @@ export function projectEditFormFingerprintFromFormState(input: {
   clientName: string;
   siteType: string;
   siteTypeOther: string;
+  projectCategory: "new" | "renewal" | "improvement";
   isRenewal: boolean;
+  isReleased: boolean;
   renewalUrls: string[];
   kickoff: string;
   releaseDue: string;
