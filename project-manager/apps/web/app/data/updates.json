@@ -1,5 +1,12 @@
 [
   {
+    "id": "gh-e0158a8-mof9xkxh",
+    "datetime": "2026-04-26 13:34:12",
+    "version": "push-e0158a8",
+    "title": "Merge branch 'main' of https://github.com/hamano-bot/ALRfy-AI",
+    "summary": ""
+  },
+  {
     "id": "gh-77ba437-mof9rx38",
     "datetime": "2026-04-26 13:29:44",
     "version": "push-77ba437",
@@ -131,12 +138,5 @@
     "version": "push-27d4384",
     "title": "update SystemUpdatesCard.tsxの品質向上をしました",
     "summary": ""
-  },
-  {
-    "id": "gh-d05c91a-mo2rg9j7",
-    "datetime": "2026-04-17 19:23:21",
-    "version": "push-d05c91a",
-    "title": "Update dashboard history and UI comp",
-    "summary": "最新pushの変更内容を反映しました。詳細はコミット履歴をご確認ください。"
   }
 ]
