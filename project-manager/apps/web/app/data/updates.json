@@ -1,5 +1,12 @@
 [
   {
+    "id": "gh-77ba437-mof9rx38",
+    "datetime": "2026-04-26 13:29:44",
+    "version": "push-77ba437",
+    "title": "関連機能を中心に、Merge branch 'main' of https://github.com/hamano-bot/ALRfy-AIを実施しました",
+    "summary": ""
+  },
+  {
     "id": "gh-d366f16-moehmwdt",
     "datetime": "2026-04-26 00:22:01",
     "version": "push-d366f16",
@@ -131,12 +138,5 @@
     "version": "push-d05c91a",
     "title": "Update dashboard history and UI comp",
     "summary": "最新pushの変更内容を反映しました。詳細はコミット履歴をご確認ください。"
-  },
-  {
-    "id": "u1",
-    "datetime": "2026-04-17 10:30:00",
-    "version": "v0.1.0",
-    "title": "初期ダッシュボードUI",
-    "summary": "共通ヘッダーと左サイドメニューの土台を追加しました。"
   }
 ]
