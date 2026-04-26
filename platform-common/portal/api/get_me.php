@@ -134,6 +134,16 @@ try {
         ? (string)$_SESSION['user_name']
         : (string)$user['email'];
 
+    $isAdminUser = false;
+    try {
+        $admStmt = $pdo->prepare('SELECT is_admin FROM users WHERE id = :user_id LIMIT 1');
+        $admStmt->execute([':user_id' => $userId]);
+        $admCol = $admStmt->fetchColumn();
+        $isAdminUser = is_scalar($admCol) && (int)$admCol === 1;
+    } catch (Throwable $e) {
+        // `is_admin` 未作成環境では false のまま
+    }
+
     echo json_encode([
         'success' => true,
         'user' => [
@@ -141,6 +151,7 @@ try {
             'email' => (string)$user['email'],
             'display_name' => $displayName,
             'theme' => (string)($user['theme'] ?? 'default'),
+            'is_admin' => $isAdminUser,
         ],
         'roles_summary' => [
             'global' => $globalRole,

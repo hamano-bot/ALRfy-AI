@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Briefcase, CalendarDays, ExternalLink } from "lucide-react";
+import { Briefcase, CalendarDays, ExternalLink, FileText } from "lucide-react";
 import { isExternalPortalRoute, isPortalAppInteractive } from "../lib/portal-app-helpers";
 import { PortalAppIcon } from "../lib/portal-app-icons";
 import { usePortalApps } from "./PortalAppsProvider";
@@ -94,6 +94,23 @@ export function PortalAppCards() {
               Project
             </span>
           </Link>
+          <Link
+            href="/estimates"
+            className="group inline-flex max-w-full items-center gap-2 rounded-xl border border-[color:color-mix(in_srgb,var(--border)_88%,transparent)] bg-[color:color-mix(in_srgb,var(--surface)_94%,transparent)] px-3 py-2.5 text-sm text-[var(--foreground)] shadow-sm transition-colors hover:border-[color:color-mix(in_srgb,var(--accent)_45%,var(--border)_55%)] hover:bg-[color:color-mix(in_srgb,var(--surface)_88%,transparent)]"
+            aria-label="Estimates へ"
+          >
+            <span
+              className={[
+                accentButtonSurfaceBaseClassName,
+                "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_4px_12px_rgba(15,23,42,0.32)] transition-[filter] duration-200 group-hover:brightness-110",
+              ].join(" ")}
+            >
+              <FileText className="h-4 w-4" aria-hidden />
+            </span>
+            <span className="min-w-0 font-medium transition-colors group-hover:text-[color:color-mix(in_srgb,var(--accent)_88%,var(--foreground)_12%)]">
+              Estimates
+            </span>
+          </Link>
         </div>
       </section>
     );
@@ -136,6 +153,20 @@ export function PortalAppCards() {
                   project-manager
                 </p>
                 <h3 className="mt-1 text-base font-semibold text-[var(--foreground)]">Project</h3>
+                <p className="mt-2 text-xs text-[var(--muted)]">同一オリジン</p>
+              </div>
+            </div>
+          </Link>
+          <Link href="/estimates" className={cardSurfaceClass(true)}>
+            <div className="flex items-start gap-3">
+              <span className={portalCardIconBoxClass}>
+                <FileText className="h-5 w-5" aria-hidden />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]" lang="en" translate="no">
+                  estimate-manager
+                </p>
+                <h3 className="mt-1 text-base font-semibold text-[var(--foreground)]">Estimates</h3>
                 <p className="mt-2 text-xs text-[var(--muted)]">同一オリジン</p>
               </div>
             </div>
@@ -232,6 +263,20 @@ export function PortalAppCards() {
           );
         })}
         {projectManagerCard}
+        <Link key="estimate-manager-card" href="/estimates" className={cardSurfaceClass(true)}>
+          <div className="flex items-start gap-3">
+            <span className={portalCardIconBoxClass}>
+              <FileText className="h-5 w-5" aria-hidden />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]" lang="en" translate="no">
+                estimate-manager
+              </p>
+              <h3 className="mt-1 text-base font-semibold text-[var(--foreground)]">Estimates</h3>
+              <p className="mt-2 text-xs text-[var(--muted)]">利用可能</p>
+            </div>
+          </div>
+        </Link>
       </div>
     </section>
   );

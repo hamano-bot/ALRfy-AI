@@ -28,6 +28,7 @@ import { hearingPrintPreviewChannelName } from "@/lib/hearing-print-preview-chan
 import { buildRedmineIssueUrl, buildRedmineProjectUrl } from "@/lib/redmine-url";
 import { UNSAVED_LEAVE_CONFIRM_MESSAGE } from "@/lib/unsaved-navigation";
 import { useEditHistoryState } from "@/lib/use-edit-history-state";
+import { trashDeleteIconButtonClassName } from "@/lib/trash-delete-icon-button-class";
 import { cn } from "@/lib/utils";
 import { formatDateDisplayYmd } from "@/lib/format-date-display";
 import Image from "next/image";
@@ -1443,7 +1444,7 @@ export function ProjectHearingSheetClient({
                                     variant="destructive"
                                     size="sm"
                                     draggable={false}
-                                    className="h-8 w-8 shrink-0 p-0"
+                                    className={cn(trashDeleteIconButtonClassName, "shrink-0")}
                                     aria-label="行を削除"
                                     title="行を削除"
                                     onClick={() => setDeleteConfirmRowId(row.id)}

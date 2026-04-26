@@ -87,6 +87,8 @@ const allowedDevOrigins = [
  */
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  /** Route Handler で Puppeteer をバンドル対象から外す */
+  serverExternalPackages: ["puppeteer"],
   /**
    * Next.js 16 以降は `next build` が既定で Turbopack。`webpack` を定義している場合は
    * 空の turbopack 設定を置くか `--webpack` を明示する必要がある（公式メッセージ参照）。

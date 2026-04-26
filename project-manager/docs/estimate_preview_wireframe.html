@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>見積プレビュー HTML ワイヤー（印刷想定 A4 縦）</title>
+    <!--
+      用途: 帳票レイアウトの静的ワイヤー。実データは post_estimate_export_html.php 側で差し替え。
+      表示: http://dev-alrfy-ai.com:8001/docs/estimate_preview_wireframe.html は Next の静的配信外のため、
+            開発時はファイルをブラウザで直接開くか、必要なら public にコピーして配信する。
+    -->
+    <style>
+      :root {
+        --ink: #1a1a1a;
+        --muted: #6b7280;
+        --header-bg: #333333;
+        --header-fg: #ffffff;
+        --bar-bg: #e8e8e8;
+        --stripe: #f7f7f7;
+        --border: #000000;
+        --underline: #333333;
+        --sheet-bg: #ffffff;
+        --page-bg: #e2e8f0;
+      }
+      html {
+        box-sizing: border-box;
+      }
+      *,
+      *::before,
+      *::after {
+        box-sizing: inherit;
+      }
+      body {
+        margin: 0;
+        font-family: system-ui, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+        font-size: 11px;
+        color: var(--ink);
+        background: var(--page-bg);
+        line-height: 1.45;
+      }
+      .wire-sheet {
+        width: 210mm;
+        max-width: 100%;
+        min-height: 297mm;
+        margin: 12px auto;
+        padding: 10mm 12mm;
+        background: var(--sheet-bg);
+        box-shadow: 0 10px 28px rgba(2, 6, 23, 0.18);
+      }
+      .wire-banner {
+        margin: -10mm -12mm 10mm;
+        padding: 6px 12mm;
+        background: #fef3c7;
+        color: #92400e;
+        font-size: 10px;
+        border-bottom: 1px solid #fcd34d;
+      }
+      .doc-title {
+        text-align: center;
+        margin: 0 0 4px;
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+      }
+      .doc-title-sub {
+        text-align: center;
+        margin: 0 0 14px;
+        font-size: 11px;
+        font-style: italic;
+        color: var(--muted);
+      }
+      .header-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px 20px;
+        margin-bottom: 14px;
+        align-items: start;
+      }
+      .label-pair {
+        margin-bottom: 8px;
+      }
+      .label-pair .lbl {
+        display: block;
+        font-size: 9px;
+        color: var(--muted);
+        margin-bottom: 2px;
+      }
+      .label-pair .lbl-en {
+        font-size: 8px;
+      }
+      .label-pair .val {
+        display: inline-block;
+        min-width: 8em;
+        border-bottom: 1px solid var(--underline);
+        padding-bottom: 1px;
+        font-size: 12px;
+      }
+      .meta-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 10px;
+      }
+      .meta-table th,
+      .meta-table td {
+        border: 1px solid var(--border);
+        padding: 4px 6px;
+        vertical-align: top;
+      }
+      .meta-table th {
+        background: #f3f4f6;
+        font-weight: 600;
+        text-align: left;
+        width: 38%;
+        white-space: nowrap;
+      }
+      .meta-table td {
+        text-align: right;
+      }
+      .total-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: var(--bar-bg);
+        border: 1px solid #ccc;
+        padding: 10px 14px;
+        margin-bottom: 12px;
+      }
+      .total-bar .lbl {
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .total-bar .lbl small {
+        font-weight: 400;
+        color: var(--muted);
+        margin-left: 6px;
+      }
+      .total-bar .amt {
+        font-size: 22px;
+        font-weight: 800;
+        letter-spacing: 0.02em;
+      }
+      .detail-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 0;
+        font-size: 10px;
+      }
+      .detail-table th,
+      .detail-table td {
+        border: 1px solid var(--border);
+        padding: 5px 6px;
+        vertical-align: top;
+      }
+      .detail-table thead th {
+        background: var(--header-bg);
+        color: var(--header-fg);
+        font-weight: 600;
+        text-align: center;
+      }
+      .detail-table thead th:first-child {
+        text-align: left;
+        width: 46%;
+      }
+      .detail-table .col-num {
+        width: 9%;
+        text-align: right;
+      }
+      .detail-table .col-unit {
+        width: 10%;
+        text-align: center;
+      }
+      .detail-table .col-price,
+      .detail-table .col-amt {
+        width: 17%;
+        text-align: right;
+        white-space: nowrap;
+      }
+      .detail-table tbody tr:nth-child(even):not(.cat-row):not(.subtotal-row) {
+        background: var(--stripe);
+      }
+      .cat-row td {
+        background: #f0f0f0;
+        font-weight: 700;
+        padding: 6px 8px;
+      }
+      .subtotal-row td {
+        font-weight: 600;
+        background: #fafafa;
+      }
+      .subtotal-row .sub-lbl {
+        text-align: right;
+        padding-right: 12px;
+      }
+      .detail-table .content-sub {
+        display: block;
+        margin-left: 10px;
+        margin-top: 2px;
+        font-size: 9px;
+        color: #374151;
+        font-weight: 400;
+      }
+      .tax-footer {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        border: 1px solid var(--border);
+        border-top: none;
+        margin-bottom: 14px;
+      }
+      .tax-footer > div {
+        padding: 8px 10px;
+        border-right: 1px solid var(--border);
+        text-align: center;
+        font-size: 10px;
+      }
+      .tax-footer > div:last-child {
+        border-right: none;
+        font-weight: 700;
+      }
+      .tax-footer .tf-lbl {
+        display: block;
+        color: var(--muted);
+        font-size: 9px;
+        margin-bottom: 4px;
+      }
+      .tax-footer .tf-val {
+        font-size: 13px;
+      }
+      .page-footer {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        margin-top: auto;
+        padding-top: 10px;
+        font-size: 9px;
+      }
+      .remarks-block h3 {
+        margin: 0 0 6px;
+        font-size: 10px;
+        font-weight: 700;
+      }
+      .remarks-block ul {
+        margin: 0;
+        padding-left: 1.1em;
+      }
+      .issuer-block {
+        text-align: right;
+      }
+      .issuer-block .logo-wrap {
+        margin-bottom: 6px;
+        min-height: 32px;
+      }
+      .issuer-block .logo-wrap img {
+        max-height: 36px;
+        width: auto;
+      }
+      .logo-ph {
+        display: none;
+        padding: 6px 12px;
+        background: #e5e7eb;
+        color: #4b5563;
+        font-size: 9px;
+        border-radius: 4px;
+      }
+      .issuer-block .co-name {
+        font-weight: 700;
+        font-size: 11px;
+        margin-bottom: 4px;
+      }
+      @media print {
+        @page {
+          size: A4 portrait;
+          margin: 10mm;
+        }
+        body {
+          background: #fff;
+        }
+        .wire-banner {
+          display: none;
+        }
+        .wire-sheet {
+          width: auto;
+          max-width: none;
+          min-height: 0;
+          margin: 0;
+          padding: 0;
+          box-shadow: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wire-sheet">
+      <div class="wire-banner">
+        ワイヤー用ダミー文言です。本番は <code>post_estimate_export_html.php</code> が同等レイアウトを生成。ロゴは <code>/brand/shift-logo.png</code>（未配置時は <code>/brand/alrfy-ai-logo.svg</code> にフォールバック）。発行元は <code>ESTIMATE_ISSUER_COMPANY_NAME</code> 等の環境変数で上書き可。
+      </div>
+
+      <h1 class="doc-title">概算御見積書</h1>
+      <p class="doc-title-sub">Quotation</p>
+
+      <header class="header-grid" aria-label="見積ヘッダ">
+        <div class="header-left">
+          <div class="label-pair">
+            <span class="lbl">御見積先 <span class="lbl-en">Order-From</span></span>
+            <span class="val">山田様</span>
+          </div>
+          <div class="label-pair">
+            <span class="lbl">内容 <span class="lbl-en">Description</span></span>
+            <span class="val">公式サイト新規構築（mini）</span>
+          </div>
+        </div>
+        <div class="header-right">
+          <table class="meta-table">
+            <tbody>
+              <tr>
+                <th>作成年月日 <span style="font-weight: 400; color: #6b7280">Issue Date</span></th>
+                <td>2023/11/25</td>
+              </tr>
+              <tr>
+                <th>見積番号 <span style="font-weight: 400; color: #6b7280">Quotation No.</span></th>
+                <td>20231125YM001</td>
+              </tr>
+              <tr>
+                <th>納入予定 <span style="font-weight: 400; color: #6b7280">Lead time</span></th>
+                <td>別途ご相談</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="label-pair" style="margin-top: 8px">
+            <span class="lbl">営業担当者 <span class="lbl-en">Sales Rep.</span></span>
+            <span class="val" style="border-bottom: none; padding-bottom: 0">佐藤 渉生</span>
+          </div>
+        </div>
+      </header>
+
+      <section class="total-bar" aria-label="税込合計">
+        <span class="lbl">合計金額（税込） <small>Total Amount</small></span>
+        <span class="amt">¥3,370,125</span>
+      </section>
+
+      <table class="detail-table" aria-label="明細">
+        <thead>
+          <tr>
+            <th>内容 <span style="font-weight: 400; opacity: 0.9">Content</span></th>
+            <th class="col-num">数量 <span style="font-weight: 400; opacity: 0.9">Qty</span></th>
+            <th class="col-unit">単位 <span style="font-weight: 400; opacity: 0.9">Unit</span></th>
+            <th class="col-price">単価 <span style="font-weight: 400; opacity: 0.9">U.price</span></th>
+            <th class="col-amt">金額 <span style="font-weight: 400; opacity: 0.9">Amount</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="cat-row">
+            <td colspan="5">●要件定義、設計</td>
+          </tr>
+          <tr>
+            <td>・要件定義、打合せ</td>
+            <td class="col-num">4.0</td>
+            <td class="col-unit">人日</td>
+            <td class="col-price">¥60,000</td>
+            <td class="col-amt">¥240,000</td>
+          </tr>
+          <tr>
+            <td>・画面遷移図作成</td>
+            <td class="col-num">3.0</td>
+            <td class="col-unit">人日</td>
+            <td class="col-price">¥50,000</td>
+            <td class="col-amt">¥150,000</td>
+          </tr>
+          <tr class="subtotal-row">
+            <td colspan="3"></td>
+            <td class="sub-lbl" colspan="1">小計</td>
+            <td class="col-amt">¥390,000</td>
+          </tr>
+
+          <tr class="cat-row">
+            <td colspan="5">●SITEMANAGE Miniライセンス</td>
+          </tr>
+          <tr>
+            <td>
+              ・ライセンス一式
+              <span class="content-sub">・公開側 10ページまで<br />・会員側 5ページまで 等（ワイヤー用ダミー）</span>
+            </td>
+            <td class="col-num">1.0</td>
+            <td class="col-unit">式</td>
+            <td class="col-price">¥2,500,000</td>
+            <td class="col-amt">¥2,500,000</td>
+          </tr>
+          <tr class="subtotal-row">
+            <td colspan="3"></td>
+            <td class="sub-lbl" colspan="1">小計</td>
+            <td class="col-amt">¥2,500,000</td>
+          </tr>
+
+          <tr class="cat-row">
+            <td colspan="5">●公開側制作</td>
+          </tr>
+          <tr>
+            <td>・トップページ</td>
+            <td class="col-num">1.0</td>
+            <td class="col-unit">ページ</td>
+            <td class="col-price">¥173,750</td>
+            <td class="col-amt">¥173,750</td>
+          </tr>
+          <tr class="subtotal-row">
+            <td colspan="3"></td>
+            <td class="sub-lbl" colspan="1">小計</td>
+            <td class="col-amt">¥173,750</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="tax-footer" aria-label="税サマリー">
+        <div>
+          <span class="tf-lbl">税抜金額</span>
+          <span class="tf-val">¥3,063,750</span>
+        </div>
+        <div>
+          <span class="tf-lbl">消費税額（10%）</span>
+          <span class="tf-val">¥306,375</span>
+        </div>
+        <div>
+          <span class="tf-lbl">税込み合計金額</span>
+          <span class="tf-val">¥3,370,125</span>
+        </div>
+      </div>
+
+      <footer class="page-footer" aria-label="フッタ">
+        <div class="remarks-block">
+          <h3>◆備考</h3>
+          <ul>
+            <li>本見積の有効期限は発行日より30日間とします（ダミー）。</li>
+            <li>写真・イラスト等のストック素材費は別途（ダミー）。</li>
+          </ul>
+        </div>
+        <div class="issuer-block">
+          <div class="logo-wrap">
+            <img
+              src="/brand/shift-logo.png"
+              alt="SHIFT"
+              onerror="this.style.display='none';document.getElementById('wire-logo-ph').style.display='inline-block';"
+            />
+            <span id="wire-logo-ph" class="logo-ph">LOGO: /brand/shift-logo.png（未配置時）</span>
+          </div>
+          <div class="co-name">株式会社シフト</div>
+          <div>〒000-0000 東京都〇〇区〇〇 …（ダミー住所）</div>
+          <div>TEL: 00-0000-0000 / FAX: 00-0000-0001</div>
+          <div>https://example.jp/</div>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>

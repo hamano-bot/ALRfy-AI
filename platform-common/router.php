@@ -40,6 +40,11 @@ $routes = [
     '/portal/api/project-redmine-issues' => __DIR__ . '/portal/api/get_project_redmine_issues.php',
     '/portal/api/project-redmine-issue-create' => __DIR__ . '/portal/api/post_project_redmine_issue_create.php',
     '/portal/api/user-suggest' => __DIR__ . '/portal/api/get_user_suggest.php',
+    '/portal/api/estimate-templates' => __DIR__ . '/portal/api/get_post_patch_delete_estimate_templates.php',
+    '/portal/api/estimates' => __DIR__ . '/portal/api/get_post_patch_delete_estimates.php',
+    '/portal/api/estimate-export-html' => __DIR__ . '/portal/api/post_estimate_export_html.php',
+    '/portal/api/estimate-export' => __DIR__ . '/portal/api/post_estimate_export.php',
+    '/portal/api/estimate-client-abbr' => __DIR__ . '/portal/api/get_estimate_client_abbr_lookup.php',
 ];
 
 if (isset($routes[$path])) {

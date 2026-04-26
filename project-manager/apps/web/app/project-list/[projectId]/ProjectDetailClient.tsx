@@ -14,6 +14,8 @@ import { projectPageLgMainSidebarGridClassName } from "@/lib/project-page-layout
 import { PROJECT_ROLE_LABEL_JA } from "@/lib/project-role-labels";
 import { UNSAVED_LEAVE_CONFIRM_MESSAGE } from "@/lib/unsaved-navigation";
 import { cn } from "@/lib/utils";
+import { AccessControlTable, type AccessControlRow } from "@/app/components/AccessControlTable";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/app/components/ui/dialog";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -40,10 +42,58 @@ export function ProjectDetailClient({ projectId, initialProject, canEdit }: Proj
   const [editing, setEditing] = useState(false);
   const [editFormDirty, setEditFormDirty] = useState(false);
   const [project, setProject] = useState<PortalProjectDetail>(initialProject);
+  const [teamPermissionRows, setTeamPermissionRows] = useState<AccessControlRow[]>([]);
+  const [linkedEstimates, setLinkedEstimates] = useState<
+    Array<{ id: number; estimate_number: string; title: string; estimate_status: string; effective_role?: string }>
+  >([]);
+  const [isEstimateLinkModalOpen, setIsEstimateLinkModalOpen] = useState(false);
+  const [allEstimates, setAllEstimates] = useState<
+    Array<{ id: number; estimate_number: string; title: string; estimate_status: string }>
+  >([]);
+  const [selectedEstimateIds, setSelectedEstimateIds] = useState<number[]>([]);
 
   useEffect(() => {
     setProject(initialProject);
   }, [initialProject]);
+
+  useEffect(() => {
+    const loadRelations = async () => {
+      try {
+        const [permRes, estRes] = await Promise.all([
+          fetch(`/api/portal/project-team-permissions?project_id=${projectId}`, { credentials: "include", cache: "no-store" }),
+          fetch(`/api/portal/project-estimates?project_id=${projectId}`, { credentials: "include", cache: "no-store" }),
+        ]);
+        if (permRes.ok) {
+          const permData = (await permRes.json()) as {
+            success?: boolean;
+            permissions?: Array<{ team_tag: string; role: "owner" | "editor" | "viewer" }>;
+          };
+          if (permData.success && Array.isArray(permData.permissions)) {
+            setTeamPermissionRows(
+              permData.permissions.map((row, idx) => ({
+                key: `project-team-${idx}-${row.team_tag}`,
+                subjectType: "team",
+                subject: row.team_tag,
+                role: row.role,
+              })),
+            );
+          }
+        }
+        if (estRes.ok) {
+          const estimateData = (await estRes.json()) as {
+            success?: boolean;
+            estimates?: Array<{ id: number; estimate_number: string; title: string; estimate_status: string; effective_role?: string }>;
+          };
+          if (estimateData.success && Array.isArray(estimateData.estimates)) {
+            setLinkedEstimates(estimateData.estimates);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    };
+    void loadRelations();
+  }, [projectId]);
 
   const setEditModeQuery = useCallback(
     (nextEdit: boolean) => {
@@ -392,6 +442,64 @@ export function ProjectDetailClient({ projectId, initialProject, canEdit }: Proj
     </ul>
   );
 
+  const saveProjectTeamPermissions = async () => {
+    const payload = {
+      project_id: projectId,
+      permissions: teamPermissionRows
+        .filter((row) => row.subjectType === "team" && row.subject.trim() !== "")
+        .map((row) => ({ team_tag: row.subject.trim(), role: row.role })),
+    };
+    await fetch("/api/portal/project-team-permissions", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  };
+
+  const openEstimateLinkModal = async () => {
+    try {
+      const res = await fetch("/api/portal/estimates", { credentials: "include", cache: "no-store" });
+      const data = (await res.json()) as {
+        success?: boolean;
+        estimates?: Array<{ id: number; estimate_number: string; title: string; estimate_status: string; effective_role?: string }>;
+      };
+      if (!res.ok || !data.success || !Array.isArray(data.estimates)) {
+        return;
+      }
+      setAllEstimates(data.estimates);
+      setSelectedEstimateIds(linkedEstimates.map((estimate) => estimate.id));
+      setIsEstimateLinkModalOpen(true);
+    } catch {
+      // ignore
+    }
+  };
+
+  const saveProjectEstimateLinks = async () => {
+    await fetch("/api/portal/project-estimates", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        project_id: projectId,
+        estimate_ids: selectedEstimateIds,
+      }),
+    });
+    try {
+      const res = await fetch(`/api/portal/project-estimates?project_id=${projectId}`, { credentials: "include", cache: "no-store" });
+      const data = (await res.json()) as {
+        success?: boolean;
+        estimates?: Array<{ id: number; estimate_number: string; title: string; estimate_status: string }>;
+      };
+      if (res.ok && data.success && Array.isArray(data.estimates)) {
+        setLinkedEstimates(data.estimates);
+      }
+    } catch {
+      // ignore
+    }
+    setIsEstimateLinkModalOpen(false);
+  };
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5">
       {pageHeading}
@@ -410,14 +518,160 @@ export function ProjectDetailClient({ projectId, initialProject, canEdit }: Proj
         </div>
 
         <aside className="mt-6 min-w-0 lg:mt-0 lg:sticky lg:top-4 lg:self-start">
-          <Card className="overflow-hidden shadow-sm">
-            <h2 id="project-detail-docs-heading" className="sr-only">
-              ドキュメント
-            </h2>
-            <CardContent className="p-4 sm:p-5">{documentList}</CardContent>
-          </Card>
+          <div className="space-y-4">
+            <Card className="overflow-hidden shadow-sm">
+              <h2 id="project-detail-docs-heading" className="sr-only">
+                ドキュメント
+              </h2>
+              <CardContent className="p-4 sm:p-5">{documentList}</CardContent>
+            </Card>
+
+            <Card className="overflow-hidden shadow-sm">
+              <CardContent className="space-y-3 p-4 sm:p-5">
+                <h3 className="text-sm font-semibold text-[var(--foreground)]">アクセス設定（共通UI）</h3>
+                <AccessControlTable rows={teamPermissionRows} onChange={setTeamPermissionRows} readOnly={!canEdit} />
+                {canEdit ? (
+                  <Button type="button" variant="default" size="sm" onClick={() => void saveProjectTeamPermissions()}>
+                    保存
+                  </Button>
+                ) : null}
+              </CardContent>
+            </Card>
+
+            <Card className="overflow-hidden shadow-sm">
+              <CardContent className="space-y-3 p-4 sm:p-5">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-[var(--foreground)]">紐づき見積</h3>
+                  {canEdit ? (
+                    <Button type="button" variant="default" size="sm" onClick={() => void openEstimateLinkModal()}>
+                      見積を紐づける
+                    </Button>
+                  ) : null}
+                </div>
+                <div className="overflow-auto">
+                  <table className="w-full min-w-[520px] border-collapse text-sm">
+                    <thead>
+                      <tr className="border-b border-[var(--border)] text-left">
+                        <th className="px-2 py-1">見積番号</th>
+                        <th className="px-2 py-1">件名</th>
+                        <th className="px-2 py-1">ステータス</th>
+                        <th className="px-2 py-1">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {linkedEstimates.map((estimate) => (
+                        <tr key={`project-estimate-${estimate.id}`} className="border-b border-[var(--border)]">
+                          <td className="px-2 py-1">{estimate.estimate_number}</td>
+                          <td className="px-2 py-1">{estimate.title}</td>
+                          <td className="px-2 py-1">{estimate.estimate_status}</td>
+                          <td className="px-2 py-1">
+                            <div className="flex gap-1">
+                              <Button
+                                asChild
+                                type="button"
+                                variant="default"
+                                size="sm"
+                                disabled={!["owner", "editor"].includes(estimate.effective_role ?? "")}
+                                title={!["owner", "editor"].includes(estimate.effective_role ?? "") ? "編集権限がありません" : undefined}
+                              >
+                                <Link href={`/estimates/${estimate.id}`}>{["owner", "editor"].includes(estimate.effective_role ?? "") ? "編集へ" : "詳細へ"}</Link>
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="default"
+                                size="sm"
+                                disabled={!["owner", "editor", "viewer"].includes(estimate.effective_role ?? "")}
+                                onClick={async () => {
+                                  const res = await fetch("/api/portal/estimate-export-html", {
+                                    method: "POST",
+                                    credentials: "include",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ estimate_id: estimate.id }),
+                                  });
+                                  const data = (await res.json()) as { success?: boolean; html?: string };
+                                  if (data.success && data.html) {
+                                    const w = window.open("", "_blank");
+                                    if (w) {
+                                      w.document.open();
+                                      w.document.write(data.html);
+                                      w.document.close();
+                                    }
+                                  }
+                                }}
+                              >
+                                HTML出力へ
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {linkedEstimates.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="px-2 py-3 text-center text-[var(--muted)]">
+                            紐づき見積はありません。
+                          </td>
+                        </tr>
+                      ) : null}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </aside>
       </div>
+
+      <Dialog open={isEstimateLinkModalOpen} onOpenChange={setIsEstimateLinkModalOpen}>
+        <DialogContent aria-label="見積を紐づける">
+          <DialogHeader>
+            <DialogTitle>見積を紐づける</DialogTitle>
+            <DialogDescription>Project側から紐づける見積を選択してください。</DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-auto">
+            <table className="w-full min-w-[520px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-[var(--border)] text-left">
+                  <th className="px-2 py-1">選択</th>
+                  <th className="px-2 py-1">見積番号</th>
+                  <th className="px-2 py-1">件名</th>
+                  <th className="px-2 py-1">ステータス</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allEstimates.map((estimate) => {
+                  const checked = selectedEstimateIds.includes(estimate.id);
+                  return (
+                    <tr key={`estimate-link-candidate-${estimate.id}`} className="border-b border-[var(--border)]">
+                      <td className="px-2 py-1">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            setSelectedEstimateIds((prev) =>
+                              e.target.checked ? [...prev, estimate.id] : prev.filter((id) => id !== estimate.id),
+                            );
+                          }}
+                        />
+                      </td>
+                      <td className="px-2 py-1">{estimate.estimate_number}</td>
+                      <td className="px-2 py-1">{estimate.title}</td>
+                      <td className="px-2 py-1">{estimate.estimate_status}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-3 flex justify-end gap-2">
+            <Button type="button" variant="default" size="sm" onClick={() => setIsEstimateLinkModalOpen(false)}>
+              キャンセル
+            </Button>
+            <Button type="button" variant="accent" size="sm" onClick={() => void saveProjectEstimateLinks()}>
+              保存
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

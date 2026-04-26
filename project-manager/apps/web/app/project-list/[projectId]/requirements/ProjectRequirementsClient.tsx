@@ -41,6 +41,7 @@ import type {
 import { UNSAVED_LEAVE_CONFIRM_MESSAGE } from "@/lib/unsaved-navigation";
 import { useEditHistoryState } from "@/lib/use-edit-history-state";
 import { cn } from "@/lib/utils";
+import { trashDeleteIconButtonClassName } from "@/lib/trash-delete-icon-button-class";
 import { requirementsPrintPreviewChannelName } from "@/lib/requirements-print-preview-channel";
 
 const AUTO_SAVE_INTERVAL_MS = 120_000;
@@ -338,7 +339,7 @@ function RequirementsTableEditor({
                           type="button"
                           variant="destructive"
                           size="sm"
-                          className="h-8 w-8 border-0 bg-transparent p-0 text-red-600 shadow-none hover:bg-[color:color-mix(in_srgb,rgb(239_68_68)_12%,transparent)] hover:text-red-700"
+                          className={trashDeleteIconButtonClassName}
                           disabled={readOnly || content.columnLabels.length <= 1 || ci === 0}
                           onClick={() => removeColumn(ci)}
                           aria-label={`列${ci + 1}を削除`}
@@ -432,7 +433,7 @@ function RequirementsTableEditor({
                     type="button"
                     variant="destructive"
                     size="sm"
-                    className="h-8 w-8 border-0 bg-transparent p-0 text-red-600 shadow-none hover:bg-[color:color-mix(in_srgb,rgb(239_68_68)_12%,transparent)] hover:text-red-700"
+                    className={trashDeleteIconButtonClassName}
                     disabled={readOnly || content.rows.length <= 1}
                     onClick={() => removeRow(ri)}
                     aria-label="行を削除"

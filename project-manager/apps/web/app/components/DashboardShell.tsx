@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ExternalLink } from "lucide-react";
+import { ChevronLeft, ExternalLink, FileText } from "lucide-react";
 import { isExternalPortalRoute, isPortalAppInteractive } from "../lib/portal-app-helpers";
 import { PortalAppIcon } from "../lib/portal-app-icons";
 import { Button, accentButtonSurfaceBaseClassName } from "./ui/button";
@@ -76,6 +76,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
   const pathname = usePathname();
   const isRequirementsPrintPreview = pathname?.includes("/requirements/print-preview") ?? false;
   const isHearingPrintPreview = pathname?.includes("/hearing/print-preview") ?? false;
+  const isEstimatePrintPreview = /^\/estimates\/\d+\/preview\/?$/.test(pathname ?? "");
   const { apps: portalApps } = usePortalApps();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isAiOpen, setIsAiOpen] = useState(false);
@@ -95,7 +96,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
   const loginDisplayName = useMemo(() => clampLoginName(rawLoginName), [rawLoginName]);
 
   const sidebarNavItems = useMemo((): SidebarNavItem[] => {
-    const items: SidebarNavItem[] = [{ key: "dashboard", href: "/", label: "システム更新履歴", icon: "▦" }];
+    const items: SidebarNavItem[] = [{ key: "dashboard", href: "/", label: "Dashboard", icon: "▦" }];
     const pmApp = portalApps.find((a) => a.app_key === "project-manager");
     const appsWithoutPm = portalApps.filter((a) => a.app_key !== "project-manager");
     for (const app of appsWithoutPm) {
@@ -120,6 +121,24 @@ export function DashboardShell({ children }: DashboardShellProps) {
       external: false,
       disabled: !pmInteractive,
       disabledReason: pmApp?.reason ?? null,
+    });
+    items.push({
+      key: "estimate-manager-fixed",
+      href: "/estimates",
+      label: "Estimates",
+      icon: <FileText className="h-3.5 w-3.5" aria-hidden />,
+      external: false,
+      disabled: false,
+      disabledReason: null,
+    });
+    items.push({
+      key: "settings-users-fixed",
+      href: "/settings/users",
+      label: "Settings",
+      icon: "⚙",
+      external: false,
+      disabled: false,
+      disabledReason: null,
     });
     return items;
   }, [portalApps]);
@@ -238,7 +257,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  if (isRequirementsPrintPreview || isHearingPrintPreview) {
+  if (isRequirementsPrintPreview || isHearingPrintPreview || isEstimatePrintPreview) {
     return (
       <div className="h-full min-h-0 bg-[var(--background)] text-[var(--foreground)]">
         <main className="requirements-print-shell-main h-full min-h-0 overflow-auto">{children}</main>

@@ -38,6 +38,8 @@ type ThemeDateFieldProps = {
   controlId?: string;
   /** フォーム監査・オートフィル用の name（任意） */
   name?: string;
+  /** カレンダーパネル下に「今日」ボタンを表示する（既定: true） */
+  showTodayButton?: boolean;
 };
 
 export function ThemeDateField({
@@ -49,6 +51,7 @@ export function ThemeDateField({
   className,
   controlId: controlIdProp,
   name,
+  showTodayButton = true,
 }: ThemeDateFieldProps) {
   const generatedId = useId();
   const id = controlIdProp ?? generatedId;
@@ -112,6 +115,19 @@ export function ThemeDateField({
               jpHoliday: "theme-dp-holiday",
             }}
           />
+          {showTodayButton ? (
+            <Button
+              type="button"
+              variant="ghost"
+              className="mt-1.5 w-full text-xs text-[var(--muted)] hover:text-[var(--foreground)]"
+              onClick={() => {
+                onChange(format(new Date(), "yyyy-MM-dd"));
+                setOpen(false);
+              }}
+            >
+              今日
+            </Button>
+          ) : null}
           {!required ? (
             <Button
               type="button"

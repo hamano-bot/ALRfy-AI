@@ -1,6 +1,6 @@
 "use client";
 
-import { Briefcase, CalendarDays } from "lucide-react";
+import { Briefcase, CalendarDays, FileText } from "lucide-react";
 import type { ReactNode } from "react";
 
 type PortalAppIconProps = {
@@ -19,6 +19,9 @@ export function PortalAppIcon({ appKey, className = "h-5 w-5" }: PortalAppIconPr
   }
   if (appKey === "minutes-record") {
     return <CalendarDays className={cn} aria-hidden />;
+  }
+  if (appKey === "estimate-manager") {
+    return <FileText className={cn} aria-hidden />;
   }
   const letter = appKey.trim().slice(0, 1);
   return (
