@@ -1,5 +1,12 @@
 [
   {
+    "id": "gh-d366f16-moehmwdt",
+    "datetime": "2026-04-26 00:22:01",
+    "version": "push-d366f16",
+    "title": "関連機能を中心に、Merge branch 'main' of https://github.com/hamano-bot/ALRfy-AIを実施しました",
+    "summary": ""
+  },
+  {
     "id": "gh-8212377-moeg1y8u",
     "datetime": "2026-04-25 23:33:48",
     "version": "push-8212377",
@@ -131,12 +138,5 @@
     "version": "v0.1.0",
     "title": "初期ダッシュボードUI",
     "summary": "共通ヘッダーと左サイドメニューの土台を追加しました。"
-  },
-  {
-    "id": "u2",
-    "datetime": "2026-04-16 18:15:00",
-    "version": "v0.0.9",
-    "title": "AIチャット導線",
-    "summary": "フローティングボタンからダミーチャットを開けるようにしました。"
   }
 ]
