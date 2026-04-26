@@ -82,7 +82,7 @@ export function SystemUpdatesCard() {
     <>
       <Card className="backdrop-blur-sm">
         <CardHeader className="pb-3">
-          <CardTitle>システム更新履歴（更新内容はGeminiが要約して自動反映しています）</CardTitle>
+          <CardTitle>システム更新履歴</CardTitle>
         </CardHeader>
         <CardContent>
           {loadError ? (

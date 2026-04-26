@@ -3,7 +3,7 @@ import { PortalAppCards } from "./components/PortalAppCards";
 import { SystemUpdatesCard } from "./components/SystemUpdatesCard";
 
 export const metadata: Metadata = {
-  title: "Dashboard",
+  title: "システム更新履歴",
   description: "アプリ一覧・ショートカット（Project Web）",
 };
 

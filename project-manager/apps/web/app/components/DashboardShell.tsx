@@ -95,7 +95,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
   const loginDisplayName = useMemo(() => clampLoginName(rawLoginName), [rawLoginName]);
 
   const sidebarNavItems = useMemo((): SidebarNavItem[] => {
-    const items: SidebarNavItem[] = [{ key: "dashboard", href: "/", label: "Dashboard", icon: "▦" }];
+    const items: SidebarNavItem[] = [{ key: "dashboard", href: "/", label: "システム更新履歴", icon: "▦" }];
     const pmApp = portalApps.find((a) => a.app_key === "project-manager");
     const appsWithoutPm = portalApps.filter((a) => a.app_key !== "project-manager");
     for (const app of appsWithoutPm) {
