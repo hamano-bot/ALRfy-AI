@@ -77,6 +77,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
   const isRequirementsPrintPreview = pathname?.includes("/requirements/print-preview") ?? false;
   const isHearingPrintPreview = pathname?.includes("/hearing/print-preview") ?? false;
   const isEstimatePrintPreview = /^\/estimates\/\d+\/preview\/?$/.test(pathname ?? "");
+  const isSitemapWorkspace = pathname?.includes("/requirements/sitemap-workspace") ?? false;
   const { apps: portalApps } = usePortalApps();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isAiOpen, setIsAiOpen] = useState(false);
@@ -257,10 +258,18 @@ export function DashboardShell({ children }: DashboardShellProps) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  if (isRequirementsPrintPreview || isHearingPrintPreview || isEstimatePrintPreview) {
+  if (isRequirementsPrintPreview || isHearingPrintPreview || isEstimatePrintPreview || isSitemapWorkspace) {
     return (
       <div className="h-full min-h-0 bg-[var(--background)] text-[var(--foreground)]">
-        <main className="requirements-print-shell-main h-full min-h-0 overflow-auto">{children}</main>
+        <main
+          className={
+            isSitemapWorkspace
+              ? "h-full min-h-0 overflow-hidden p-0"
+              : "requirements-print-shell-main h-full min-h-0 overflow-auto"
+          }
+        >
+          {children}
+        </main>
       </div>
     );
   }

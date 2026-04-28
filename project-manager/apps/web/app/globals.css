@@ -899,6 +899,31 @@ body {
   page-break-inside: avoid;
 }
 
+/* サイトマップ React Flow: パン・ノードドラッグのカーソル（@xyflow 既定に合わせる） */
+.sitemap-flow-canvas-host .react-flow__pane {
+  cursor: grab;
+}
+
+.sitemap-flow-canvas-host .react-flow__pane:active {
+  cursor: grabbing;
+}
+
+.sitemap-flow-canvas-host .react-flow__node {
+  cursor: default;
+}
+
+.sitemap-flow-canvas-host .react-flow__node.selectable {
+  cursor: grab;
+}
+
+.sitemap-flow-canvas-host .react-flow__node.selectable:active {
+  cursor: grabbing;
+}
+
+.sitemap-flow-canvas-host .react-flow__edge-path {
+  cursor: default;
+}
+
 /* サイトマップ: 印刷時はツールバー等を隠し、プレビューを白背景で印字 */
 @media print {
   .requirements-sitemap-no-print {
@@ -1059,7 +1084,8 @@ body {
   background: #fff;
   color: #111827;
   margin: 0 auto;
-  padding: 10mm 12mm;
+  /* top, right, bottom, left — 左・下・右をやや詰めてサイトマップの可視領域を広げる */
+  padding: 9mm 8mm 6mm 7mm;
   border-radius: 10px;
   box-shadow: 0 14px 36px rgba(2, 6, 23, 0.32);
 }
@@ -1269,15 +1295,59 @@ body {
 
 .requirements-print-sitemap-canvas-shell {
   overflow: auto;
-  border: 1px solid #cbd5e1;
-  border-radius: 0.5rem;
-  background: #f8fafc;
+  border: none;
+  border-radius: 0.35rem;
+  background: #ffffff;
 }
 
 .requirements-print-sitemap-canvas {
   position: relative;
-  overflow: hidden;
+  /* ノード bbox 内には収まっていても、辺の stroke / smoothstep がわずかに外側にはみ出すため hidden だと欠ける */
+  overflow: visible;
   background: #fff;
+}
+
+.requirements-print-sitemap-canvas-with-png {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.requirements-print-sitemap-capture-stack {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.requirements-print-sitemap-flow-source {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/*
+ * PNG を scale 表示すると角が透過になり、下層の React Flow が透ける（[ や Parts の P などのゴースト）。
+ * ラスタが載っている間はソース図を非表示にする（toPng 直前は pngUrl が null のため再表示される）。
+ */
+.requirements-print-sitemap-flow-source-beneath-png-hidden {
+  display: none !important;
+}
+
+.requirements-print-sitemap-png-img {
+  position: relative;
+  z-index: 1;
+  display: block;
+  margin: 0 auto;
+  object-fit: contain;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+/* 印刷プレビュー: サイトマップ PNG のみ 90% 表示（max-width 系が transform と干渉しないよう解除） */
+.requirements-print-sitemap-png-img.requirements-print-sitemap-png-display-scaled {
+  max-width: none;
+  max-height: none;
 }
 
 .requirements-print-sitemap-list-fallback {
@@ -1462,7 +1532,7 @@ body {
     min-height: 210mm;
     max-height: 210mm;
     margin: 0;
-    padding: 10mm 12mm;
+    padding: 9mm 8mm 6mm 7mm;
     border-radius: 0;
     border: 0;
     box-shadow: none;
@@ -1500,9 +1570,60 @@ body {
     overflow: hidden;
   }
 
+  .requirements-print-sitemap-flow-source {
+    display: none !important;
+  }
+
   .requirements-print-sitemap-canvas {
     transform: scale(1);
     transform-origin: top left;
+  }
+
+  /* サイトマップ図: 固定 px のままだと用紙の余白内より広く PDF で欠ける。印刷時は幅 100% で縮小し、シートの overflow も緩める */
+  .requirements-print-sheet:has(.requirements-print-sitemap) {
+    overflow: visible;
+  }
+
+  .requirements-print-sitemap {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .requirements-print-sitemap .requirements-print-sitemap-canvas-wrap {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .requirements-print-sitemap .requirements-print-sitemap-canvas-shell {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: visible !important;
+  }
+
+  .requirements-print-sitemap .requirements-print-sitemap-canvas {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    box-sizing: border-box;
+  }
+
+  .requirements-print-sitemap .requirements-print-sitemap-capture-stack {
+    width: 100% !important;
+    height: auto !important;
+    position: relative;
+  }
+
+  .requirements-print-sitemap .requirements-print-sitemap-png-img,
+  .requirements-print-sitemap .requirements-print-sitemap-png-img.requirements-print-sitemap-png-display-scaled {
+    width: 100% !important;
+    height: auto !important;
+    max-width: 100% !important;
+    max-height: 168mm !important;
+    object-fit: contain;
+    transform: scale(0.9);
+    transform-origin: center center;
   }
 
   .hearing-print-no-print {

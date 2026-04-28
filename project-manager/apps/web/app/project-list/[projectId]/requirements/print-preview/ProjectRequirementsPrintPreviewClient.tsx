@@ -5,17 +5,18 @@ import { ChevronDown, ChevronLeft, ChevronRight, Move, Printer } from "lucide-re
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { Button } from "@/app/components/ui/button";
 import { Card, CardContent } from "@/app/components/ui/card";
+import { RequirementsSitemapFlowCanvas } from "@/app/components/requirements/RequirementsSitemapFlowCanvas";
+import type { RequirementsDocBody, RequirementsPage, SitemapNode, SitemapNodePosition } from "@/lib/requirements-doc-types";
 import {
-  PreviewSitemapCanvas,
+  A4_LANDSCAPE_CANVAS_HEIGHT,
+  A4_LANDSCAPE_CANVAS_WIDTH,
   type SitemapPreviewDiagramLayout,
-} from "@/app/components/requirements/RequirementsSitemapEditor";
-import type {
-  RequirementsDocBody,
-  RequirementsPage,
-  RequirementsPageContentSitemap,
-  SitemapNode,
-} from "@/lib/requirements-doc-types";
+} from "@/lib/requirements-sitemap-layout";
 import { requirementsPrintPreviewChannelName } from "@/lib/requirements-print-preview-channel";
+import { toPng } from "html-to-image";
+
+/** 右端欠け対策: ラスタ PNG の表示のみ一様縮小（キャプチャ解像度・A4 論理サイズはそのまま） */
+const PRINT_PREVIEW_SITEMAP_PNG_DISPLAY_SCALE = 0.9;
 import { cn } from "@/lib/utils";
 
 type PrintPreviewClientProps = {
@@ -36,13 +37,12 @@ type RenderSheet = {
   table?: { headers: string[]; rows: string[][] };
   split?: { richtextDoc: JSONContent; headers: string[]; rows: string[][] };
   sitemapRoot?: SitemapNode;
+  sitemapNodePositions?: Record<string, SitemapNodePosition>;
+  sitemapDiagramLayout?: SitemapPreviewDiagramLayout;
 };
 
 const TABLE_ROWS_PER_SHEET = 10;
 const SPLIT_TABLE_ROWS_PER_SHEET = 7;
-const A4_LANDSCAPE_CANVAS_WIDTH = 1122;
-const A4_LANDSCAPE_CANVAS_HEIGHT = 794;
-
 function chunkList<T>(items: T[], size: number): T[][] {
   if (items.length === 0) {
     return [[]];
@@ -120,6 +120,8 @@ function buildSheets(page: RequirementsPage): RenderSheet[] {
       branchIndex: 0,
       title: pageTitle(baseTitle, 0),
       sitemapRoot: page.content.root,
+      sitemapNodePositions: page.content.nodePositions,
+      sitemapDiagramLayout: page.content.diagramLayout === "vertical" ? "vertical" : "horizontal",
     },
   ];
 }
@@ -414,40 +416,132 @@ function SheetArticle({ sheet }: { sheet: RenderSheet }) {
 
       {sheet.mode === "sitemap" ? (
         <section className="requirements-print-sitemap">
-          {sheet.sitemapRoot ? <SitemapPreviewBlock root={sheet.sitemapRoot} /> : <p>（内容なし）</p>}
+          {sheet.sitemapRoot ? (
+            <SitemapPreviewBlock
+              root={sheet.sitemapRoot}
+              nodePositions={sheet.sitemapNodePositions}
+              diagramLayout={sheet.sitemapDiagramLayout ?? "horizontal"}
+            />
+          ) : (
+            <p>（内容なし）</p>
+          )}
         </section>
       ) : null}
     </article>
   );
 }
 
-function SitemapPreviewBlock({ root }: { root: SitemapNode }) {
-  const [layout, setLayout] = useState<SitemapPreviewDiagramLayout>("horizontal");
+function waitNextFrame(): Promise<void> {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+function SitemapPreviewBlock({
+  root,
+  nodePositions: nodePositionsProp,
+  diagramLayout,
+}: {
+  root: SitemapNode;
+  nodePositions?: Record<string, SitemapNodePosition>;
+  diagramLayout: SitemapPreviewDiagramLayout;
+}) {
+  const [localPositions, setLocalPositions] = useState<Record<string, SitemapNodePosition> | undefined>(nodePositionsProp);
+  const [pngUrl, setPngUrl] = useState<string | null>(null);
+  const captureWrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setLocalPositions(nodePositionsProp);
+  }, [nodePositionsProp, root]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      setPngUrl(null);
+      await waitNextFrame();
+      await waitNextFrame();
+      if (cancelled) {
+        return;
+      }
+      const wrap = captureWrapRef.current;
+      const el = wrap?.querySelector<HTMLElement>("[data-sitemap-flow-export]");
+      if (!el) {
+        return;
+      }
+      try {
+        if (typeof document !== "undefined" && "fonts" in document) {
+          try {
+            await (document as Document & { fonts?: FontFaceSet }).fonts?.ready;
+          } catch {
+            /* ignore */
+          }
+        }
+        const dataUrl = await toPng(el, {
+          pixelRatio: 2,
+          cacheBust: true,
+          backgroundColor: "#ffffff",
+          width: A4_LANDSCAPE_CANVAS_WIDTH,
+          height: A4_LANDSCAPE_CANVAS_HEIGHT,
+          style: {
+            width: `${A4_LANDSCAPE_CANVAS_WIDTH}px`,
+            height: `${A4_LANDSCAPE_CANVAS_HEIGHT}px`,
+          },
+        });
+        if (!cancelled) {
+          setPngUrl(dataUrl);
+        }
+      } catch {
+        if (!cancelled) {
+          setPngUrl(null);
+        }
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [root, localPositions, diagramLayout]);
+
   return (
     <div className="requirements-print-sitemap-canvas-wrap">
-      <div className="requirements-print-sitemap-toolbar requirements-print-no-print">
-        <label htmlFor="sitemap-layout" className="text-xs text-[var(--muted)]">
-          レイアウト
-        </label>
-        <select
-          id="sitemap-layout"
-          className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800"
-          value={layout}
-          onChange={(e) => setLayout(e.target.value as SitemapPreviewDiagramLayout)}
-        >
-          <option value="horizontal">水平（右方向）</option>
-          <option value="vertical">垂直（下方向）</option>
-        </select>
-      </div>
       <div className="requirements-print-sitemap-canvas-shell">
         <div
-          className="requirements-print-sitemap-canvas"
+          className="requirements-print-sitemap-canvas requirements-print-sitemap-canvas-with-png"
           style={{
             width: `${A4_LANDSCAPE_CANVAS_WIDTH}px`,
             height: `${A4_LANDSCAPE_CANVAS_HEIGHT}px`,
           }}
         >
-          <PreviewSitemapCanvas root={root} diagramLayout={layout} />
+          <div ref={captureWrapRef} className="requirements-print-sitemap-capture-stack">
+            <div
+              className={cn(
+                "requirements-print-sitemap-flow-source requirements-print-no-print",
+                pngUrl && "requirements-print-sitemap-flow-source-beneath-png-hidden",
+              )}
+            >
+              <RequirementsSitemapFlowCanvas
+                root={root}
+                diagramLayout={diagramLayout}
+                nodePositions={localPositions}
+                readOnly
+                showDotGrid={false}
+              />
+            </div>
+            {pngUrl ? (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element -- data URL from html-to-image raster of React Flow */}
+                <img
+                  src={pngUrl}
+                  alt=""
+                  width={A4_LANDSCAPE_CANVAS_WIDTH}
+                  height={A4_LANDSCAPE_CANVAS_HEIGHT}
+                  className="requirements-print-sitemap-png-img requirements-print-sitemap-png-display-scaled"
+                  style={{
+                    transform: `scale(${PRINT_PREVIEW_SITEMAP_PNG_DISPLAY_SCALE})`,
+                    transformOrigin: "center center",
+                  }}
+                />
+              </>
+            ) : null}
+          </div>
         </div>
       </div>
       <div className="requirements-print-sitemap-list-fallback">
@@ -650,24 +744,6 @@ export function ProjectRequirementsPrintPreviewClient({
                   <span className="block line-clamp-2">{p.title || p.pageType}</span>
                 </button>
               ))}
-              <div className="mt-1 border-t border-[color:color-mix(in_srgb,var(--border)_78%,transparent)] pt-1">
-                <p className="mb-1 text-[10px] text-[var(--muted)]">印刷ページアンカー</p>
-                {allSheets.map((s, idx) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => scrollToSheet(idx)}
-                    className={cn(
-                      "block w-full rounded px-2 py-1 text-left text-xs",
-                      idx === activeSheetIndex
-                        ? "bg-[color:color-mix(in_srgb,var(--accent)_16%,var(--surface)_84%)]"
-                        : "hover:bg-[color:color-mix(in_srgb,var(--surface)_90%,transparent)]",
-                    )}
-                  >
-                    {s.title}
-                  </button>
-                ))}
-              </div>
             </CardContent>
           </Card>
         ) : null}

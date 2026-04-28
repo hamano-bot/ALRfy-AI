@@ -35,13 +35,32 @@ try {
 
 $standard = [];
 if ($fieldType === 'item_name') {
-    $stmt = $pdo->query('SELECT DISTINCT item_name FROM estimate_rule_items WHERE item_name IS NOT NULL AND item_name <> "" ORDER BY item_name ASC LIMIT 300');
+    $stmt = $pdo->query(
+        'SELECT item_name, unit_type, unit_price
+         FROM estimate_item_master
+         WHERE is_active = 1 AND item_name IS NOT NULL AND item_name <> ""
+         ORDER BY sort_order ASC, item_name ASC
+         LIMIT 300'
+    );
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     if (is_array($rows)) {
         foreach ($rows as $row) {
-            if (is_array($row) && is_string($row['item_name'] ?? null)) {
-                $standard[] = $row['item_name'];
+            if (!is_array($row) || !is_string($row['item_name'] ?? null)) {
+                continue;
             }
+            $name = $row['item_name'];
+            $unitType = is_string($row['unit_type'] ?? null) ? $row['unit_type'] : 'set';
+            $rawPrice = $row['unit_price'] ?? null;
+            $unitPrice = 0.0;
+            if ($rawPrice !== null && $rawPrice !== '') {
+                $unitPrice = (float)$rawPrice;
+            }
+            $standard[] = [
+                'value' => $name,
+                'unit_type' => $unitType,
+                'unit_price' => $unitPrice,
+                'from' => 'master',
+            ];
         }
     }
 } else {

@@ -35,10 +35,12 @@ if ($estimateId <= 0) {
 }
 
 $stmt = $pdo->prepare(
-    'SELECT id, estimate_id, operation_type, operator_user_id, detail_json, created_at
-     FROM estimate_operation_logs
+    'SELECT l.id, l.estimate_id, l.operation_type, l.operator_user_id, l.detail_json, l.created_at,
+            COALESCE(NULLIF(TRIM(u.display_name), \'\'), NULLIF(TRIM(u.email), \'\')) AS operator_label
+     FROM estimate_operation_logs l
+     LEFT JOIN users u ON u.id = l.operator_user_id
      WHERE estimate_id = :estimate_id
-     ORDER BY id DESC
+     ORDER BY l.id DESC
      LIMIT 200'
 );
 $stmt->execute([':estimate_id' => $estimateId]);

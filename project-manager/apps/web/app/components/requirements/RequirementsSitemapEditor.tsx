@@ -28,77 +28,50 @@ import {
   collectSitemapLabelSuggestions,
   type RequirementsPageContentSitemap,
   type SitemapNode,
+  type SitemapNodePosition,
 } from "@/lib/requirements-sitemap-schema";
 import { cn } from "@/lib/utils";
 import { toPng } from "html-to-image";
-import { GripVertical, Loader2, Maximize2, Plus, Trash2, ZoomIn, ZoomOut } from "lucide-react";
+import { ExternalLink, GripVertical, Loader2, Plus, Trash2, ZoomIn, ZoomOut } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { RequirementsSitemapFlowCanvas } from "@/app/components/requirements/RequirementsSitemapFlowCanvas";
+import {
+  SitemapWorkspaceDraggableHierarchyPanel,
+  SitemapWorkspaceDraggableToolbarPanel,
+} from "@/app/components/requirements/SitemapWorkspaceFloatingPanels";
+import type { SitemapPreviewDiagramLayout } from "@/lib/requirements-sitemap-layout";
+import {
+  A4_LANDSCAPE_CANVAS_HEIGHT,
+  A4_LANDSCAPE_CANVAS_WIDTH,
+  PREVIEW_ZOOM_MAX,
+  PREVIEW_ZOOM_MIN,
+} from "@/lib/requirements-sitemap-layout";
+import { pruneSitemapNodePositions } from "@/lib/requirements-sitemap-positions";
 
 const DND_MIME = "application/x-alrfy-sitemap-node";
 
-export type SitemapPreviewDiagramLayout = "horizontal" | "vertical";
+export type { SitemapPreviewDiagramLayout } from "@/lib/requirements-sitemap-layout";
 
 type Props = {
   content: RequirementsPageContentSitemap;
   readOnly: boolean;
   onChange: (next: RequirementsPageContentSitemap) => void;
+  /** 別タブワークスペースの URL（未指定ならボタン非表示） */
+  sitemapWorkspaceHref?: string;
+  /** 別タブ用にプレビュー領域を広げる */
+  editorLayout?: "default" | "workspace";
+  /** 別タブ: 要件定義へ戻るリンク */
+  workspaceBackHref?: string;
+  /** 別タブ: ツールバーの保存 */
+  onWorkspaceSave?: () => void | Promise<void>;
+  workspaceSaveDisabled?: boolean;
+  workspaceSaving?: boolean;
 };
 
 function waitNextFrame(): Promise<void> {
   return new Promise((resolve) => requestAnimationFrame(() => resolve()));
 }
-
-const A4_LANDSCAPE_CANVAS_WIDTH = 1122;
-const A4_LANDSCAPE_CANVAS_HEIGHT = 794;
-const CANVAS_PADDING = 80;
-const NODE_BOX_WIDTH_VERTICAL = 240 * 3;
-const NODE_BOX_WIDTH_HORIZONTAL = Math.round(NODE_BOX_WIDTH_VERTICAL * 1.5);
-/** Preview body: matches box div lineHeight / padding at full width (see PreviewSitemapCanvas). */
-const PREVIEW_BODY_LINE_HEIGHT = 1.25;
-const PREVIEW_BODY_FONT_BASE = 14;
-const PREVIEW_BODY_PAD_Y = 8;
-const PREVIEW_BODY_BORDER_Y = 4;
-const PREVIEW_SCREEN_BODY_MAX_LINES_HORIZONTAL = 2;
-const PREVIEW_SCREEN_BODY_MAX_LINES_VERTICAL = 3;
-const HORIZONTAL_LABEL_OFFSET_TOP_PX = 2;
-const HORIZONTAL_BOX_HEIGHT_MULTIPLIER = 2.4;
-const HORIZONTAL_LEVEL_GAP_MULTIPLIER = 1.2;
-const VERTICAL_BOX_HEIGHT_MULTIPLIER = 2;
-const VERTICAL_LEVEL_GAP_MULTIPLIER = 1.4;
-
-function nodeScreenBoxBorderBoxHeightPx(maxBodyLines: number): number {
-  const innerText = Math.ceil(maxBodyLines * PREVIEW_BODY_FONT_BASE * PREVIEW_BODY_LINE_HEIGHT);
-  return innerText + 2 * PREVIEW_BODY_PAD_Y + PREVIEW_BODY_BORDER_Y;
-}
-
-const NODE_BOX_HEIGHT_HORIZONTAL = Math.round(
-  nodeScreenBoxBorderBoxHeightPx(PREVIEW_SCREEN_BODY_MAX_LINES_HORIZONTAL) * 2 * HORIZONTAL_BOX_HEIGHT_MULTIPLIER,
-);
-const NODE_BOX_HEIGHT_VERTICAL = Math.round(
-  nodeScreenBoxBorderBoxHeightPx(PREVIEW_SCREEN_BODY_MAX_LINES_VERTICAL) * 4 * VERTICAL_BOX_HEIGHT_MULTIPLIER,
-);
-const NODE_LABEL_HEIGHT = 16;
-const NODE_LABEL_GAP_PX = 10;
-const NODE_AFTER_LABEL_GAP_PX = 2;
-const NODE_STACK_HEIGHT_HORIZONTAL =
-  NODE_BOX_HEIGHT_HORIZONTAL + NODE_LABEL_GAP_PX + NODE_LABEL_HEIGHT + NODE_AFTER_LABEL_GAP_PX;
-const NODE_STACK_HEIGHT_VERTICAL =
-  NODE_BOX_HEIGHT_VERTICAL + NODE_LABEL_GAP_PX + NODE_LABEL_HEIGHT + NODE_AFTER_LABEL_GAP_PX;
-function nodeScreenBoxTopY(n: LayoutNode, direction: SitemapPreviewDiagramLayout): number {
-  const gap = NODE_LABEL_GAP_PX * (n.w / NODE_BOX_WIDTH_VERTICAL);
-  const labelOffset = direction === "horizontal" ? HORIZONTAL_LABEL_OFFSET_TOP_PX : 0;
-  return n.y + n.labelHeight + labelOffset + gap;
-}
-
-const LEVEL_GAP_HORIZONTAL = 170;
-const LEVEL_GAP_HORIZONTAL_SCALED = Math.round(LEVEL_GAP_HORIZONTAL * HORIZONTAL_LEVEL_GAP_MULTIPLIER);
-const LEVEL_GAP_VERTICAL = 180;
-const LEVEL_GAP_VERTICAL_SCALED = Math.round(LEVEL_GAP_VERTICAL * VERTICAL_LEVEL_GAP_MULTIPLIER);
-const SIBLING_GAP_VERTICAL = 36;
-const SIBLING_GAP_HORIZONTAL = Math.round(SIBLING_GAP_VERTICAL * 2);
-const PREVIEW_LINE_COLOR = "rgba(0, 0, 0, 0.9)";
-const PREVIEW_ZOOM_MIN = 0.4;
-const PREVIEW_ZOOM_MAX = 2;
 
 function collectExpandedDefault(root: SitemapNode): Set<string> {
   const s = new Set<string>();
@@ -189,388 +162,6 @@ function SitemapLabelInput({
   );
 }
 
-type LayoutNode = {
-  id: string;
-  depth: number;
-  labelText: string;
-  screenName: string;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  boxHeight: number;
-  labelHeight: number;
-  screenFontPx: number;
-  labelFontPx: number;
-};
-
-type LayoutEdge = { id: string; points: Array<{ x: number; y: number }> };
-
-type AxisNode = {
-  id: string;
-  labelText: string;
-  screenName: string;
-  depth: number;
-  primary: number;
-  crossCenter: number;
-  boxHeight: number;
-  labelHeight: number;
-  totalHeight: number;
-  screenFontPx: number;
-  labelFontPx: number;
-};
-
-type NodeMetric = {
-  labelText: string;
-  labelHeight: number;
-  boxHeight: number;
-  totalHeight: number;
-  screenFontPx: number;
-  labelFontPx: number;
-};
-
-function estimateLines(text: string, charsPerLine: number): number {
-  if (!text.trim()) {
-    return 1;
-  }
-  return Math.max(1, Math.ceil(text.length / Math.max(1, charsPerLine)));
-}
-
-function previewScreenInnerTextHeightPx(borderBoxHeight: number): number {
-  return Math.max(8, borderBoxHeight - 2 * PREVIEW_BODY_PAD_Y - PREVIEW_BODY_BORDER_Y);
-}
-
-/** Slightly conservative for bold CJK so preview does not clip before we shrink enough. */
-const PREVIEW_SCREEN_CHAR_EM = 0.55;
-
-function fitFontSizeByTextLength(
-  text: string,
-  boxWidth: number,
-  boxHeight: number,
-  base: number,
-  min: number,
-  maxLines: number,
-): number {
-  const inner = previewScreenInnerTextHeightPx(boxHeight);
-  for (let size = base; size >= min; size -= 1) {
-    const charsPerLine = Math.max(4, Math.floor((boxWidth - 24) / (size * PREVIEW_SCREEN_CHAR_EM)));
-    const lines = estimateLines(text, charsPerLine);
-    const needed = lines * (size * PREVIEW_BODY_LINE_HEIGHT);
-    if (lines <= maxLines && needed <= inner) {
-      return size;
-    }
-  }
-  return min;
-}
-
-/** Label strip uses lineHeight 1.2 and is not the padded screen-name box; keep separate from fitFontSizeByTextLength. */
-function fitLabelFontSize(text: string, boxWidth: number, stripHeight: number, base: number, min: number): number {
-  let size = base;
-  while (size > min) {
-    const charsPerLine = Math.max(4, Math.floor((boxWidth - 24) / (size * 0.62)));
-    const lines = estimateLines(text, charsPerLine);
-    const needed = lines * (size * 1.2);
-    if (needed <= stripHeight - 4) {
-      break;
-    }
-    size -= 1;
-  }
-  return Math.max(min, size);
-}
-
-function collectNodeMetrics(root: SitemapNode, direction: SitemapPreviewDiagramLayout): Map<string, NodeMetric> {
-  const boxWidth = direction === "horizontal" ? NODE_BOX_WIDTH_HORIZONTAL : NODE_BOX_WIDTH_VERTICAL;
-  const boxHeight = direction === "horizontal" ? NODE_BOX_HEIGHT_HORIZONTAL : NODE_BOX_HEIGHT_VERTICAL;
-  const totalHeight = direction === "horizontal" ? NODE_STACK_HEIGHT_HORIZONTAL : NODE_STACK_HEIGHT_VERTICAL;
-  const maxLines = direction === "horizontal" ? PREVIEW_SCREEN_BODY_MAX_LINES_HORIZONTAL : PREVIEW_SCREEN_BODY_MAX_LINES_VERTICAL;
-  const m = new Map<string, NodeMetric>();
-  const walk = (n: SitemapNode) => {
-    const labelText = n.labels.map((l) => l.trim()).filter(Boolean).join("  ");
-    const labelHeight = NODE_LABEL_HEIGHT;
-    const screenFontPx = fitFontSizeByTextLength(n.screenName, boxWidth, boxHeight, 14, 8, maxLines);
-    const labelFontPx = fitLabelFontSize(labelText || " ", boxWidth, NODE_LABEL_HEIGHT, 11, 9);
-    m.set(n.id, {
-      labelText,
-      labelHeight,
-      boxHeight,
-      totalHeight,
-      screenFontPx,
-      labelFontPx,
-    });
-    for (const c of n.children) {
-      walk(c);
-    }
-  };
-  walk(root);
-  return m;
-}
-
-function buildTreeLayout(root: SitemapNode, direction: SitemapPreviewDiagramLayout): { nodes: LayoutNode[]; edges: LayoutEdge[] } {
-  const metrics = collectNodeMetrics(root, direction);
-  const axisNodes = new Map<string, AxisNode>();
-  const edgesAxis: Array<{ from: string; to: string }> = [];
-  const nodeBoxWidth = direction === "horizontal" ? NODE_BOX_WIDTH_HORIZONTAL : NODE_BOX_WIDTH_VERTICAL;
-  const siblingGap = direction === "horizontal" ? SIBLING_GAP_HORIZONTAL : SIBLING_GAP_VERTICAL;
-  const levelGap = direction === "horizontal" ? LEVEL_GAP_HORIZONTAL_SCALED : LEVEL_GAP_VERTICAL_SCALED;
-  const maxNodeTotalHeight = direction === "horizontal" ? NODE_STACK_HEIGHT_HORIZONTAL : NODE_STACK_HEIGHT_VERTICAL;
-  const defaultBoxHeight = direction === "horizontal" ? NODE_BOX_HEIGHT_HORIZONTAL : NODE_BOX_HEIGHT_VERTICAL;
-  const defaultStackHeight = direction === "horizontal" ? NODE_STACK_HEIGHT_HORIZONTAL : NODE_STACK_HEIGHT_VERTICAL;
-  const minPrimary = CANVAS_PADDING;
-  const primaryStep = direction === "horizontal" ? nodeBoxWidth + levelGap : maxNodeTotalHeight + levelGap;
-
-  const place = (
-    node: SitemapNode,
-    depth: number,
-    startCross: number,
-    parentPrimary: number | null,
-    parentTotalHeight: number | null,
-  ): { span: number; center: number } => {
-    const metric = metrics.get(node.id) ?? {
-      labelText: "",
-      labelHeight: NODE_LABEL_HEIGHT,
-      boxHeight: defaultBoxHeight,
-      totalHeight: defaultStackHeight,
-      screenFontPx: 14,
-      labelFontPx: 11,
-    };
-    const crossSize = direction === "horizontal" ? metric.totalHeight : nodeBoxWidth;
-    if (node.children.length === 0) {
-      const center = startCross + crossSize / 2;
-      const primary =
-        direction === "horizontal"
-          ? minPrimary + depth * primaryStep
-          : parentPrimary === null
-            ? minPrimary
-            : parentPrimary + (parentTotalHeight ?? maxNodeTotalHeight) + levelGap;
-      axisNodes.set(node.id, {
-        id: node.id,
-        labelText: metric.labelText,
-        screenName: node.screenName,
-        depth,
-        primary,
-        crossCenter: center,
-        boxHeight: metric.boxHeight,
-        labelHeight: metric.labelHeight,
-        totalHeight: metric.totalHeight,
-        screenFontPx: metric.screenFontPx,
-        labelFontPx: metric.labelFontPx,
-      });
-      return { span: crossSize, center };
-    }
-    let cursor = startCross;
-    let totalSpan = 0;
-    const childCenters: number[] = [];
-    for (let i = 0; i < node.children.length; i++) {
-      const child = node.children[i];
-      const primaryForNode =
-        direction === "horizontal"
-          ? minPrimary + depth * primaryStep
-          : parentPrimary === null
-            ? minPrimary
-            : parentPrimary + (parentTotalHeight ?? maxNodeTotalHeight) + levelGap;
-      const childPlaced = place(child, depth + 1, cursor, primaryForNode, metric.totalHeight);
-      childCenters.push(childPlaced.center);
-      edgesAxis.push({ from: node.id, to: child.id });
-      cursor += childPlaced.span + siblingGap;
-      totalSpan += childPlaced.span;
-      if (i < node.children.length - 1) {
-        totalSpan += siblingGap;
-      }
-    }
-    totalSpan = Math.max(totalSpan, crossSize);
-    const center = startCross + totalSpan / 2;
-    const primary =
-      direction === "horizontal"
-        ? minPrimary + depth * primaryStep
-        : parentPrimary === null
-          ? minPrimary
-          : parentPrimary + (parentTotalHeight ?? maxNodeTotalHeight) + levelGap;
-    axisNodes.set(node.id, {
-      id: node.id,
-      labelText: metric.labelText,
-      screenName: node.screenName,
-      depth,
-      primary,
-      crossCenter: center,
-      boxHeight: metric.boxHeight,
-      labelHeight: metric.labelHeight,
-      totalHeight: metric.totalHeight,
-      screenFontPx: metric.screenFontPx,
-      labelFontPx: metric.labelFontPx,
-    });
-    return { span: totalSpan, center };
-  };
-
-  const placed = place(root, 0, CANVAS_PADDING, null, null);
-  const maxCross = placed.span + CANVAS_PADDING * 2;
-  const maxDepth = Math.max(...[...axisNodes.values()].map((n) => n.depth));
-  const maxPrimary =
-    direction === "horizontal"
-      ? minPrimary + maxDepth * primaryStep + nodeBoxWidth + CANVAS_PADDING
-      : Math.max(...[...axisNodes.values()].map((n) => n.primary + n.totalHeight), minPrimary + maxNodeTotalHeight) + CANVAS_PADDING;
-
-  const scale = Math.min(
-    (A4_LANDSCAPE_CANVAS_WIDTH - CANVAS_PADDING * 2) / (direction === "horizontal" ? maxPrimary : maxCross),
-    (A4_LANDSCAPE_CANVAS_HEIGHT - CANVAS_PADDING * 2) / (direction === "horizontal" ? maxCross : maxPrimary),
-    1,
-  );
-
-  const nodes: LayoutNode[] = [];
-  for (const n of axisNodes.values()) {
-    if (direction === "horizontal") {
-      nodes.push({
-        id: n.id,
-        depth: n.depth,
-        labelText: n.labelText,
-        screenName: n.screenName,
-        x: n.primary * scale,
-        y: (n.crossCenter - n.totalHeight / 2) * scale,
-        w: nodeBoxWidth * scale,
-        h: n.totalHeight * scale,
-        boxHeight: n.boxHeight * scale,
-        labelHeight: n.labelHeight * scale,
-        screenFontPx: n.screenFontPx * scale,
-        labelFontPx: n.labelFontPx * scale,
-      });
-    } else {
-      nodes.push({
-        id: n.id,
-        depth: n.depth,
-        labelText: n.labelText,
-        screenName: n.screenName,
-        x: (n.crossCenter - nodeBoxWidth / 2) * scale,
-        y: n.primary * scale,
-        w: nodeBoxWidth * scale,
-        h: n.totalHeight * scale,
-        boxHeight: n.boxHeight * scale,
-        labelHeight: n.labelHeight * scale,
-        screenFontPx: n.screenFontPx * scale,
-        labelFontPx: n.labelFontPx * scale,
-      });
-    }
-  }
-
-  const nodeById = new Map(nodes.map((n) => [n.id, n]));
-  const edges: LayoutEdge[] = edgesAxis
-    .map((e, idx) => {
-      const from = nodeById.get(e.from);
-      const to = nodeById.get(e.to);
-      if (!from || !to) {
-        return null;
-      }
-      if (direction === "horizontal") {
-        const fromBoxTop = nodeScreenBoxTopY(from, direction);
-        const toBoxTop = nodeScreenBoxTopY(to, direction);
-        const sx = from.x + from.w;
-        const sy = Math.round(fromBoxTop + from.boxHeight / 2);
-        const ex = to.x;
-        const ey = Math.round(toBoxTop + to.boxHeight / 2);
-        const mx = Math.round((sx + ex) / 2);
-        return { id: `e-${idx}`, points: [{ x: sx, y: sy }, { x: mx, y: sy }, { x: mx, y: ey }, { x: ex, y: ey }] };
-      }
-      const fromBoxTop = nodeScreenBoxTopY(from, direction);
-      const toBoxTop = nodeScreenBoxTopY(to, direction);
-      const sx = Math.round(from.x + from.w / 2);
-      const sy = Math.round(fromBoxTop + from.boxHeight);
-      const ex = Math.round(to.x + to.w / 2);
-      const ey = Math.round(toBoxTop);
-      const my = Math.round((sy + ey) / 2);
-      return { id: `e-${idx}`, points: [{ x: sx, y: sy }, { x: sx, y: my }, { x: ex, y: my }, { x: ex, y: ey }] };
-    })
-    .filter((v): v is LayoutEdge => v !== null);
-
-  return { nodes, edges };
-}
-
-export function PreviewSitemapCanvas({ root, diagramLayout }: { root: SitemapNode; diagramLayout: SitemapPreviewDiagramLayout }) {
-  const { nodes, edges } = useMemo(() => buildTreeLayout(root, diagramLayout), [root, diagramLayout]);
-  const labelOffsetTop = diagramLayout === "horizontal" ? HORIZONTAL_LABEL_OFFSET_TOP_PX : 0;
-  return (
-    <div
-      style={{
-        position: "relative",
-        background: "#ffffff",
-        width: `${A4_LANDSCAPE_CANVAS_WIDTH}px`,
-        height: `${A4_LANDSCAPE_CANVAS_HEIGHT}px`,
-      }}
-    >
-      <svg
-        width={A4_LANDSCAPE_CANVAS_WIDTH}
-        height={A4_LANDSCAPE_CANVAS_HEIGHT}
-        style={{ position: "absolute", inset: 0 }}
-        shapeRendering="geometricPrecision"
-      >
-        {edges.map((e) => (
-          <path
-            key={e.id}
-            fill="none"
-            stroke={PREVIEW_LINE_COLOR}
-            strokeWidth={1.2}
-            strokeLinejoin="round"
-            strokeLinecap="round"
-            d={e.points
-              .map((p, i) => `${i === 0 ? "M" : "L"} ${Math.round(p.x)} ${Math.round(p.y)}`)
-              .join(" ")}
-          />
-        ))}
-      </svg>
-      {nodes.map((n) => (
-        <div
-          key={n.id}
-          style={{
-            position: "absolute",
-            left: `${n.x}px`,
-            top: `${n.y}px`,
-            width: `${n.w}px`,
-          }}
-        >
-          {n.labelText ? (
-            <div
-              className="px-1 text-slate-500"
-              style={{
-                fontSize: `${Math.max(9, Math.min(11, n.labelFontPx))}px`,
-                lineHeight: "1.2",
-                minHeight: `${n.labelHeight}px`,
-                marginTop: `${labelOffsetTop}px`,
-                marginBottom: `${NODE_LABEL_GAP_PX * (n.w / NODE_BOX_WIDTH_VERTICAL)}px`,
-              }}
-            >
-              {n.labelText}
-            </div>
-          ) : (
-            <div style={{ minHeight: `${n.labelHeight + labelOffsetTop + NODE_LABEL_GAP_PX * (n.w / NODE_BOX_WIDTH_VERTICAL)}px` }} />
-          )}
-          <div
-            style={{
-              borderRadius: "8px",
-              border: "2px solid #1f2937",
-              boxSizing: "border-box",
-              background: "#ffffff",
-              color: "#0f172a",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              textAlign: "center",
-              fontWeight: 600,
-              padding: `${Math.max(6, 8 * (n.w / NODE_BOX_WIDTH_VERTICAL))}px ${Math.max(8, 12 * (n.w / NODE_BOX_WIDTH_VERTICAL))}px`,
-              height: `${n.boxHeight}px`,
-              minHeight: `${n.boxHeight}px`,
-              maxHeight: `${n.boxHeight}px`,
-              fontSize: `${Math.max(8, Math.min(14, n.screenFontPx))}px`,
-              lineHeight: PREVIEW_BODY_LINE_HEIGHT,
-              overflow: "hidden",
-              overflowWrap: "anywhere",
-              wordBreak: "break-all",
-              whiteSpace: "pre-wrap",
-            }}
-          >
-            {n.screenName}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 type TreeRowProps = {
   node: SitemapNode;
@@ -821,7 +412,19 @@ function ChildUl({ parent, root, depth, expanded, selectedId, readOnly, suggesti
   );
 }
 
-export function RequirementsSitemapEditor({ content, readOnly, onChange }: Props) {
+export function RequirementsSitemapEditor({
+  content,
+  readOnly,
+  onChange,
+  sitemapWorkspaceHref,
+  editorLayout = "default",
+  workspaceBackHref,
+  onWorkspaceSave,
+  workspaceSaveDisabled,
+  workspaceSaving,
+}: Props) {
+  const isWorkspace = editorLayout === "workspace";
+  const [structureFloatExpanded, setStructureFloatExpanded] = useState(true);
   const [expanded, setExpanded] = useState(() => collectExpandedDefault(content.root));
   const [selectedId, setSelectedId] = useState<string | null>(content.root.id);
   const [importOpen, setImportOpen] = useState(false);
@@ -830,7 +433,9 @@ export function RequirementsSitemapEditor({ content, readOnly, onChange }: Props
   const [previewZoom, setPreviewZoom] = useState(1);
   const [isPanningPreview, setIsPanningPreview] = useState(false);
   const [pendingFocusNodeId, setPendingFocusNodeId] = useState<string | null>(null);
-  const [previewDiagramLayout, setPreviewDiagramLayout] = useState<SitemapPreviewDiagramLayout>("horizontal");
+  const [previewDiagramLayout, setPreviewDiagramLayout] = useState<SitemapPreviewDiagramLayout>(() =>
+    content.diagramLayout === "vertical" ? "vertical" : "horizontal",
+  );
   const previewBodyRef = useRef<HTMLDivElement>(null);
   const previewViewportRef = useRef<HTMLDivElement>(null);
   const previewPanRef = useRef<{ startX: number; startY: number; scrollLeft: number; scrollTop: number } | null>(null);
@@ -854,6 +459,10 @@ export function RequirementsSitemapEditor({ content, readOnly, onChange }: Props
     viewport.scrollLeft = 0;
     viewport.scrollTop = 0;
   }, [previewDiagramLayout]);
+
+  useEffect(() => {
+    setPreviewDiagramLayout(content.diagramLayout === "vertical" ? "vertical" : "horizontal");
+  }, [content.diagramLayout]);
 
   useEffect(() => {
     const exists = flattenSitemapPreorder(content.root).some((r) => r.id === selectedId);
@@ -880,7 +489,13 @@ export function RequirementsSitemapEditor({ content, readOnly, onChange }: Props
 
   const onPatchRoot = useCallback(
     (nextRoot: SitemapNode) => {
-      onChange({ ...content, schemaVersion: content.schemaVersion ?? 1, root: nextRoot });
+      const nodePositions = pruneSitemapNodePositions(nextRoot, content.nodePositions);
+      onChange({
+        ...content,
+        schemaVersion: content.schemaVersion ?? 1,
+        root: nextRoot,
+        ...(nodePositions && Object.keys(nodePositions).length > 0 ? { nodePositions } : { nodePositions: undefined }),
+      });
     },
     [content, onChange],
   );
@@ -894,7 +509,13 @@ export function RequirementsSitemapEditor({ content, readOnly, onChange }: Props
       if (!newChildId) {
         return;
       }
-      onChange({ ...content, schemaVersion: content.schemaVersion ?? 1, root: next });
+      const nodePositions = pruneSitemapNodePositions(next, content.nodePositions);
+      onChange({
+        ...content,
+        schemaVersion: content.schemaVersion ?? 1,
+        root: next,
+        ...(nodePositions && Object.keys(nodePositions).length > 0 ? { nodePositions } : { nodePositions: undefined }),
+      });
       setPendingFocusNodeId(newChildId);
       setExpanded((prev) => {
         const n = new Set(prev);
@@ -956,20 +577,11 @@ export function RequirementsSitemapEditor({ content, readOnly, onChange }: Props
     w.addEventListener("load", onLoaded);
   };
 
-  const openPreviewInNewTab = () => {
-    const el = previewBodyRef.current;
-    if (!el) {
+  const openSitemapWorkspaceTab = () => {
+    if (!sitemapWorkspaceHref) {
       return;
     }
-    const html = buildPreviewStandaloneHtml(el, "Sitemap Preview", false);
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const w = window.open(url, "_blank");
-    if (!w) {
-      URL.revokeObjectURL(url);
-      return;
-    }
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    window.open(sitemapWorkspaceHref, "_blank", "noopener,noreferrer");
   };
 
   const zoomOut = () => setPreviewZoom((z) => Math.max(PREVIEW_ZOOM_MIN, Math.round((z - 0.1) * 10) / 10));
@@ -994,6 +606,10 @@ export function RequirementsSitemapEditor({ content, readOnly, onChange }: Props
 
   const onPreviewPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) {
+      return;
+    }
+    const target = e.target as HTMLElement | null;
+    if (target?.closest(".react-flow")) {
       return;
     }
     const viewport = previewViewportRef.current;
@@ -1057,7 +673,9 @@ export function RequirementsSitemapEditor({ content, readOnly, onChange }: Props
           height: `${el.scrollHeight}px`,
           overflow: "visible",
         },
-        filter: (node) => !node.classList?.contains("requirements-sitemap-page-break-guide"),
+        filter: (node) =>
+          !node.classList?.contains("requirements-sitemap-page-break-guide") &&
+          !node.classList?.contains("sitemap-flow-toolbar-panel"),
       });
       const a = document.createElement("a");
       a.href = dataUrl;
@@ -1070,8 +688,174 @@ export function RequirementsSitemapEditor({ content, readOnly, onChange }: Props
     }
   };
 
+  const structureInner = (
+    <>
+      <Label>構造</Label>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" disabled={readOnly} onClick={collapseThirdLevel}>
+          3階層目を閉じる
+        </Button>
+        <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" disabled={readOnly} onClick={expandAll}>
+          すべて開く
+        </Button>
+      </div>
+      <div className="rounded-md border border-[color:color-mix(in_srgb,var(--border)_85%,transparent)] bg-[color:color-mix(in_srgb,var(--surface)_96%,transparent)] p-2">
+        <TreeRow
+          node={content.root}
+          root={content.root}
+          depth={0}
+          selectedId={selectedId}
+          readOnly={readOnly}
+          suggestions={suggestions}
+          onPatchRoot={onPatchRoot}
+          onSelect={setSelectedId}
+          onAddChild={onAddChild}
+          onDragStart={() => {}}
+          onDragEnd={() => {}}
+        />
+        {expanded.has(content.root.id) ? (
+          <ChildUl
+            parent={content.root}
+            root={content.root}
+            depth={1}
+            expanded={expanded}
+            selectedId={selectedId}
+            readOnly={readOnly}
+            suggestions={suggestions}
+            onPatchRoot={onPatchRoot}
+            onSelect={setSelectedId}
+            onAddChild={onAddChild}
+          />
+        ) : null}
+      </div>
+    </>
+  );
+
+  const zoomLayoutRow = (
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
+      <span className="min-w-[3.8rem] text-left text-xs text-[var(--muted)]">{Math.round(previewZoom * 100)}%</span>
+      <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={zoomOut} aria-label="縮小">
+        <ZoomOut className="h-3.5 w-3.5" />
+      </Button>
+      <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={zoomIn} aria-label="拡大">
+        <ZoomIn className="h-3.5 w-3.5" />
+      </Button>
+      <Button type="button" variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={zoomFitAll}>
+        全体
+      </Button>
+      <Label htmlFor={isWorkspace ? "sitemap-preview-diagram-layout-ws" : "sitemap-preview-diagram-layout"} className="text-xs text-[var(--muted)]">
+        レイアウト
+      </Label>
+      <Select
+        value={previewDiagramLayout}
+        disabled={readOnly}
+        onValueChange={(v) => {
+          const next = v as SitemapPreviewDiagramLayout;
+          setPreviewDiagramLayout(next);
+          if (readOnly) {
+            return;
+          }
+          onChange({
+            ...content,
+            schemaVersion: content.schemaVersion ?? 1,
+            diagramLayout: next,
+            nodePositions: undefined,
+          });
+        }}
+      >
+        <SelectTrigger
+          id={isWorkspace ? "sitemap-preview-diagram-layout-ws" : "sitemap-preview-diagram-layout"}
+          className="h-8 w-[min(100%,11rem)] max-w-full"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="horizontal">水平（右方向）</SelectItem>
+          <SelectItem value="vertical">垂直（下方向）</SelectItem>
+        </SelectContent>
+      </Select>
+      {!isWorkspace && sitemapWorkspaceHref && !readOnly ? (
+        <Button type="button" variant="ghost" size="sm" className="h-8 gap-1 px-2 text-xs" onClick={openSitemapWorkspaceTab}>
+          <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          別タブで編集
+        </Button>
+      ) : null}
+    </div>
+  );
+
+  const previewViewport = (
+    <div
+      ref={previewViewportRef}
+      className={cn(
+        "requirements-sitemap-print-root overflow-auto rounded-lg border border-slate-300 bg-slate-100/80 shadow-sm dark:bg-slate-900/40",
+        isWorkspace ? "min-h-0 flex-1 rounded-md" : "min-h-[32rem]",
+      )}
+      onPointerDown={onPreviewPointerDown}
+      onPointerMove={onPreviewPointerMove}
+      onPointerUp={onPreviewPointerUp}
+      onPointerCancel={stopPreviewPanning}
+      onPointerLeave={stopPreviewPanning}
+      style={{
+        cursor: isPanningPreview ? "grabbing" : "grab",
+        userSelect: isPanningPreview ? "none" : "auto",
+        touchAction: "none",
+      }}
+    >
+      <div
+        className={cn(
+          "box-border flex w-full",
+          isWorkspace ? "min-h-full flex-1 items-center justify-center p-0" : "min-h-[32rem] items-start justify-start p-4",
+        )}
+      >
+        <div style={{ width: `${A4_LANDSCAPE_CANVAS_WIDTH * previewZoom}px`, height: `${A4_LANDSCAPE_CANVAS_HEIGHT * previewZoom}px` }}>
+          <div
+            style={{
+              width: `${A4_LANDSCAPE_CANVAS_WIDTH}px`,
+              height: `${A4_LANDSCAPE_CANVAS_HEIGHT}px`,
+              transform: `scale(${previewZoom})`,
+              transformOrigin: "top left",
+            }}
+          >
+            <div
+              ref={previewBodyRef}
+              className="relative bg-white shadow-sm"
+              style={{
+                width: `${A4_LANDSCAPE_CANVAS_WIDTH}px`,
+                height: `${A4_LANDSCAPE_CANVAS_HEIGHT}px`,
+                overflow: "hidden",
+                border: "1px solid #cbd5e1",
+                boxSizing: "border-box",
+              }}
+            >
+              <RequirementsSitemapFlowCanvas
+                root={content.root}
+                diagramLayout={previewDiagramLayout}
+                nodePositions={content.nodePositions}
+                readOnly={readOnly}
+                showRfZoomToolbar={!isWorkspace}
+                showDotGrid={!isWorkspace}
+                onNodePositionsCommit={
+                  readOnly
+                    ? undefined
+                    : (next: Record<string, SitemapNodePosition>) => {
+                        const pruned = pruneSitemapNodePositions(content.root, next);
+                        onChange({
+                          ...content,
+                          schemaVersion: content.schemaVersion ?? 1,
+                          ...(pruned && Object.keys(pruned).length > 0 ? { nodePositions: pruned } : { nodePositions: undefined }),
+                        });
+                      }
+                }
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="space-y-3">
+    <div className={cn("space-y-3", isWorkspace && "flex h-full min-h-0 min-w-0 flex-1 flex-col gap-0 space-y-0")}>
       <RequirementsSitemapImportExcelDialog
         open={importOpen}
         onOpenChange={setImportOpen}
@@ -1087,158 +871,127 @@ export function RequirementsSitemapEditor({ content, readOnly, onChange }: Props
         onApply={(next) => onChange(next)}
       />
 
-      <div className="requirements-sitemap-no-print flex flex-wrap items-center gap-2">
-        <p className="mr-auto text-sm font-medium text-[var(--foreground)]">サイトマップ</p>
-        <Button
-          type="button"
-          variant="default"
-          size="sm"
-          className="inline-flex items-center gap-1.5"
-          disabled={readOnly}
-          onClick={() => setImportOpen(true)}
-        >
-          <GeminiMarkIcon className="h-4 w-4 shrink-0" />
-          Excel を取り込む
-        </Button>
-        <Button
-          type="button"
-          variant="default"
-          size="sm"
-          className="inline-flex items-center gap-1.5"
-          disabled={readOnly}
-          onClick={() => setChatOpen(true)}
-        >
-          <GeminiMarkIcon className="h-4 w-4 shrink-0" />
-          Gemini で編集
-        </Button>
-        <Button type="button" variant="default" size="sm" onClick={printPreview}>
-          印刷
-        </Button>
-        <Button type="button" variant="default" size="sm" disabled={pngBusy} onClick={() => void downloadPng()}>
-          {pngBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : "PNG"}
-        </Button>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="requirements-sitemap-no-print space-y-2 rounded-lg border border-[color:color-mix(in_srgb,var(--border)_88%,transparent)] p-3">
-          <Label>構造</Label>
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" disabled={readOnly} onClick={collapseThirdLevel}>
-              3階層目を閉じる
-            </Button>
-            <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" disabled={readOnly} onClick={expandAll}>
-              すべて開く
-            </Button>
-          </div>
-          <div className="rounded-md border border-[color:color-mix(in_srgb,var(--border)_85%,transparent)] bg-[color:color-mix(in_srgb,var(--surface)_96%,transparent)] p-2">
-            <TreeRow
-              node={content.root}
-              root={content.root}
-              depth={0}
-              selectedId={selectedId}
-              readOnly={readOnly}
-              suggestions={suggestions}
-              onPatchRoot={onPatchRoot}
-              onSelect={setSelectedId}
-              onAddChild={onAddChild}
-              onDragStart={() => {}}
-              onDragEnd={() => {}}
-            />
-            {expanded.has(content.root.id) ? (
-              <ChildUl
-                parent={content.root}
-                root={content.root}
-                depth={1}
-                expanded={expanded}
-                selectedId={selectedId}
-                readOnly={readOnly}
-                suggestions={suggestions}
-                onPatchRoot={onPatchRoot}
-                onSelect={setSelectedId}
-                onAddChild={onAddChild}
-              />
-            ) : null}
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <div className="requirements-sitemap-no-print flex min-w-0 flex-col gap-2">
-            <Label className="text-sm font-medium leading-snug">プレビュー（印刷・PNG）</Label>
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <span className="min-w-[3.8rem] text-left text-xs text-[var(--muted)]">{Math.round(previewZoom * 100)}%</span>
-              <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={zoomOut} aria-label="縮小">
-                <ZoomOut className="h-3.5 w-3.5" />
-              </Button>
-              <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={zoomIn} aria-label="拡大">
-                <ZoomIn className="h-3.5 w-3.5" />
-              </Button>
-              <Button type="button" variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={zoomFitAll}>
-                全体
-              </Button>
-              <Label htmlFor="sitemap-preview-diagram-layout" className="text-xs text-[var(--muted)]">
-                レイアウト
-              </Label>
-              <Select
-                value={previewDiagramLayout}
-                onValueChange={(v) => setPreviewDiagramLayout(v as SitemapPreviewDiagramLayout)}
-              >
-                <SelectTrigger id="sitemap-preview-diagram-layout" className="h-8 w-[min(100%,11rem)] max-w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="horizontal">水平（右方向）</SelectItem>
-                  <SelectItem value="vertical">垂直（下方向）</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button type="button" variant="ghost" size="sm" className="h-8 gap-1" onClick={openPreviewInNewTab}>
-                <Maximize2 className="h-3.5 w-3.5" />
-                最大化
-              </Button>
-            </div>
-          </div>
-          <div
-            ref={previewViewportRef}
-            className="requirements-sitemap-print-root overflow-auto rounded-lg border border-slate-300 bg-slate-100/80 shadow-sm dark:bg-slate-900/40"
-            onPointerDown={onPreviewPointerDown}
-            onPointerMove={onPreviewPointerMove}
-            onPointerUp={onPreviewPointerUp}
-            onPointerCancel={stopPreviewPanning}
-            onPointerLeave={stopPreviewPanning}
-            style={{
-              cursor: isPanningPreview ? "grabbing" : "grab",
-              userSelect: isPanningPreview ? "none" : "auto",
-              touchAction: "none",
-            }}
+      {isWorkspace ? (
+        <>
+          <SitemapWorkspaceDraggableHierarchyPanel
+            title="階層"
+            width={320}
+            bodyMaxHeight="min(70vh, 560px)"
+            initialPosition={{ x: 12, y: 56 }}
+            expanded={structureFloatExpanded}
+            onExpandedChange={setStructureFloatExpanded}
           >
-            <div className="box-border flex min-h-[32rem] w-full items-start justify-start p-4">
-              <div style={{ width: `${A4_LANDSCAPE_CANVAS_WIDTH * previewZoom}px`, height: `${A4_LANDSCAPE_CANVAS_HEIGHT * previewZoom}px` }}>
-                <div
-                  style={{
-                    width: `${A4_LANDSCAPE_CANVAS_WIDTH}px`,
-                    height: `${A4_LANDSCAPE_CANVAS_HEIGHT}px`,
-                    transform: `scale(${previewZoom})`,
-                    transformOrigin: "top left",
-                  }}
-                >
-                  <div
-                    ref={previewBodyRef}
-                    className="relative bg-white shadow-sm"
-                    style={{
-                      width: `${A4_LANDSCAPE_CANVAS_WIDTH}px`,
-                      height: `${A4_LANDSCAPE_CANVAS_HEIGHT}px`,
-                      overflow: "hidden",
-                      border: "1px solid #cbd5e1",
-                      boxSizing: "border-box",
-                    }}
-                  >
-                    <PreviewSitemapCanvas root={content.root} diagramLayout={previewDiagramLayout} />
-                  </div>
-                </div>
+            <div className="requirements-sitemap-no-print space-y-2">{structureInner}</div>
+          </SitemapWorkspaceDraggableHierarchyPanel>
+
+          <SitemapWorkspaceDraggableToolbarPanel title="操作" initialPosition={{ x: 24, y: 12 }}>
+            {workspaceBackHref ? (
+              <Button asChild type="button" variant="ghost" size="sm" className="h-8 shrink-0 px-2 text-xs">
+                <Link href={workspaceBackHref}>要件定義</Link>
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              className="inline-flex h-8 shrink-0 items-center gap-1 px-2 text-xs"
+              disabled={readOnly}
+              onClick={() => setImportOpen(true)}
+            >
+              <GeminiMarkIcon className="h-3.5 w-3.5 shrink-0" />
+              Excel を取り込む
+            </Button>
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              className="inline-flex h-8 shrink-0 items-center gap-1 px-2 text-xs"
+              disabled={readOnly}
+              onClick={() => setChatOpen(true)}
+            >
+              <GeminiMarkIcon className="h-3.5 w-3.5 shrink-0" />
+              Gemini で編集
+            </Button>
+            <Button type="button" variant="default" size="sm" className="h-8 shrink-0 px-2 text-xs" onClick={printPreview}>
+              印刷
+            </Button>
+            <Button type="button" variant="default" size="sm" className="h-8 shrink-0 px-2 text-xs" disabled={pngBusy} onClick={() => void downloadPng()}>
+              {pngBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "PNG"}
+            </Button>
+            {onWorkspaceSave ? (
+              <Button
+                type="button"
+                variant="accent"
+                size="sm"
+                className="h-8 shrink-0 px-2 text-xs"
+                disabled={Boolean(workspaceSaveDisabled)}
+                onClick={() => void onWorkspaceSave()}
+              >
+                {workspaceSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "保存"}
+              </Button>
+            ) : null}
+            <div className="mt-1 w-full basis-full border-t border-[color:color-mix(in_srgb,var(--border)_75%,transparent)] pt-1.5">
+              {zoomLayoutRow}
+            </div>
+          </SitemapWorkspaceDraggableToolbarPanel>
+
+          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{previewViewport}</div>
+        </>
+      ) : (
+        <>
+          <div className="requirements-sitemap-no-print flex flex-wrap items-center gap-2">
+            <p className="mr-auto text-sm font-medium text-[var(--foreground)]">サイトマップ</p>
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              className="inline-flex items-center gap-1.5"
+              disabled={readOnly}
+              onClick={() => setImportOpen(true)}
+            >
+              <GeminiMarkIcon className="h-4 w-4 shrink-0" />
+              Excel を取り込む
+            </Button>
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              className="inline-flex items-center gap-1.5"
+              disabled={readOnly}
+              onClick={() => setChatOpen(true)}
+            >
+              <GeminiMarkIcon className="h-4 w-4 shrink-0" />
+              Gemini で編集
+            </Button>
+            <Button type="button" variant="default" size="sm" onClick={printPreview}>
+              印刷
+            </Button>
+            <Button type="button" variant="default" size="sm" disabled={pngBusy} onClick={() => void downloadPng()}>
+              {pngBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : "PNG"}
+            </Button>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="requirements-sitemap-no-print space-y-2 rounded-lg border border-[color:color-mix(in_srgb,var(--border)_88%,transparent)] p-3">
+              {structureInner}
+            </div>
+
+            <div className="space-y-2">
+              <div className="requirements-sitemap-no-print flex min-w-0 flex-col gap-2">
+                <Label className="text-sm font-medium leading-snug">プレビュー（印刷・PNG）</Label>
+                {!readOnly ? (
+                  <p className="text-xs leading-snug text-[var(--muted)]">
+                    図のノードをドラッグして位置を調整できます（指を離すと保存）。ノードは 16px のグリッドに吸着します。外側の余白をドラッグすると表示領域を移動できます。
+                  </p>
+                ) : null}
+                {zoomLayoutRow}
               </div>
+              {previewViewport}
             </div>
           </div>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 }
+

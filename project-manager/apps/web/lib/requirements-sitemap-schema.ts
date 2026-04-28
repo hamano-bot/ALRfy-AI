@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { pruneSitemapNodePositions } from "@/lib/requirements-sitemap-positions";
 
 /** ルートを第1階層と数えた最大深さ */
 export const SITEMAP_MAX_DEPTH = 32;
@@ -12,9 +13,18 @@ export type SitemapNode = {
   children: SitemapNode[];
 };
 
+export type SitemapNodePosition = { x: number; y: number };
+
+/** フロー図の主軸方向（要件 JSON に保存） */
+export type SitemapDiagramLayout = "horizontal" | "vertical";
+
 export type RequirementsPageContentSitemap = {
   schemaVersion: number;
   root: SitemapNode;
+  /** サイトマップ図のレイアウト。未指定時は UI 側で水平とみなす */
+  diagramLayout?: SitemapDiagramLayout;
+  /** React Flow 等で配置したノード左上座標（A4 プレビュー座標系）。ツリーとは別フィールド。 */
+  nodePositions?: Record<string, SitemapNodePosition>;
 };
 
 const sitemapNodeSchema: z.ZodType<SitemapNode> = z.lazy(() =>
@@ -26,10 +36,17 @@ const sitemapNodeSchema: z.ZodType<SitemapNode> = z.lazy(() =>
   }),
 );
 
+const nodePositionSchema = z.object({
+  x: z.number().finite(),
+  y: z.number().finite(),
+});
+
 export const sitemapContentSchema = z
   .object({
     schemaVersion: z.number().int().min(1).max(10).default(1),
     root: sitemapNodeSchema,
+    diagramLayout: z.enum(["horizontal", "vertical"]).optional(),
+    nodePositions: z.record(z.string().min(1).max(128), nodePositionSchema).optional(),
   })
   .strip()
   .superRefine((data, ctx) => {
@@ -84,9 +101,15 @@ export function ensureSitemapNodeIds(node: SitemapNode): SitemapNode {
 }
 
 export function ensureSitemapContentIds(content: RequirementsPageContentSitemap): RequirementsPageContentSitemap {
+  const root = ensureSitemapNodeIds(content.root);
+  const nodePositions = pruneSitemapNodePositions(root, content.nodePositions);
   return {
     schemaVersion: content.schemaVersion ?? 1,
-    root: ensureSitemapNodeIds(content.root),
+    root,
+    ...(content.diagramLayout === "horizontal" || content.diagramLayout === "vertical"
+      ? { diagramLayout: content.diagramLayout }
+      : {}),
+    ...(nodePositions && Object.keys(nodePositions).length > 0 ? { nodePositions } : {}),
   };
 }
 
@@ -120,18 +143,31 @@ export function mergeSitemapImport(
 ): RequirementsPageContentSitemap {
   const nextImported = ensureSitemapContentIds(imported);
   if (mode === "replace") {
+    const diagramLayout = nextImported.diagramLayout ?? current.diagramLayout;
     return {
       schemaVersion: current.schemaVersion ?? 1,
       root: nextImported.root,
+      ...(diagramLayout === "horizontal" || diagramLayout === "vertical" ? { diagramLayout } : {}),
+      ...(nextImported.nodePositions && Object.keys(nextImported.nodePositions).length > 0
+        ? { nodePositions: nextImported.nodePositions }
+        : {}),
     };
   }
   const cur = ensureSitemapContentIds(current);
+  const mergedRoot = {
+    ...cur.root,
+    children: [...cur.root.children, ...nextImported.root.children],
+  };
+  const nextPositions: Record<string, { x: number; y: number }> = {
+    ...(cur.nodePositions ?? {}),
+    ...(nextImported.nodePositions ?? {}),
+  };
+  const pruned = pruneSitemapNodePositions(mergedRoot, nextPositions);
   return {
     schemaVersion: cur.schemaVersion ?? 1,
-    root: {
-      ...cur.root,
-      children: [...cur.root.children, ...nextImported.root.children],
-    },
+    root: mergedRoot,
+    ...(cur.diagramLayout === "horizontal" || cur.diagramLayout === "vertical" ? { diagramLayout: cur.diagramLayout } : {}),
+    ...(pruned && Object.keys(pruned).length > 0 ? { nodePositions: pruned } : {}),
   };
 }
 

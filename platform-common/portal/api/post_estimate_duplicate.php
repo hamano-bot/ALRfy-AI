@@ -47,15 +47,9 @@ if (!is_array($base)) {
     exit;
 }
 
-$lineStmt = $pdo->prepare('SELECT * FROM project_estimate_lines WHERE estimate_id = :id ORDER BY sort_order ASC, id ASC');
-$lineStmt->execute([':id' => $estimateId]);
-$lines = $lineStmt->fetchAll(PDO::FETCH_ASSOC);
-if (!is_array($lines)) {
-    $lines = [];
-}
-
 try {
     $pdo->beginTransaction();
+    $issuedOn = (new DateTimeImmutable('now', new DateTimeZone('Asia/Tokyo')))->format('Y-m-d');
     $newNumber = sprintf('見積_%s_COPY_%04d', (new DateTimeImmutable('now'))->format('Ymd'), random_int(1, 9999));
     $ins = $pdo->prepare(
         'INSERT INTO project_estimates
@@ -71,13 +65,13 @@ try {
         ':project_id' => $base['project_id'] ?? null,
         ':estimate_number' => $newNumber,
         ':estimate_status' => 'draft',
-        ':title' => (string)($base['title'] ?? '見積') . ' (複製)',
+        ':title' => '新規見積',
         ':is_rough_estimate' => (int)($base['is_rough_estimate'] ?? 0),
-        ':client_name' => $base['client_name'] ?? null,
-        ':client_abbr' => isset($base['client_abbr']) && is_string($base['client_abbr']) && trim($base['client_abbr']) !== '' ? trim($base['client_abbr']) : null,
-        ':recipient_text' => $base['recipient_text'] ?? null,
+        ':client_name' => null,
+        ':client_abbr' => null,
+        ':recipient_text' => null,
         ':remarks' => $base['remarks'] ?? null,
-        ':issue_date' => (new DateTimeImmutable('now'))->format('Y-m-d'),
+        ':issue_date' => $issuedOn,
         ':delivery_due_text' => $base['delivery_due_text'] ?? null,
         ':sales_user_id' => $base['sales_user_id'] ?? null,
         ':visibility_scope' => $base['visibility_scope'] ?? 'public_all_users',
@@ -93,29 +87,28 @@ try {
     ]);
     $newId = (int)$pdo->lastInsertId();
 
-    if ($lines !== []) {
-        $insLine = $pdo->prepare(
-            'INSERT INTO project_estimate_lines
-             (estimate_id, sort_order, major_category, category, item_code, item_name, quantity, unit_type, unit_price, factor, line_amount)
-             VALUES
-             (:estimate_id, :sort_order, :major_category, :category, :item_code, :item_name, :quantity, :unit_type, :unit_price, :factor, :line_amount)'
-        );
-        foreach ($lines as $line) {
-            $insLine->execute([
-                ':estimate_id' => $newId,
-                ':sort_order' => $line['sort_order'] ?? 0,
-                ':major_category' => $line['major_category'] ?? null,
-                ':category' => $line['category'] ?? null,
-                ':item_code' => $line['item_code'] ?? null,
-                ':item_name' => $line['item_name'] ?? '',
-                ':quantity' => $line['quantity'] ?? 0,
-                ':unit_type' => $line['unit_type'] ?? 'set',
-                ':unit_price' => $line['unit_price'] ?? 0,
-                ':factor' => $line['factor'] ?? 1,
-                ':line_amount' => $line['line_amount'] ?? 0,
-            ]);
-        }
-    }
+    $insLine = $pdo->prepare(
+        'INSERT INTO project_estimate_lines
+         (estimate_id, sort_order, major_category, category, item_code, item_name, quantity, unit_type, unit_price, factor, line_amount)
+         SELECT
+           :new_estimate_id,
+           sort_order,
+           major_category,
+           category,
+           item_code,
+           item_name,
+           quantity,
+           unit_type,
+           unit_price,
+           factor,
+           line_amount
+         FROM project_estimate_lines
+         WHERE estimate_id = :source_estimate_id'
+    );
+    $insLine->execute([
+        ':new_estimate_id' => $newId,
+        ':source_estimate_id' => $estimateId,
+    ]);
     $pdo->commit();
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) {

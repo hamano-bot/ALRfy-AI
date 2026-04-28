@@ -11,8 +11,8 @@ export type EstimateLineLike = {
   item_code?: string | null;
   item_name: string;
   major_category?: string | null;
-  quantity: number;
-  unit_price: number;
+  quantity: number | null;
+  unit_price: number | null;
   factor: number;
   unit_type: string;
 };
@@ -86,8 +86,8 @@ export function sumCheckedDetailLineAmounts(
     const line = lines[idx];
     if (!line || isMajorHeadingLine(line)) continue;
     sum += computeEstimateLineAmount({
-      quantity: line.quantity,
-      unit_price: line.unit_price,
+      quantity: line.quantity ?? 0,
+      unit_price: line.unit_price ?? 0,
       factor: line.factor,
       unit_type: line.unit_type,
     });

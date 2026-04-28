@@ -237,6 +237,7 @@ export function ProjectHearingSheetClient({
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [autoCategoryDialogOpen, setAutoCategoryDialogOpen] = useState(false);
   const [templateReloadConfirmOpen, setTemplateReloadConfirmOpen] = useState(false);
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
   const [adviceSuggestions, setAdviceSuggestions] = useState<HearingAdviceSuggestion[]>([]);
   const [adviceLoading, setAdviceLoading] = useState(false);
   const [adviceError, setAdviceError] = useState<string | null>(null);
@@ -361,8 +362,9 @@ export function ProjectHearingSheetClient({
 
   const onProjectDetailNavigate = useCallback(
     (e: MouseEvent<HTMLAnchorElement>) => {
-      if (isDirty && !window.confirm(UNSAVED_LEAVE_CONFIRM_MESSAGE)) {
+      if (isDirty) {
         e.preventDefault();
+        setLeaveConfirmOpen(true);
       }
     },
     [isDirty],
@@ -949,6 +951,30 @@ export function ProjectHearingSheetClient({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5">
+      <Dialog open={leaveConfirmOpen} onOpenChange={setLeaveConfirmOpen}>
+        <DialogContent className="max-w-md" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>未保存の変更があります</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm leading-relaxed text-[var(--foreground)]">{UNSAVED_LEAVE_CONFIRM_MESSAGE}</p>
+          <div className="mt-6 flex flex-wrap justify-end gap-2">
+            <Button type="button" variant="default" size="sm" onClick={() => setLeaveConfirmOpen(false)}>
+              キャンセル
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                setLeaveConfirmOpen(false);
+                router.push(`/project-list/${projectId}`);
+              }}
+            >
+              破棄して戻る
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <section className="surface-card pm-page-hero relative shrink-0 overflow-hidden px-5">
         <div className="pointer-events-none absolute -top-10 right-0 h-36 w-36 rounded-full bg-[color:color-mix(in_srgb,var(--accent)_22%,transparent)] blur-3xl" />
         <div className="relative flex h-full min-h-0 items-center justify-between gap-3">

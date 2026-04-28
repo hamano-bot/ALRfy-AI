@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type RefObject } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button, accentButtonSurfaceBaseClassName } from "@/app/components/ui/button";
@@ -12,14 +12,12 @@ import { Card, CardContent } from "@/app/components/ui/card";
 import { ScrollPanel } from "@/app/components/ui/scroll-panel";
 import { AccessControlTable, type AccessControlRow } from "@/app/components/AccessControlTable";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/app/components/ui/dropdown-menu";
-import { BookTemplate, ChevronLeft, FileText, GripVertical, Lock, LockOpen, Redo2, Trash2, Undo2, X } from "lucide-react";
+import { BookTemplate, ChevronLeft, Copy, FileText, GripVertical, Lock, LockOpen, Redo2, Trash2, Undo2, X } from "lucide-react";
 import { PortalAppIcon } from "@/app/lib/portal-app-icons";
 import { ThemeDateField } from "@/app/components/ThemeDateField";
-import { buildEstimateExportBasename } from "@/lib/estimate-export-filename";
+import { buildEstimatePdfExportBasename } from "@/lib/estimate-export-filename";
 import {
   computeEstimateLineAmount,
-  countEstimateHtmlExportRowBudget,
-  ESTIMATE_A4_HTML_EXPORT_ROW_BUDGET,
 } from "@/lib/portal-estimate";
 import {
   detailIndicesInSameMajorBlock,
@@ -34,6 +32,7 @@ import {
   sumCheckedDetailLineAmounts,
 } from "@/lib/estimate-progress-fee-modal";
 import { trashDeleteIconButtonClassName } from "@/lib/trash-delete-icon-button-class";
+import { UNSAVED_LEAVE_CONFIRM_MESSAGE } from "@/lib/unsaved-navigation";
 import { cn } from "@/lib/utils";
 import { HearingAutoTextarea } from "@/app/project-list/[projectId]/hearing/HearingAutoTextarea";
 import {
@@ -49,16 +48,62 @@ type EstimateLine = {
   category?: string | null;
   item_code?: string | null;
   item_name: string;
-  quantity: number;
+  quantity: number | null;
   unit_type: "person_month" | "person_day" | "set" | "page" | "times" | "percent" | "monthly_fee" | "annual_fee";
-  unit_price: number;
+  unit_price: number | null;
   factor: number;
   line_amount?: number;
 };
 
+/** 項目名サジェスト（設定マスタ or 入力履歴） */
+type ItemNameSuggestion =
+  | { from: "master"; value: string; unit_type: EstimateLine["unit_type"]; unit_price: number }
+  | { from: "history"; value: string };
+
+type FilteredItemNameSuggestion = ItemNameSuggestion & { display: string };
+
+function parseApiItemMasterUnitType(raw: unknown): EstimateLine["unit_type"] {
+  const allowed: EstimateLine["unit_type"][] = [
+    "person_month",
+    "person_day",
+    "set",
+    "page",
+    "times",
+    "percent",
+    "monthly_fee",
+    "annual_fee",
+  ];
+  if (typeof raw === "string" && allowed.includes(raw as EstimateLine["unit_type"])) {
+    return raw as EstimateLine["unit_type"];
+  }
+  return "set";
+}
+
+function parseApiItemMasterUnitPrice(raw: unknown): number {
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+  if (typeof raw === "string" && raw.trim() !== "") {
+    const n = Number.parseFloat(raw);
+    return Number.isFinite(n) ? n : 0;
+  }
+  return 0;
+}
+
 type EstimateEditorClientProps = {
   estimateId?: number;
+  duplicateFromEstimateId?: number;
 };
+
+type EstimateConfirmDialogState = {
+  open: boolean;
+  title: string;
+  description: string;
+  confirmLabel: string;
+  destructive?: boolean;
+};
+
+function todayIsoDateLocal(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
 /** Phase1 設計の大項目候補（大項目行の見出し・明細の major_category の初期値に使用） */
 const ESTIMATE_MAJOR_CATEGORIES = [
@@ -74,6 +119,8 @@ const ESTIMATE_MAJOR_LINE_ITEM_CODE = "__ESTIMATE_MAJOR__";
 
 /** 行追加で作る空明細。大項目と区別するため item_name が空でも legacy 見出し行にしない */
 const ESTIMATE_MANUAL_DETAIL_LINE_ITEM_CODE = "__ESTIMATE_MANUAL_DETAIL__";
+/** 帳票/プレビュー上で空行として扱う専用明細行 */
+const ESTIMATE_BLANK_DETAIL_LINE_ITEM_CODE = "__ESTIMATE_BLANK_DETAIL__";
 
 const ESTIMATE_OTHER_MAJOR_LABEL = "その他";
 const PROGRESS_FEE_ITEM_NAME = "進行管理費";
@@ -116,6 +163,10 @@ function isMajorHeadingLine(line: Pick<EstimateLine, "item_code" | "item_name" |
   const major = String(line.major_category ?? "").trim();
   if (!major) return false;
   return String(line.item_name ?? "").trim() === "" && (line.item_code == null || line.item_code === "");
+}
+
+function isBlankDetailLine(line: Pick<EstimateLine, "item_code">): boolean {
+  return line.item_code === ESTIMATE_BLANK_DETAIL_LINE_ITEM_CODE;
 }
 
 /** ヒアリングシートの並び替えと同じ挿入インデックス（ドラッグ行を除いた配列上の位置） */
@@ -176,9 +227,9 @@ function normalizeLoadedEstimateLine(line: any): EstimateLine {
     category,
     item_code,
     item_name: resolvedName,
-    quantity: Number(line.quantity ?? 0),
+    quantity: parseNullableNumberInput(String(line.quantity ?? "")),
     unit_type: (line.unit_type as EstimateLine["unit_type"]) ?? "set",
-    unit_price: Number(line.unit_price ?? 0),
+    unit_price: parseNullableNumberInput(String(line.unit_price ?? "")),
     factor: Number(line.factor ?? 1),
     line_amount: line.line_amount != null ? Number(line.line_amount) : undefined,
   };
@@ -187,9 +238,9 @@ function normalizeLoadedEstimateLine(line: any): EstimateLine {
 function emptyLine(): EstimateLine {
   return {
     item_name: "",
-    quantity: 0,
+    quantity: null,
     unit_type: "set",
-    unit_price: 0,
+    unit_price: null,
     factor: 1,
   };
 }
@@ -319,6 +370,23 @@ function splitAssigneeLabelForSuggest(label: string): { primary: string; seconda
   return { primary: label, secondary: "" };
 }
 
+function resolvePermissionUserIdFromSubject(subject: string, rows: Array<{ id: number; label: string }>): number | null {
+  const t = String(subject ?? "").trim();
+  if (t === "") return null;
+  if (/^\d+$/.test(t)) {
+    const n = Number.parseInt(t, 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+  const exact = rows.find((r) => r.label === t || splitAssigneeLabelForSuggest(r.label).primary === t);
+  if (exact) return exact.id;
+  const m = t.match(/user#(\d+)$/i);
+  if (m?.[1]) {
+    const n = Number.parseInt(m[1], 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+  return null;
+}
+
 function useMousedownOutside(ref: RefObject<HTMLElement | null>, onOutside: () => void, active: boolean) {
   useEffect(() => {
     if (!active) return;
@@ -332,12 +400,9 @@ function useMousedownOutside(ref: RefObject<HTMLElement | null>, onOutside: () =
   }, [active, onOutside, ref]);
 }
 
-function filterItemNameSuggestions(
-  items: Array<{ value: string; from: "standard" | "history" }>,
-  query: string,
-): Array<{ value: string; from: "standard" | "history"; display: string }> {
+function filterItemNameSuggestions(items: ItemNameSuggestion[], query: string): FilteredItemNameSuggestion[] {
   const q = query.trim().toLowerCase();
-  const out: Array<{ value: string; from: "standard" | "history"; display: string }> = [];
+  const out: FilteredItemNameSuggestion[] = [];
   for (const s of items) {
     const display = s.value.trim();
     if (q === "" || display.toLowerCase().includes(q)) {
@@ -530,11 +595,19 @@ function applyHeaderJsonToEstimateFields(
 
 function estimateLineHasMeaningfulContent(line: EstimateLine): boolean {
   if (isMajorHeadingLine(line)) return true;
+  if (isBlankDetailLine(line)) return true;
   if (line.item_name.trim() !== "") return true;
-  if (line.quantity !== 0) return true;
-  if (line.unit_price !== 0) return true;
+  if (Number.isFinite(line.quantity) && line.quantity !== 0) return true;
+  if (Number.isFinite(line.unit_price) && line.unit_price !== 0) return true;
   if ((line.factor ?? 1) !== 1) return true;
   return false;
+}
+
+function parseNullableNumberInput(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (trimmed === "") return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function estimateEditorShouldWarnBeforeTemplateLoad(input: {
@@ -567,7 +640,7 @@ function estimateEditorShouldWarnBeforeTemplateLoad(input: {
   return false;
 }
 
-export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) {
+export function EstimateEditorClient({ estimateId, duplicateFromEstimateId }: EstimateEditorClientProps) {
   const router = useRouter();
   const [title, setTitle] = useState("新規見積");
   const [estimateStatus, setEstimateStatus] = useState<"draft" | "submitted" | "won" | "lost">("draft");
@@ -583,7 +656,8 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
   /** DB の estimate_number（ヘッダー連番・プレビューと整合） */
   const [estimateNumberFromApi, setEstimateNumberFromApi] = useState("");
   const [recipientText, setRecipientText] = useState("");
-  const [issueDate, setIssueDate] = useState(() => new Date().toISOString().slice(0, 10));
+  // Keep SSR and first client render deterministic to avoid hydration mismatch.
+  const [issueDate, setIssueDate] = useState("");
   /** 納入予定（自由文言。YYYY-MM-DD を入れた場合もそのまま保存・帳票で日付表示） */
   const [deliveryDueText, setDeliveryDueText] = useState("要相談");
   const [remarks, setRemarks] = useState(() => (estimateId ? "" : DEFAULT_NEW_ESTIMATE_REMARKS));
@@ -619,8 +693,20 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
   /** 上書き対象がロック済みのとき、文言を切り替える */
   const [estimateTemplateOverwriteTargetLocked, setEstimateTemplateOverwriteTargetLocked] = useState(false);
   const [visibilityScope, setVisibilityScope] = useState<"public_all_users" | "restricted">("public_all_users");
+  const [effectiveRole, setEffectiveRole] = useState<"owner" | "editor" | "viewer" | "none">("owner");
+  const [estimateCreatedByUserId, setEstimateCreatedByUserId] = useState<number | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<EstimateConfirmDialogState>({
+    open: false,
+    title: "",
+    description: "",
+    confirmLabel: "実行する",
+    destructive: false,
+  });
+  const confirmActionRef = useRef<null | (() => void | Promise<void>)>(null);
+  const duplicatePrefillAppliedRef = useRef(false);
   const [permissionRows, setPermissionRows] = useState<AccessControlRow[]>([]);
-  const [linkedProjectsText, setLinkedProjectsText] = useState("");
+  const [linkedProjectIds, setLinkedProjectIds] = useState<number[]>([]);
+  const [estimatePrimaryProjectId, setEstimatePrimaryProjectId] = useState<number | null>(null);
   const [taxRateChoices, setTaxRateChoices] = useState<Array<{ rate: number; effectiveFrom: string }>>([]);
   const [selectedTaxEffectiveFrom, setSelectedTaxEffectiveFrom] = useState("");
   const [historyStack, setHistoryStack] = useState<EstimateLine[][]>([]);
@@ -631,12 +717,38 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
   const linesRef = useRef(lines);
   linesRef.current = lines;
   const draggingIndexRef = useRef<number | null>(null);
-  const [itemSuggestions, setItemSuggestions] = useState<Array<{ value: string; from: "standard" | "history" }>>([]);
-  const [operationLogs, setOperationLogs] = useState<Array<{ id: number; operation_type: string; operator_user_id: number; created_at: string }>>([]);
+  const [itemSuggestions, setItemSuggestions] = useState<ItemNameSuggestion[]>([]);
+  const itemMasterLookup = useMemo(() => {
+    const m = new Map<string, { unit_type: EstimateLine["unit_type"]; unit_price: number }>();
+    for (const s of itemSuggestions) {
+      if (s.from !== "master") continue;
+      const key = s.value.trim();
+      if (key === "") continue;
+      const unit_price = Number.isFinite(s.unit_price) ? s.unit_price : 0;
+      m.set(key, { unit_type: s.unit_type, unit_price });
+    }
+    return m;
+  }, [itemSuggestions]);
+  const [operationLogs, setOperationLogs] = useState<
+    Array<{ id: number; operation_type: string; operator_user_id: number; operator_label?: string | null; detail_json?: string | null; created_at: string }>
+  >([]);
+  const [operationLogsRefreshTick, setOperationLogsRefreshTick] = useState(0);
+  const [showAllOperationLogs, setShowAllOperationLogs] = useState(false);
+
+  useEffect(() => {
+    if (estimateId) {
+      return;
+    }
+    setIssueDate(todayIsoDateLocal());
+  }, [estimateId]);
   const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false);
   const [userSuggestRows, setUserSuggestRows] = useState<Array<{ id: number; label: string }>>([]);
+  const [userSuggestLoadError, setUserSuggestLoadError] = useState<string | null>(null);
   const [projectSuggestRows, setProjectSuggestRows] = useState<Array<{ id: number; name: string; client_name: string | null }>>([]);
+  const [projectSuggestLoadError, setProjectSuggestLoadError] = useState<string | null>(null);
+  const [teamTagSuggestions, setTeamTagSuggestions] = useState<string[]>([]);
   const [projectSuggestInput, setProjectSuggestInput] = useState("");
+  const [selectedProjectSuggestId, setSelectedProjectSuggestId] = useState<number | null>(null);
   const [majorCategoryToAdd, setMajorCategoryToAdd] = useState<string>(ESTIMATE_MAJOR_CATEGORIES[0]);
   const [bulkPasteOpen, setBulkPasteOpen] = useState(false);
   const [bulkPasteDraft, setBulkPasteDraft] = useState("");
@@ -678,9 +790,26 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
       )
       .slice(0, 40);
   }, [projectSuggestRows, projectSuggestInput]);
+  const projectDetailNavigateIds = useMemo(() => {
+    const base = estimatePrimaryProjectId != null && estimatePrimaryProjectId > 0 ? [estimatePrimaryProjectId] : [];
+    return Array.from(
+      new Set(
+        [...base, ...linkedProjectIds].filter((id) => Number.isFinite(id) && id > 0),
+      ),
+    );
+  }, [estimatePrimaryProjectId, linkedProjectIds]);
 
-  const canEditEstimateBody = estimateStatus === "draft";
+  const canManageEstimateSettings = effectiveRole === "owner" || effectiveRole === "editor";
+  const canEditEstimateBody = canManageEstimateSettings && estimateStatus === "draft";
   const bodyFieldDisabled = loading || !canEditEstimateBody;
+  const ownerUserId = estimateId ? estimateCreatedByUserId : currentUserId;
+  const ownerLabel = useMemo(() => {
+    if (!ownerUserId || ownerUserId <= 0) return "作成者";
+    const fromUsers = userSuggestRows.find((u) => u.id === ownerUserId)?.label;
+    if (fromUsers && fromUsers.trim() !== "") return fromUsers.trim();
+    if (currentUserId === ownerUserId && meUserLabel.trim() !== "") return meUserLabel.trim();
+    return `user#${ownerUserId}`;
+  }, [ownerUserId, userSuggestRows, currentUserId, meUserLabel]);
 
   const currentPersistSnapshotJson = useMemo(() => {
     const resolvedSalesUserId =
@@ -727,9 +856,16 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
     taxRatePercent,
     lines,
   ]);
+  const isDirty = useMemo(() => {
+    if (savedPersistSnapshotJsonRef.current === "") {
+      return false;
+    }
+    return currentPersistSnapshotJson !== savedPersistSnapshotJsonRef.current;
+  }, [currentPersistSnapshotJson]);
 
   const assigneeSuggestWrapRef = useRef<HTMLDivElement | null>(null);
   const clientAbbrInputRef = useRef<HTMLInputElement | null>(null);
+  const recipientTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [assigneeSuggestOpen, setAssigneeSuggestOpen] = useState(false);
   const projectSuggestWrapRef = useRef<HTMLDivElement | null>(null);
   const [projectSuggestOpen, setProjectSuggestOpen] = useState(false);
@@ -743,6 +879,13 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
   useMousedownOutside(assigneeSuggestWrapRef, closeAssigneeSuggest, assigneeSuggestOpen);
   useMousedownOutside(projectSuggestWrapRef, closeProjectSuggest, projectSuggestOpen);
   useMousedownOutside(itemSuggestWrapRef, closeItemSuggest, itemSuggestOpenIndex !== null);
+
+  useEffect(() => {
+    const el = recipientTextareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [recipientText]);
 
   useEffect(() => {
     setTotalsDockVisible(readEstimateTotalsDockCookie() === "visible");
@@ -933,6 +1076,16 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
         setClientName(String(e.client_name ?? ""));
         setClientAbbr(String(e.client_abbr ?? ""));
         setEstimateNumberFromApi(String(e.estimate_number ?? ""));
+        setEstimateCreatedByUserId(
+          e.created_by_user_id != null && e.created_by_user_id !== "" && Number.isFinite(Number(e.created_by_user_id))
+            ? Number(e.created_by_user_id)
+            : null,
+        );
+        setEstimatePrimaryProjectId(
+          e.project_id != null && e.project_id !== "" && Number.isFinite(Number(e.project_id)) && Number(e.project_id) > 0
+            ? Number(e.project_id)
+            : null,
+        );
         setRecipientText(String(e.recipient_text ?? ""));
         setRemarks(String(e.remarks ?? ""));
         setIssueDate(String(e.issue_date ?? "").slice(0, 10));
@@ -965,6 +1118,40 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
   }, [estimateId, hydrateAssigneeByUserId]);
 
   useEffect(() => {
+    if (estimateId) {
+      return;
+    }
+    if (!duplicateFromEstimateId || duplicateFromEstimateId <= 0) {
+      return;
+    }
+    if (duplicatePrefillAppliedRef.current) {
+      return;
+    }
+    duplicatePrefillAppliedRef.current = true;
+    const loadDuplicateSource = async () => {
+      try {
+        const res = await fetch(`/api/portal/estimates?id=${duplicateFromEstimateId}`, { credentials: "include", cache: "no-store" });
+        const data = (await res.json()) as { success?: boolean; estimate?: any; message?: string };
+        if (!res.ok || !data.success || !data.estimate) {
+          setMessage(data.message ?? "複製元見積の取得に失敗しました。");
+          return;
+        }
+        const source = data.estimate;
+        setRemarks(String(source.remarks ?? ""));
+        if (Array.isArray(source.lines) && source.lines.length > 0) {
+          setLines(source.lines.map((line: any) => normalizeLoadedEstimateLine(line)));
+        } else {
+          setLines([emptyLine()]);
+        }
+        setMessage("複製元の明細行と備考を反映しました。必要に応じて編集して保存してください。");
+      } catch {
+        setMessage("複製元見積の取得に失敗しました。");
+      }
+    };
+    void loadDuplicateSource();
+  }, [estimateId, duplicateFromEstimateId]);
+
+  useEffect(() => {
     const name = clientName.trim();
     if (name === "" || !abbrLinkedToNameRef.current) {
       return;
@@ -993,84 +1180,131 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
     return () => window.clearTimeout(timer);
   }, [clientName]);
 
-  useEffect(() => {
+  const loadOperationLogs = useCallback(async () => {
+    // #region agent log
+    fetch('http://127.0.0.1:7870/ingest/d3eabf84-6c86-4277-b829-e548b07d84d8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4c935d'},body:JSON.stringify({sessionId:'4c935d',runId:'run1',hypothesisId:'H4',location:'EstimateEditorClient.tsx:loadOperationLogs:start',message:'loadOperationLogs called',data:{estimateId:estimateId??null},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (!estimateId) {
       setOperationLogs([]);
       return;
     }
-    const loadLogs = async () => {
-      try {
-        const res = await fetch(`/api/portal/estimate-operation-logs?estimate_id=${estimateId}`, { credentials: "include", cache: "no-store" });
-        if (!res.ok) return;
-        const data = (await res.json()) as {
-          success?: boolean;
-          logs?: Array<{ id: number; operation_type: string; operator_user_id: number; created_at: string }>;
-        };
-        if (data.success && Array.isArray(data.logs)) {
-          setOperationLogs(data.logs);
-        }
-      } catch {
-        // ignore
+    try {
+      const res = await fetch(`/api/portal/estimate-operation-logs?estimate_id=${estimateId}`, { credentials: "include", cache: "no-store" });
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        success?: boolean;
+        logs?: Array<{ id: number; operation_type: string; operator_user_id: number; operator_label?: string | null; detail_json?: string | null; created_at: string }>;
+      };
+      // #region agent log
+      fetch('http://127.0.0.1:7870/ingest/d3eabf84-6c86-4277-b829-e548b07d84d8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'690a2d'},body:JSON.stringify({sessionId:'690a2d',runId:'run1',hypothesisId:'H4',location:'EstimateEditorClient.tsx:loadOperationLogs:response',message:'operation logs loaded',data:{estimateId,status:res.status,ok:res.ok,success:Boolean(data.success),logCount:Array.isArray(data.logs)?data.logs.length:null,latestOperationType:Array.isArray(data.logs)&&data.logs.length>0?data.logs[0]?.operation_type??null:null},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      // #region agent log
+      fetch('http://127.0.0.1:7870/ingest/d3eabf84-6c86-4277-b829-e548b07d84d8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4c935d'},body:JSON.stringify({sessionId:'4c935d',runId:'run1',hypothesisId:'H4',location:'EstimateEditorClient.tsx:loadOperationLogs:response',message:'operation logs response parsed',data:{estimateId,ok:res.ok,status:res.status,success:Boolean(data.success),logCount:Array.isArray(data.logs)?data.logs.length:null},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      if (data.success && Array.isArray(data.logs)) {
+        setOperationLogs(data.logs);
       }
+    } catch {
+      // ignore
+    }
+  }, [estimateId]);
+
+  useEffect(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7870/ingest/d3eabf84-6c86-4277-b829-e548b07d84d8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4c935d'},body:JSON.stringify({sessionId:'4c935d',runId:'run1',hypothesisId:'H3',location:'EstimateEditorClient.tsx:operationLogsEffect',message:'operation logs effect triggered',data:{estimateId:estimateId??null,operationLogsRefreshTick},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    void loadOperationLogs();
+  }, [loadOperationLogs, operationLogsRefreshTick]);
+
+  const loadUserSuggestions = useCallback(async () => {
+    const usersRes = await fetch("/api/portal/admin/users", { credentials: "include", cache: "no-store" });
+    if (!usersRes.ok) {
+      setUserSuggestRows([]);
+      setUserSuggestLoadError("ユーザー候補の取得に失敗しました。");
+      return;
+    }
+    const usersData = (await usersRes.json()) as {
+      success?: boolean;
+      users?: Array<{ id?: unknown; display_name?: unknown; email?: unknown; team?: unknown }>;
     };
-    void loadLogs();
-  }, [estimateId, message]);
+    if (!usersData.success || !Array.isArray(usersData.users)) {
+      setUserSuggestRows([]);
+      setUserSuggestLoadError("ユーザー候補の取得に失敗しました。");
+      return;
+    }
+    const tags = new Set<string>();
+    const rows = usersData.users
+      .map((u) => {
+        const id = Number(u.id);
+        const displayName = typeof u.display_name === "string" ? u.display_name.trim() : "";
+        const email = typeof u.email === "string" ? u.email.trim() : "";
+        if (!Number.isFinite(id) || id <= 0) return null;
+        if (typeof u.team === "string" && u.team.trim() !== "") {
+          try {
+            const parsed = JSON.parse(u.team) as unknown;
+            if (Array.isArray(parsed)) {
+              for (const t of parsed) {
+                if (typeof t === "string" && t.trim() !== "") tags.add(t.trim().toLowerCase());
+              }
+            }
+          } catch {
+            // ignore invalid team json
+          }
+        }
+        const labelBase = displayName !== "" ? displayName : email !== "" ? email : `user#${id}`;
+        return { id, label: `${labelBase} (user#${id})` };
+      })
+      .filter((v): v is { id: number; label: string } => v !== null);
+    setUserSuggestRows(rows);
+    setTeamTagSuggestions(Array.from(tags).sort((a, b) => a.localeCompare(b, "ja")));
+    setUserSuggestLoadError(null);
+  }, []);
+
+  const loadProjectSuggestions = useCallback(async () => {
+    const projectsRes = await fetch("/api/portal/my-projects", { credentials: "include", cache: "no-store" });
+    if (!projectsRes.ok) {
+      setProjectSuggestRows([]);
+      setProjectSuggestLoadError("Project候補の取得に失敗しました。");
+      return;
+    }
+    const projectsData = (await projectsRes.json()) as {
+      success?: boolean;
+      projects?: Array<{ id?: unknown; name?: unknown; client_name?: unknown }>;
+    };
+    if (!projectsData.success || !Array.isArray(projectsData.projects)) {
+      setProjectSuggestRows([]);
+      setProjectSuggestLoadError("Project候補の取得に失敗しました。");
+      return;
+    }
+    setProjectSuggestRows(
+      projectsData.projects
+        .map((p) => {
+          const id = Number(p.id);
+          const name = typeof p.name === "string" ? p.name.trim() : "";
+          const client_name = typeof p.client_name === "string" && p.client_name.trim() !== "" ? p.client_name.trim() : null;
+          if (!Number.isFinite(id) || id <= 0 || name === "") return null;
+          return { id, name, client_name };
+        })
+        .filter((v): v is { id: number; name: string; client_name: string | null } => v !== null),
+    );
+    setProjectSuggestLoadError(null);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        const [usersRes, projectsRes] = await Promise.all([
-          fetch("/api/portal/admin/users", { credentials: "include", cache: "no-store" }),
-          fetch("/api/portal/my-projects", { credentials: "include", cache: "no-store" }),
-        ]);
-        if (!cancelled && usersRes.ok) {
-          const usersData = (await usersRes.json()) as {
-            success?: boolean;
-            users?: Array<{ id?: unknown; display_name?: unknown; email?: unknown }>;
-          };
-          if (usersData.success && Array.isArray(usersData.users)) {
-            setUserSuggestRows(
-              usersData.users
-                .map((u) => {
-                  const id = Number(u.id);
-                  const displayName = typeof u.display_name === "string" ? u.display_name.trim() : "";
-                  const email = typeof u.email === "string" ? u.email.trim() : "";
-                  if (!Number.isFinite(id) || id <= 0) return null;
-                  const labelBase = displayName !== "" ? displayName : email !== "" ? email : `user#${id}`;
-                  return { id, label: `${labelBase} (user#${id})` };
-                })
-                .filter((v): v is { id: number; label: string } => v !== null),
-            );
-          }
-        }
-        if (!cancelled && projectsRes.ok) {
-          const projectsData = (await projectsRes.json()) as {
-            success?: boolean;
-            projects?: Array<{ id?: unknown; name?: unknown; client_name?: unknown }>;
-          };
-          if (projectsData.success && Array.isArray(projectsData.projects)) {
-            setProjectSuggestRows(
-              projectsData.projects
-                .map((p) => {
-                  const id = Number(p.id);
-                  const name = typeof p.name === "string" ? p.name.trim() : "";
-                  const client_name = typeof p.client_name === "string" && p.client_name.trim() !== "" ? p.client_name.trim() : null;
-                  if (!Number.isFinite(id) || id <= 0 || name === "") return null;
-                  return { id, name, client_name };
-                })
-                .filter((v): v is { id: number; name: string; client_name: string | null } => v !== null),
-            );
-          }
-        }
+        await Promise.all([loadUserSuggestions(), loadProjectSuggestions()]);
       } catch {
-        // ignore
+        if (!cancelled) {
+          // keep existing data; only surface errors when each loader decides
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadProjectSuggestions, loadUserSuggestions]);
 
   useEffect(() => {
     const loadTaxRates = async () => {
@@ -1095,59 +1329,91 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
     void loadTaxRates();
   }, [selectedTaxEffectiveFrom]);
 
+  const reloadAccessAndLinks = useCallback(async (targetEstimateId: number) => {
+    if (!targetEstimateId) return null;
+    try {
+      const [vRes, lRes] = await Promise.all([
+        fetch(`/api/portal/estimate-visibility?estimate_id=${targetEstimateId}`, { credentials: "include", cache: "no-store" }),
+        fetch(`/api/portal/estimate-project-links?estimate_id=${targetEstimateId}`, { credentials: "include", cache: "no-store" }),
+      ]);
+      let loadedVisibility: { scope: "public_all_users" | "restricted"; teamCount: number; userCount: number } | null = null;
+      let loadedProjectCount = 0;
+      if (vRes.ok) {
+        const vData = (await vRes.json()) as {
+          success?: boolean;
+          effective_role?: "owner" | "editor" | "viewer" | "none";
+          visibility_scope?: "public_all_users" | "restricted";
+          team_permissions?: Array<{ team_tag: string; role: "owner" | "editor" | "viewer" }>;
+          user_permissions?: Array<{ user_id: number; role: "owner" | "editor" | "viewer" }>;
+        };
+        if (vData.success) {
+          const nextScope = vData.visibility_scope ?? "public_all_users";
+          setVisibilityScope(nextScope);
+          setEffectiveRole((vData.effective_role as "owner" | "editor" | "viewer" | "none") ?? "none");
+          const rows: AccessControlRow[] = [];
+          if (Array.isArray(vData.team_permissions)) {
+            rows.push(
+              ...vData.team_permissions.map((row, idx) => ({
+                key: `team-${idx}-${row.team_tag}`,
+                subjectType: "team" as const,
+                subject: row.team_tag,
+                role: row.role,
+              })),
+            );
+          }
+          if (Array.isArray(vData.user_permissions)) {
+            rows.push(
+              ...vData.user_permissions.map((row, idx) => ({
+                key: `user-${idx}-${row.user_id}`,
+                subjectType: "user" as const,
+                subjectUserId: row.user_id,
+                subject: String(row.user_id),
+                role: row.role,
+              })),
+            );
+          }
+          setPermissionRows(rows.filter((row) => row.role === "editor" || row.role === "viewer"));
+          loadedVisibility = {
+            scope: nextScope,
+            teamCount: Array.isArray(vData.team_permissions) ? vData.team_permissions.length : 0,
+            userCount: Array.isArray(vData.user_permissions) ? vData.user_permissions.length : 0,
+          };
+        }
+      }
+      if (lRes.ok) {
+        const lData = (await lRes.json()) as { success?: boolean; links?: Array<{ project_id: number }> };
+        if (lData.success && Array.isArray(lData.links)) {
+          const ids = lData.links
+            .map((row) => Number(row.project_id))
+            .filter((id) => Number.isFinite(id) && id > 0);
+          setLinkedProjectIds(Array.from(new Set(ids)));
+          loadedProjectCount = ids.length;
+        }
+      }
+      return { loadedVisibility, loadedProjectCount };
+    } catch {
+      return null;
+    }
+  }, []);
+
   useEffect(() => {
     if (!estimateId) return;
-    const loadAccessAndLinks = async () => {
-      try {
-        const [vRes, lRes] = await Promise.all([
-          fetch(`/api/portal/estimate-visibility?estimate_id=${estimateId}`, { credentials: "include", cache: "no-store" }),
-          fetch(`/api/portal/estimate-project-links?estimate_id=${estimateId}`, { credentials: "include", cache: "no-store" }),
-        ]);
-        if (vRes.ok) {
-          const vData = (await vRes.json()) as {
-            success?: boolean;
-            visibility_scope?: "public_all_users" | "restricted";
-            team_permissions?: Array<{ team_tag: string; role: "owner" | "editor" | "viewer" }>;
-            user_permissions?: Array<{ user_id: number; role: "owner" | "editor" | "viewer" }>;
-          };
-          if (vData.success) {
-            setVisibilityScope(vData.visibility_scope ?? "public_all_users");
-            const rows: AccessControlRow[] = [];
-            if (Array.isArray(vData.team_permissions)) {
-              rows.push(
-                ...vData.team_permissions.map((row, idx) => ({
-                  key: `team-${idx}-${row.team_tag}`,
-                  subjectType: "team" as const,
-                  subject: row.team_tag,
-                  role: row.role,
-                })),
-              );
-            }
-            if (Array.isArray(vData.user_permissions)) {
-              rows.push(
-                ...vData.user_permissions.map((row, idx) => ({
-                  key: `user-${idx}-${row.user_id}`,
-                  subjectType: "user" as const,
-                  subject: String(row.user_id),
-                  role: row.role,
-                })),
-              );
-            }
-            setPermissionRows(rows);
-          }
-        }
-        if (lRes.ok) {
-          const lData = (await lRes.json()) as { success?: boolean; links?: Array<{ project_id: number }> };
-          if (lData.success && Array.isArray(lData.links)) {
-            setLinkedProjectsText(lData.links.map((row) => String(row.project_id)).join(","));
-          }
-        }
-      } catch {
-        // ignore
-      }
-    };
-    void loadAccessAndLinks();
-  }, [estimateId]);
+    void reloadAccessAndLinks(estimateId);
+  }, [estimateId, reloadAccessAndLinks]);
+
+  useEffect(() => {
+    if (userSuggestRows.length === 0) return;
+    setPermissionRows((prev) =>
+      prev.map((row) => {
+        if (row.subjectType !== "user") return row;
+        const n = Number.parseInt(String(row.subject), 10);
+        if (!Number.isFinite(n) || n <= 0 || String(row.subject).trim() !== String(n)) return row;
+        const hit = userSuggestRows.find((u) => u.id === n);
+        if (!hit) return row;
+        return { ...row, subject: splitAssigneeLabelForSuggest(hit.label).primary, subjectUserId: hit.id };
+      }),
+    );
+  }, [userSuggestRows]);
 
   const subtotal = useMemo(
     () =>
@@ -1155,8 +1421,8 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
         (sum, line) =>
           sum +
           computeEstimateLineAmount({
-            quantity: line.quantity,
-            unit_price: line.unit_price,
+            quantity: line.quantity ?? 0,
+            unit_price: line.unit_price ?? 0,
             factor: line.factor,
             unit_type: line.unit_type,
           }),
@@ -1206,7 +1472,11 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
         if (next.item_code === ESTIMATE_MANUAL_DETAIL_LINE_ITEM_CODE && String(next.item_name ?? "").trim() !== "") {
           next.item_code = null;
         }
-        if (next.item_code !== ESTIMATE_MAJOR_LINE_ITEM_CODE && String(next.item_name ?? "").trim() === "") {
+        if (
+          next.item_code !== ESTIMATE_MAJOR_LINE_ITEM_CODE &&
+          next.item_code !== ESTIMATE_BLANK_DETAIL_LINE_ITEM_CODE &&
+          String(next.item_name ?? "").trim() === ""
+        ) {
           next.item_code = ESTIMATE_MANUAL_DETAIL_LINE_ITEM_CODE;
         }
         return next;
@@ -1237,6 +1507,23 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
           quantity: 1,
           unit_type: "set",
           item_code: ESTIMATE_MANUAL_DETAIL_LINE_ITEM_CODE,
+          major_category: parentMajor,
+          category: null,
+        },
+      ];
+    });
+  };
+
+  const addBlankLine = () => {
+    setHistoryStack((prev) => [...prev, lines]);
+    setFutureStack([]);
+    setLines((prev) => {
+      const parentMajor = nearestMajorCategoryAbove(prev, prev.length);
+      return [
+        ...prev,
+        {
+          ...emptyLine(),
+          item_code: ESTIMATE_BLANK_DETAIL_LINE_ITEM_CODE,
           major_category: parentMajor,
           category: null,
         },
@@ -1483,12 +1770,12 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
         const hasQuantity = Number.isFinite(line.quantity) && line.quantity !== 0;
         const hasUnitPrice = Number.isFinite(line.unit_price) && line.unit_price !== 0;
         const quantityRatio = target === "person_day" ? 20 : 1 / 20;
-        const unitPriceRatio = target === "person_day" ? 20 : 1 / 20;
+        const unitPriceRatio = target === "person_day" ? 1 / 20 : 20;
         return {
           ...line,
           unit_type: target,
-          quantity: hasQuantity ? Number((line.quantity * quantityRatio).toFixed(4)) : line.quantity,
-          unit_price: hasUnitPrice ? Number((line.unit_price * unitPriceRatio).toFixed(4)) : line.unit_price,
+          quantity: hasQuantity ? Number(((line.quantity ?? 0) * quantityRatio).toFixed(4)) : line.quantity,
+          unit_price: hasUnitPrice ? Number(((line.unit_price ?? 0) * unitPriceRatio).toFixed(4)) : line.unit_price,
         };
       }),
     );
@@ -1554,10 +1841,42 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
           cache: "no-store",
         });
         if (itemRes.ok) {
-          const data = (await itemRes.json()) as { standard?: string[]; history?: string[] };
-          const standard = Array.isArray(data.standard) ? data.standard.map((value) => ({ value, from: "standard" as const })) : [];
-          const history = Array.isArray(data.history) ? data.history.map((value) => ({ value, from: "history" as const })) : [];
-          setItemSuggestions([...standard, ...history]);
+          const data = (await itemRes.json()) as { standard?: unknown; history?: unknown };
+          const masterParsed: ItemNameSuggestion[] = [];
+          if (Array.isArray(data.standard)) {
+            for (const entry of data.standard) {
+              if (typeof entry === "string") {
+                const v = entry.trim();
+                if (v !== "") {
+                  masterParsed.push({ from: "master", value: v, unit_type: "set", unit_price: 0 });
+                }
+                continue;
+              }
+              if (entry && typeof entry === "object") {
+                const o = entry as Record<string, unknown>;
+                const val = o.value;
+                if (typeof val !== "string" || val.trim() === "") continue;
+                const trimmed = val.trim();
+                const fromRaw = o.from;
+                if (fromRaw === "history") {
+                  masterParsed.push({ from: "history", value: trimmed });
+                  continue;
+                }
+                masterParsed.push({
+                  from: "master",
+                  value: trimmed,
+                  unit_type: parseApiItemMasterUnitType(o.unit_type),
+                  unit_price: parseApiItemMasterUnitPrice(o.unit_price),
+                });
+              }
+            }
+          }
+          const historyParsed: ItemNameSuggestion[] = Array.isArray(data.history)
+            ? data.history
+                .filter((v): v is string => typeof v === "string" && v.trim() !== "")
+                .map((value) => ({ value: value.trim(), from: "history" as const }))
+            : [];
+          setItemSuggestions([...masterParsed, ...historyParsed]);
         }
       } catch {
         // ignore
@@ -2060,133 +2379,388 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
   persistEstimateRef.current = persistEstimate;
 
   useEffect(() => {
-    if (!estimateId || loading || !canEditEstimateBody) {
+    if (estimateId) {
       return;
     }
-    if (clientAbbr.trim() === "") {
+    if (savedPersistSnapshotJsonRef.current !== "") {
       return;
     }
-    if (savedPersistSnapshotJsonRef.current === "") {
-      return;
-    }
-    if (currentPersistSnapshotJson === savedPersistSnapshotJsonRef.current) {
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      void persistEstimateRef.current({ silent: true });
-    }, 1200);
-    return () => window.clearTimeout(timer);
-  }, [currentPersistSnapshotJson, estimateId, loading, canEditEstimateBody, clientAbbr]);
+    // 新規作成時の初期状態を離脱判定の基準にする
+    savedPersistSnapshotJsonRef.current = currentPersistSnapshotJson;
+  }, [estimateId, currentPersistSnapshotJson]);
+
+  const saveVisibilityInternal = useCallback(
+    async (targetEstimateId: number, opts?: { silent?: boolean }): Promise<boolean> => {
+      const silent = opts?.silent ?? false;
+      if (targetEstimateId <= 0) {
+        if (!silent) setMessage("見積作成後に公開範囲を設定できます。");
+        return false;
+      }
+      const normalizedRows = permissionRows.filter((row) => row.role === "editor" || row.role === "viewer");
+      try {
+        const resolvedUserPermissionsDebug = normalizedRows
+          .filter((row) => row.subjectType === "user" && row.subject.trim() !== "")
+          .map((row) => ({
+            subject: row.subject,
+            subjectUserId: row.subjectUserId ?? null,
+            user_id:
+              row.subjectUserId != null && Number.isFinite(row.subjectUserId) && row.subjectUserId > 0
+                ? row.subjectUserId
+                : resolvePermissionUserIdFromSubject(row.subject, userSuggestRows),
+            role: row.role,
+          }));
+        // #region agent log
+        fetch('http://127.0.0.1:7870/ingest/d3eabf84-6c86-4277-b829-e548b07d84d8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'690a2d'},body:JSON.stringify({sessionId:'690a2d',runId:'run1',hypothesisId:'H2',location:'EstimateEditorClient.tsx:saveVisibilityInternal:beforePatch',message:'visibility payload resolution result',data:{targetEstimateId,visibilityScope,normalizedRowsCount:normalizedRows.length,userSuggestRowsCount:userSuggestRows.length,resolvedUserPermissions:resolvedUserPermissionsDebug},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        const teamPermissions = normalizedRows
+          .filter((row) => row.subjectType === "team" && row.subject.trim() !== "")
+          .map((row) => ({ team_tag: row.subject.trim(), role: row.role }));
+        const userPermissions = normalizedRows
+          .filter((row) => row.subjectType === "user" && row.subject.trim() !== "")
+          .map((row) => ({
+            user_id:
+              row.subjectUserId != null && Number.isFinite(row.subjectUserId) && row.subjectUserId > 0
+                ? row.subjectUserId
+                : resolvePermissionUserIdFromSubject(row.subject, userSuggestRows),
+            role: row.role,
+          }))
+          .filter((row) => Number.isFinite(row.user_id) && row.user_id > 0);
+        const unresolvedUserRows = normalizedRows.filter(
+          (row) =>
+            row.subjectType === "user" &&
+            row.subject.trim() !== "" &&
+            !(
+              row.subjectUserId != null &&
+              Number.isFinite(row.subjectUserId) &&
+              row.subjectUserId > 0
+            ) &&
+            !(
+              Number.isFinite(resolvePermissionUserIdFromSubject(row.subject, userSuggestRows) ?? NaN) &&
+              (resolvePermissionUserIdFromSubject(row.subject, userSuggestRows) ?? 0) > 0
+            ),
+        );
+        const effectiveVisibilityScope: "public_all_users" | "restricted" =
+          teamPermissions.length > 0 || userPermissions.length > 0 ? "restricted" : visibilityScope;
+        if (effectiveVisibilityScope === "restricted" && teamPermissions.length === 0 && userPermissions.length === 0) {
+          if (!silent) setMessage("個別制限ではチームまたは個人を1件以上、候補から選択してください。");
+          return false;
+        }
+        if (unresolvedUserRows.length > 0) {
+          if (!silent) setMessage("ユーザー権限の対象は候補から選択してください。");
+          return false;
+        }
+        const payload = {
+          estimate_id: targetEstimateId,
+          visibility_scope: effectiveVisibilityScope,
+          team_permissions: teamPermissions,
+          user_permissions: userPermissions,
+        };
+        const res = await fetch("/api/portal/estimate-visibility", {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const raw = await res.text();
+        let data: { success?: boolean; message?: string } = {};
+        try {
+          data = JSON.parse(raw) as { success?: boolean; message?: string };
+        } catch {
+          data = {};
+        }
+        // #region agent log
+        fetch('http://127.0.0.1:7870/ingest/d3eabf84-6c86-4277-b829-e548b07d84d8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'690a2d'},body:JSON.stringify({sessionId:'690a2d',runId:'run1',hypothesisId:'H3',location:'EstimateEditorClient.tsx:saveVisibilityInternal:afterPatch',message:'visibility patch response',data:{targetEstimateId,status:res.status,ok:res.ok,success:Boolean(data.success),message:data.message??null},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        if (!res.ok || data.success === false) {
+          if (!silent) setMessage(data.message ?? "公開範囲の保存に失敗しました。");
+          return false;
+        }
+        if (visibilityScope !== effectiveVisibilityScope) {
+          setVisibilityScope(effectiveVisibilityScope);
+        }
+        return true;
+      } catch {
+        if (!silent) setMessage("公開範囲の保存に失敗しました。");
+        return false;
+      }
+    },
+    [permissionRows, visibilityScope],
+  );
+
+  const saveLinkedProjectsInternal = useCallback(
+    async (targetEstimateId: number, opts?: { silent?: boolean }): Promise<boolean> => {
+      const silent = opts?.silent ?? false;
+      if (targetEstimateId <= 0) {
+        if (!silent) setMessage("見積作成後に案件紐づけを設定できます。");
+        return false;
+      }
+      const projectIds = Array.from(
+        new Set(
+          [
+            ...linkedProjectIds,
+            selectedProjectSuggestId != null && selectedProjectSuggestId > 0 ? selectedProjectSuggestId : null,
+          ].filter((v): v is number => Number.isFinite(v) && (v as number) > 0),
+        ),
+      );
+      try {
+        // #region agent log
+        fetch('http://127.0.0.1:7870/ingest/d3eabf84-6c86-4277-b829-e548b07d84d8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'690a2d'},body:JSON.stringify({sessionId:'690a2d',runId:'run2',hypothesisId:'H4',location:'EstimateEditorClient.tsx:saveLinkedProjectsInternal:beforePatch',message:'project links payload prepared',data:{targetEstimateId,projectIds},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        const res = await fetch("/api/portal/estimate-project-links", {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            estimate_id: targetEstimateId,
+            links: projectIds.map((projectId, idx) => ({ project_id: projectId, link_type: idx === 0 ? "primary" : "related" })),
+          }),
+        });
+        const raw = await res.text();
+        let data: { success?: boolean; message?: string } = {};
+        try {
+          data = JSON.parse(raw) as { success?: boolean; message?: string };
+        } catch {
+          data = {};
+        }
+        // #region agent log
+        fetch('http://127.0.0.1:7870/ingest/d3eabf84-6c86-4277-b829-e548b07d84d8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'690a2d'},body:JSON.stringify({sessionId:'690a2d',runId:'run2',hypothesisId:'H5',location:'EstimateEditorClient.tsx:saveLinkedProjectsInternal:afterPatch',message:'project links patch response',data:{targetEstimateId,status:res.status,ok:res.ok,success:Boolean(data.success),message:data.message??null},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        if (!res.ok || data.success === false) {
+          if (!silent) setMessage(data.message ?? "案件紐づけの保存に失敗しました。");
+          return false;
+        }
+        return true;
+      } catch {
+        if (!silent) setMessage("案件紐づけの保存に失敗しました。");
+        return false;
+      }
+    },
+    [linkedProjectIds, selectedProjectSuggestId],
+  );
 
   const saveEstimate = async () => {
-    await persistEstimate();
+    // #region agent log
+    fetch('http://127.0.0.1:7870/ingest/d3eabf84-6c86-4277-b829-e548b07d84d8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'690a2d'},body:JSON.stringify({sessionId:'690a2d',runId:'run1',hypothesisId:'H5',location:'EstimateEditorClient.tsx:saveEstimate:start',message:'save estimate started',data:{estimateId:estimateId??null,permissionRowsCount:permissionRows.length,canManageEstimateSettings},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    // #region agent log
+    fetch('http://127.0.0.1:7870/ingest/d3eabf84-6c86-4277-b829-e548b07d84d8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4c935d'},body:JSON.stringify({sessionId:'4c935d',runId:'run1',hypothesisId:'H1',location:'EstimateEditorClient.tsx:saveEstimate:start',message:'saveEstimate invoked',data:{estimateId:estimateId??null,canManageEstimateSettings},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    const targetEstimateId = await persistEstimate();
+    // #region agent log
+    fetch('http://127.0.0.1:7870/ingest/d3eabf84-6c86-4277-b829-e548b07d84d8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4c935d'},body:JSON.stringify({sessionId:'4c935d',runId:'run1',hypothesisId:'H2',location:'EstimateEditorClient.tsx:saveEstimate:afterPersist',message:'persistEstimate returned',data:{estimateId:estimateId??null,targetEstimateId:targetEstimateId??null},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    if (!targetEstimateId || !canManageEstimateSettings) {
+      if (targetEstimateId) {
+        // #region agent log
+        fetch('http://127.0.0.1:7870/ingest/d3eabf84-6c86-4277-b829-e548b07d84d8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4c935d'},body:JSON.stringify({sessionId:'4c935d',runId:'run1',hypothesisId:'H3',location:'EstimateEditorClient.tsx:saveEstimate:tickIncrementEarly',message:'incrementing operationLogsRefreshTick in early return path',data:{targetEstimateId},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        setOperationLogsRefreshTick((prev) => prev + 1);
+      }
+      return;
+    }
+    setOperationLogsRefreshTick((prev) => prev + 1);
+    setMessage("見積を保存しました。権限設定・Project紐づけは各保存ボタンで保存してください。");
+  };
+
+  const saveVisibilityOnly = async () => {
+    const targetEstimateId = estimateId ?? 0;
+    if (targetEstimateId <= 0) {
+      setMessage("見積作成後に公開範囲/権限を保存できます。");
+      return;
+    }
+    const ok = await saveVisibilityInternal(targetEstimateId, { silent: false });
+    if (!ok) return;
+    const afterReload = await reloadAccessAndLinks(targetEstimateId);
+    setOperationLogsRefreshTick((prev) => prev + 1);
+    const expectedUserCount = permissionRows.filter((r) => r.subjectType === "user" && r.role !== "owner" && String(r.subject ?? "").trim() !== "").length;
+    const expectedTeamCount = permissionRows.filter((r) => r.subjectType === "team" && r.role !== "owner" && String(r.subject ?? "").trim() !== "").length;
+    if (
+      afterReload?.loadedVisibility?.scope !== "restricted" ||
+      (afterReload?.loadedVisibility?.userCount ?? 0) < expectedUserCount ||
+      (afterReload?.loadedVisibility?.teamCount ?? 0) < expectedTeamCount
+    ) {
+      setMessage("公開範囲/権限APIは成功しましたが、再取得結果に反映されませんでした。");
+      return;
+    }
+    setMessage("公開範囲/権限を保存しました。");
+  };
+
+  const saveProjectLinksOnly = async () => {
+    const targetEstimateId = estimateId ?? 0;
+    if (targetEstimateId <= 0) {
+      setMessage("見積作成後にProject紐づけを保存できます。");
+      return;
+    }
+    const ok = await saveLinkedProjectsInternal(targetEstimateId, { silent: false });
+    if (!ok) return;
+    const afterReload = await reloadAccessAndLinks(targetEstimateId);
+    setOperationLogsRefreshTick((prev) => prev + 1);
+    const expectedProjectCount = Array.from(
+      new Set(
+        [
+          ...linkedProjectIds,
+          selectedProjectSuggestId != null && selectedProjectSuggestId > 0 ? selectedProjectSuggestId : null,
+        ].filter((v): v is number => Number.isFinite(v) && (v as number) > 0),
+      ),
+    ).length;
+    if ((afterReload?.loadedProjectCount ?? 0) < expectedProjectCount) {
+      setMessage("Project紐づけAPIは成功しましたが、再取得結果に反映されませんでした。");
+      return;
+    }
+    setMessage("Project紐づけを保存しました。");
+  };
+
+  const duplicateEstimate = async () => {
+    if (!estimateId) {
+      setMessage("作成後に複製できます。");
+      return;
+    }
+    try {
+      const res = await fetch("/api/portal/estimate-duplicate", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ estimate_id: estimateId }),
+      });
+      const data = (await res.json()) as { success?: boolean; estimate_id?: number; message?: string };
+      if (!res.ok || !data.success || !Number.isFinite(data.estimate_id) || (data.estimate_id ?? 0) <= 0) {
+        setMessage(data.message ?? "複製に失敗しました。");
+        return;
+      }
+      router.push(`/estimates/${data.estimate_id}`);
+    } catch {
+      setMessage("複製に失敗しました。");
+    }
+  };
+
+  const canDeleteEstimate = Boolean(estimateId && currentUserId != null && (isAdminMe || currentUserId === estimateCreatedByUserId));
+
+  const openConfirmDialog = useCallback(
+    (opts: Omit<EstimateConfirmDialogState, "open">, action: () => void | Promise<void>) => {
+      confirmActionRef.current = action;
+      setConfirmDialog({ open: true, ...opts });
+    },
+    [],
+  );
+
+  const closeConfirmDialog = useCallback(() => {
+    setConfirmDialog((prev) => ({ ...prev, open: false }));
+    confirmActionRef.current = null;
+  }, []);
+
+  const runConfirmDialogAction = useCallback(async () => {
+    const action = confirmActionRef.current;
+    setConfirmDialog((prev) => ({ ...prev, open: false }));
+    confirmActionRef.current = null;
+    if (!action) {
+      return;
+    }
+    await action();
+  }, []);
+
+  const runDeleteEstimate = useCallback(async () => {
+    if (!estimateId) {
+      setMessage("削除対象の見積が未作成です。");
+      return;
+    }
+    if (!canDeleteEstimate) {
+      setMessage("見積を削除する権限がありません。");
+      return;
+    }
+    try {
+      const res = await fetch(`/api/portal/estimates?id=${estimateId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const data = (await res.json()) as { success?: boolean; message?: string };
+      if (!res.ok || !data.success) {
+        setMessage(data.message ?? "見積の削除に失敗しました。");
+        return;
+      }
+      router.push("/estimates");
+    } catch {
+      setMessage("見積の削除に失敗しました。");
+    }
+  }, [canDeleteEstimate, estimateId, router]);
+
+  const deleteEstimate = async () => {
+    if (!estimateId) {
+      setMessage("削除対象の見積が未作成です。");
+      return;
+    }
+    if (!canDeleteEstimate) {
+      setMessage("見積を削除する権限がありません。");
+      return;
+    }
+    openConfirmDialog(
+      estimateStatus === "submitted"
+        ? {
+            title: "提出済みの見積を削除しますか？",
+            description: "ステータスが、提出済みになっています。\n本当に削除して大丈夫ですか？",
+            confirmLabel: "削除する",
+            destructive: true,
+          }
+        : {
+            title: "見積を削除しますか？",
+            description: "この見積を削除します。よろしいですか？",
+            confirmLabel: "削除する",
+            destructive: true,
+          },
+      runDeleteEstimate,
+    );
   };
 
   const openPreview = async () => {
-    const savedId = await persistEstimate();
-    if (!savedId || savedId <= 0) {
+    if (!estimateId || estimateId <= 0) {
+      setMessage("作成後にプレビューできます。");
       return;
     }
-    window.open(`/estimates/${savedId}/preview`, "_blank", "noopener,noreferrer");
+    window.open(`/estimates/${estimateId}/preview`, "_blank", "noopener,noreferrer");
   };
 
-  const saveVisibility = async () => {
-    if (!estimateId) {
-      setMessage("見積作成後に公開範囲を設定できます。");
+  const onBackNavigate = useCallback((e: MouseEvent<HTMLAnchorElement>) => {
+    if (isDirty) {
+      e.preventDefault();
+      openConfirmDialog(
+        {
+          title: "未保存の変更があります",
+          description: UNSAVED_LEAVE_CONFIRM_MESSAGE,
+          confirmLabel: "破棄して戻る",
+          destructive: true,
+        },
+        () => {
+          router.push("/estimates");
+        },
+      );
+    }
+  }, [isDirty, openConfirmDialog, router]);
+
+  useEffect(() => {
+    if (!isDirty) {
       return;
     }
-    try {
-      const payload = {
-        estimate_id: estimateId,
-        visibility_scope: visibilityScope,
-        team_permissions: permissionRows
-          .filter((row) => row.subjectType === "team" && row.subject.trim() !== "")
-          .map((row) => ({ team_tag: row.subject.trim(), role: row.role })),
-        user_permissions: permissionRows
-          .filter((row) => row.subjectType === "user" && row.subject.trim() !== "")
-          .map((row) => ({ user_id: Number(row.subject), role: row.role }))
-          .filter((row) => Number.isFinite(row.user_id) && row.user_id > 0),
-      };
-      const res = await fetch("/api/portal/estimate-visibility", {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = (await res.json()) as { success?: boolean; message?: string };
-      if (!res.ok || !data.success) {
-        setMessage(data.message ?? "公開範囲の保存に失敗しました。");
-        return;
-      }
-      setMessage("公開範囲と権限を保存しました。");
-    } catch {
-      setMessage("公開範囲の保存に失敗しました。");
-    }
-  };
-
-  const saveLinkedProjects = async () => {
-    if (!estimateId) {
-      setMessage("見積作成後に案件紐づけを設定できます。");
-      return;
-    }
-    const projectIds = linkedProjectsText
-      .split(",")
-      .map((v) => Number.parseInt(v.trim(), 10))
-      .filter((v) => Number.isFinite(v) && v > 0);
-    try {
-      const res = await fetch("/api/portal/estimate-project-links", {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          estimate_id: estimateId,
-          links: projectIds.map((projectId, idx) => ({ project_id: projectId, link_type: idx === 0 ? "primary" : "related" })),
-        }),
-      });
-      const data = (await res.json()) as { success?: boolean; message?: string };
-      if (!res.ok || !data.success) {
-        setMessage(data.message ?? "案件紐づけの保存に失敗しました。");
-        return;
-      }
-      setMessage("案件紐づけを保存しました。");
-    } catch {
-      setMessage("案件紐づけの保存に失敗しました。");
-    }
-  };
-
-  const { a4ExportRowCount, previewOverflowsA4 } = useMemo(() => {
-    const n = countEstimateHtmlExportRowBudget(lines);
-    return { a4ExportRowCount: n, previewOverflowsA4: n > ESTIMATE_A4_HTML_EXPORT_ROW_BUDGET };
-  }, [lines]);
-  const linkedProjectIds = useMemo(
-    () =>
-      linkedProjectsText
-        .split(",")
-        .map((v) => Number.parseInt(v.trim(), 10))
-        .filter((v) => Number.isFinite(v) && v > 0),
-    [linkedProjectsText],
-  );
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [isDirty]);
 
   const applyLinkedProjectIds = (ids: number[]) => {
     const uniq = Array.from(new Set(ids.filter((v) => Number.isFinite(v) && v > 0)));
-    setLinkedProjectsText(uniq.join(","));
+    setLinkedProjectIds(uniq);
   };
 
   const addLinkedProjectBySuggest = () => {
-    const raw = projectSuggestInput.trim();
-    if (raw === "") return;
-    const byIdMatch = raw.match(/#(\d+)\)?$/);
-    let targetId = byIdMatch?.[1] ? Number.parseInt(byIdMatch[1], 10) : NaN;
-    if (!Number.isFinite(targetId)) {
-      const byName = projectSuggestRows.find((p) => `${p.name} (#${p.id})` === raw || p.name === raw);
-      targetId = byName ? byName.id : NaN;
-    }
+    const targetId = selectedProjectSuggestId ?? NaN;
     if (!Number.isFinite(targetId) || targetId <= 0) {
       setMessage("Project候補から選択してください。");
       return;
     }
     applyLinkedProjectIds([...linkedProjectIds, targetId]);
     setProjectSuggestInput("");
+    setSelectedProjectSuggestId(null);
   };
 
   return (
@@ -2194,6 +2768,28 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
       <ScrollPanel
         className={cn("min-h-0 w-full flex-1 space-y-4 pr-1", totalsDockVisible ? "pb-24" : "pb-20")}
       >
+      <Dialog open={confirmDialog.open} onOpenChange={(open) => !open && closeConfirmDialog()}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{confirmDialog.title}</DialogTitle>
+            <DialogDescription className="whitespace-pre-line">{confirmDialog.description}</DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="ghost" size="sm" onClick={closeConfirmDialog}>
+              キャンセル
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={confirmDialog.destructive ? "destructive" : "accent"}
+              onClick={() => void runConfirmDialogAction()}
+            >
+              {confirmDialog.confirmLabel}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <section className="surface-card pm-page-hero relative shrink-0 overflow-hidden px-5">
         <div className="pointer-events-none absolute -top-10 right-0 h-36 w-36 rounded-full bg-[color:color-mix(in_srgb,var(--accent)_22%,transparent)] blur-3xl" />
         <div className="relative flex h-full min-h-0 items-center justify-between gap-3">
@@ -2201,6 +2797,7 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
             <Link
               href="/estimates"
               prefetch
+              onClick={onBackNavigate}
               className="shrink-0 pt-0.5 text-sm text-[color:color-mix(in_srgb,var(--accent)_82%,var(--foreground)_18%)] hover:underline"
             >
               ←戻る
@@ -2215,6 +2812,31 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
             </div>
           </div>
           <div className="flex shrink-0 flex-nowrap items-center gap-2 sm:gap-3">
+            {estimateId ? (
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                className="inline-flex shrink-0 items-center gap-1.5 self-center rounded-lg"
+                onClick={() => void deleteEstimate()}
+                disabled={loading || pdfDownloading || !canDeleteEstimate}
+                title={!canDeleteEstimate ? "削除できるのは管理者または作成者のみです" : undefined}
+              >
+                <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
+                削除
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              className="inline-flex shrink-0 items-center gap-1.5 self-center rounded-lg"
+              disabled={loading || pdfDownloading || !estimateId}
+              onClick={() => void duplicateEstimate()}
+            >
+              <Copy className="h-4 w-4 shrink-0" aria-hidden />
+              複製
+            </Button>
             <Button
               type="button"
               variant="default"
@@ -2229,15 +2851,11 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
                 setPdfDownloading(true);
                 setMessage(null);
                 try {
-                  const savedId = await persistEstimate();
-                  if (!savedId || savedId <= 0) {
-                    return;
-                  }
                   const res = await fetch("/api/portal/estimate-export-pdf", {
                     method: "POST",
                     credentials: "include",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ estimate_id: savedId }),
+                    body: JSON.stringify({ estimate_id: estimateId }),
                   });
                   const ct = res.headers.get("content-type") ?? "";
                   if (!res.ok) {
@@ -2259,10 +2877,12 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
                   a.href = url;
                   a.download =
                     downloadFilenameFromContentDisposition(res.headers.get("content-disposition")) ??
-                    `${buildEstimateExportBasename(
+                    `${buildEstimatePdfExportBasename(
                       {
                         estimate_number: estimateNumberFromApi,
                         client_abbr: clientAbbr.trim() !== "" ? clientAbbr.trim() : null,
+                        title: title.trim(),
+                        issue_date: issueDate,
                       },
                       estimateId ?? 0,
                     )}.pdf`;
@@ -2374,7 +2994,8 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
               size="sm"
               className="shrink-0 self-center rounded-lg"
               onClick={saveEstimate}
-              disabled={loading || pdfDownloading}
+              disabled={loading || pdfDownloading || !canManageEstimateSettings}
+              title={!canManageEstimateSettings ? "編集できるのは作成者・管理者・編集者のみです" : undefined}
             >
               {loading ? "Saving…" : "Save"}
             </Button>
@@ -2632,11 +3253,17 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
             <div className="min-w-0 space-y-1">
               <Label htmlFor="estimate-recipient-text">見積先（2行程度）</Label>
               <textarea
+                ref={recipientTextareaRef}
                 id="estimate-recipient-text"
-                className={cn(inputBaseClassName, "h-auto min-h-16 resize-y py-2")}
+                className={cn(inputBaseClassName, "min-h-16 resize-none overflow-hidden py-2")}
                 rows={2}
                 value={recipientText}
                 onChange={(e) => setRecipientText(e.target.value)}
+                onInput={(e) => {
+                  const target = e.currentTarget;
+                  target.style.height = "auto";
+                  target.style.height = `${target.scrollHeight}px`;
+                }}
                 disabled={bodyFieldDisabled}
               />
             </div>
@@ -2720,8 +3347,26 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
             <Button type="button" variant="default" size="sm" onClick={addMajorCategoryLine} disabled={loading || bodyFieldDisabled}>
               大項目追加
             </Button>
-          </div>
-          <div className="flex shrink-0 flex-nowrap items-center justify-end gap-1">
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              className="shrink-0 whitespace-nowrap"
+              onClick={addLine}
+              disabled={loading || bodyFieldDisabled}
+            >
+              行追加
+            </Button>
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              className="shrink-0 whitespace-nowrap"
+              onClick={addBlankLine}
+              disabled={loading || bodyFieldDisabled}
+            >
+              空白行追加
+            </Button>
             <Button
               type="button"
               variant="default"
@@ -2732,6 +3377,8 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
             >
               進行管理費追加
             </Button>
+          </div>
+          <div className="flex shrink-0 flex-nowrap items-center justify-end gap-1">
             <Button
               type="button"
               variant="default"
@@ -2764,9 +3411,6 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
               disabled={loading || bodyFieldDisabled}
             >
               全行: 人日→人月
-            </Button>
-            <Button type="button" variant="default" size="sm" className="shrink-0 whitespace-nowrap" onClick={addLine} disabled={loading || bodyFieldDisabled}>
-              行追加
             </Button>
           </div>
         </div>
@@ -2821,13 +3465,14 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
             >
               {lines.map((line, index) => {
                 const majorRow = isMajorHeadingLine(line);
+                const blankRow = isBlankDetailLine(line);
                 const lineAmount = computeEstimateLineAmount({
-                  quantity: line.quantity,
-                  unit_price: line.unit_price,
+                  quantity: line.quantity ?? 0,
+                  unit_price: line.unit_price ?? 0,
                   factor: line.factor,
                   unit_type: line.unit_type,
                 });
-                const lineCalcKind = majorRow ? null : getLinePriceCalcKind(line.item_name);
+                const lineCalcKind = majorRow || blankRow ? null : getLinePriceCalcKind(line.item_name);
                 const isLastLineRow = index === lines.length - 1;
                 const insertAfter =
                   dropIndicatorIndex !== null &&
@@ -2936,6 +3581,78 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
                     </tr>
                   );
                 }
+                if (blankRow) {
+                  return (
+                    <tr
+                      key={`line-${index}-${line.id ?? "n"}-blank`}
+                      className={cn(
+                        "relative border-b border-[color:color-mix(in_srgb,var(--border)_80%,transparent)]",
+                        index % 2 === 1
+                          ? "bg-[color:color-mix(in_srgb,var(--surface)_94%,var(--background)_6%)]"
+                          : "bg-[var(--background)]",
+                        draggingIndex === index && "opacity-60",
+                        insertIndicatorClass,
+                        insertIndicatorAfterClass,
+                      )}
+                      {...lineDragRowProps}
+                    >
+                      <td
+                        className={cn(
+                          "border-l-[3px] border-l-[color:color-mix(in_srgb,var(--accent)_50%,transparent)] px-0.5 py-1.5 align-middle",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "inline-flex h-8 w-9 touch-none select-none items-center justify-center rounded px-0.5 text-[color:color-mix(in_srgb,var(--muted)_95%,transparent)]",
+                            canEditEstimateBody ? "cursor-grab active:cursor-grabbing" : "cursor-not-allowed opacity-60",
+                          )}
+                          title={canEditEstimateBody ? "ドラッグして並び替え" : "下書きのときのみ並び替えできます"}
+                        >
+                          <GripVertical className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+                        </span>
+                      </td>
+                      <td className="px-2 py-1.5 align-middle" aria-label="空白行">
+                        <span className="block h-8 min-h-8" />
+                      </td>
+                      <td className="px-2 py-1.5 align-middle" aria-hidden>
+                        <span className="block h-8 min-h-8" />
+                      </td>
+                      <td className="px-2 py-1.5 align-middle" aria-hidden>
+                        <span className="block h-8 min-h-8" />
+                      </td>
+                      <td className="px-2 py-1.5 align-middle" aria-hidden>
+                        <span className="block h-8 min-h-8" />
+                      </td>
+                      <td className="min-w-0 whitespace-nowrap px-2 py-1.5 text-right align-middle tabular-nums text-[var(--foreground)]" />
+                      <td className="px-1 py-1.5 align-middle">
+                        <div className="flex h-8 min-h-8 min-w-0 flex-nowrap items-center justify-end gap-0.5">
+                          <Button
+                            type="button"
+                            variant="default"
+                            size="sm"
+                            className="shrink-0"
+                            disabled={bodyFieldDisabled}
+                            onClick={() => void duplicateLine(index)}
+                          >
+                            行複製
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="sm"
+                            className={cn(trashDeleteIconButtonClassName, "shrink-0")}
+                            disabled={bodyFieldDisabled}
+                            onClick={() => removeLine(index)}
+                            aria-label="行を削除"
+                            title="行を削除"
+                          >
+                            <Trash2 className="h-4 w-4" strokeWidth={2} aria-hidden />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                }
                 return (
                   <tr
                     key={`line-${index}-${line.id ?? "n"}-detail`}
@@ -2977,6 +3694,14 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
                             updateLine(index, { item_name: e.target.value });
                             setItemSuggestOpenIndex(index);
                           }}
+                          onBlur={() => {
+                            if (bodyFieldDisabled) return;
+                            const key = line.item_name.trim();
+                            if (key === "") return;
+                            const tri = itemMasterLookup.get(key);
+                            if (!tri) return;
+                            updateLine(index, { unit_type: tri.unit_type, unit_price: tri.unit_price });
+                          }}
                           onFocus={() => setItemSuggestOpenIndex(index)}
                           placeholder="項目名"
                           autoComplete="off"
@@ -2995,14 +3720,24 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
                                   className={PORTAL_THEMED_SUGGEST_ROW}
                                   onMouseDown={(e) => e.preventDefault()}
                                   onClick={() => {
-                                    updateLine(index, { item_name: suggestion.display });
+                                    if (suggestion.from === "master") {
+                                      updateLine(index, {
+                                        item_name: suggestion.display,
+                                        unit_type: suggestion.unit_type,
+                                        unit_price: suggestion.unit_price,
+                                      });
+                                    } else {
+                                      updateLine(index, { item_name: suggestion.display });
+                                    }
                                     setItemSuggestOpenIndex(null);
                                   }}
                                 >
                                   <span className="block text-sm font-medium text-[var(--foreground)]">{suggestion.display}</span>
                                   {suggestion.from === "history" ? (
                                     <span className="block text-xs text-[var(--muted)]">履歴</span>
-                                  ) : null}
+                                  ) : (
+                                    <span className="block text-xs text-[var(--muted)]">マスタ</span>
+                                  )}
                                 </button>
                               ))
                             )}
@@ -3015,8 +3750,8 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
                         type="number"
                         step="0.01"
                         className={cn("h-8 bg-[var(--surface)] text-right tabular-nums", noNumberInputSpinnerClass)}
-                        value={line.quantity}
-                        onChange={(e) => updateLine(index, { quantity: Number(e.target.value) })}
+                        value={line.quantity ?? ""}
+                        onChange={(e) => updateLine(index, { quantity: parseNullableNumberInput(e.target.value) })}
                         disabled={bodyFieldDisabled}
                       />
                     </td>
@@ -3067,14 +3802,14 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
                             "h-8 min-w-0 flex-1 bg-[var(--surface)] text-right tabular-nums",
                             noNumberInputSpinnerClass,
                           )}
-                          value={line.unit_price}
-                          onChange={(e) => updateLine(index, { unit_price: Number(e.target.value) })}
+                          value={line.unit_price ?? ""}
+                          onChange={(e) => updateLine(index, { unit_price: parseNullableNumberInput(e.target.value) })}
                           disabled={bodyFieldDisabled}
                         />
                       </div>
                     </td>
                     <td className="min-w-0 whitespace-nowrap px-2 py-1.5 text-right align-middle tabular-nums text-[var(--foreground)]">
-                      {lineAmount.toLocaleString("ja-JP")}
+                      {lineAmount === 0 ? "" : lineAmount.toLocaleString("ja-JP")}
                     </td>
                     <td className="px-1 py-1.5 align-middle">
                       <div className="flex h-8 min-h-8 min-w-0 flex-nowrap items-center justify-end gap-0.5">
@@ -3128,23 +3863,18 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
                     <Button type="button" variant="default" size="sm" className="shrink-0" onClick={addLine} disabled={loading || bodyFieldDisabled}>
                       行追加
                     </Button>
+                    <Button type="button" variant="default" size="sm" className="shrink-0" onClick={addBlankLine} disabled={loading || bodyFieldDisabled}>
+                      空白行追加
+                    </Button>
+                    <Button type="button" variant="default" size="sm" className="shrink-0 whitespace-nowrap" onClick={openProgressFeeModal} disabled={loading || bodyFieldDisabled}>
+                      進行管理費追加
+                    </Button>
                   </div>
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
-      </section>
-
-      <section className="surface-card p-4">
-        <p className={cn("text-xs leading-relaxed", previewOverflowsA4 ? "text-amber-600" : "text-[var(--muted)]")}>
-          {previewOverflowsA4 ? <span className="font-medium">警告: A4縦1ページを超える可能性があります。</span> : null}
-          {previewOverflowsA4 ? " " : null}
-          プレビュー帳票では各大項目ブロックごとに「見出し1行＋明細各行＋小計1行」を数え、合計が
-          <strong className="mx-0.5 text-[var(--foreground)]">{ESTIMATE_A4_HTML_EXPORT_ROW_BUDGET}</strong>
-          行相当を超えると超過警告になります（現在
-          <strong className="mx-0.5 text-[var(--foreground)]">{a4ExportRowCount}</strong> 行相当）。
-        </p>
       </section>
 
       <section className="surface-card p-4">
@@ -3231,6 +3961,24 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
                 <PortalAppIcon appKey="project-manager" className="h-4 w-4" />
                 Project一覧へ
               </Link>
+              {projectDetailNavigateIds.length > 0 ? (
+                <div className="space-y-1">
+                  {projectDetailNavigateIds.slice(0, 3).map((projectId) => {
+                    const row = projectSuggestRows.find((p) => p.id === projectId);
+                    const label = row ? `${row.name} (#${projectId})` : `Project #${projectId}`;
+                    return (
+                      <Link
+                        key={`estimate-project-detail-link-${projectId}`}
+                        href={`/project-list/${projectId}`}
+                        className="flex items-center gap-2 rounded border border-[var(--border)] px-2 py-1.5 text-sm hover:bg-[color:color-mix(in_srgb,var(--surface)_88%,transparent)]"
+                      >
+                        <PortalAppIcon appKey="project-manager" className="h-4 w-4" />
+                        {label} を開く
+                      </Link>
+                    );
+                  })}
+                </div>
+              ) : null}
             </div>
 
             <div className="space-y-4">
@@ -3238,7 +3986,7 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
             <div className="space-y-1">
               <Label htmlFor="estimate-visibility-scope">公開範囲</Label>
               <Select value={visibilityScope} onValueChange={(value) => setVisibilityScope(value as "public_all_users" | "restricted")}>
-                <SelectTrigger id="estimate-visibility-scope">
+              <SelectTrigger id="estimate-visibility-scope" disabled={!canManageEstimateSettings}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -3250,27 +3998,66 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
           </div>
 
           <div>
-            <p className="mb-2 text-sm">アクセス設定（owner / editor / viewer）</p>
-            <AccessControlTable rows={permissionRows} onChange={setPermissionRows} readOnly={visibilityScope !== "restricted"} userSuggestions={userSuggestRows} />
+            <p className="mb-1 text-sm">権限設定</p>
+            <p className="mb-2 text-xs text-[var(--muted)]">オーナーは作成者のみです。</p>
+            <div className="mb-2 rounded-lg border border-[var(--border)] p-3">
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div>
+                  <p className="text-xs text-[var(--muted)]">種別</p>
+                  <p className="text-sm">ユーザー</p>
+                </div>
+                <div>
+                  <p className="text-xs text-[var(--muted)]">権限</p>
+                  <p className="text-sm font-semibold">オーナー</p>
+                </div>
+              </div>
+              <div className="mt-2">
+                <p className="text-xs text-[var(--muted)]">対象</p>
+                <p className="text-sm">{ownerLabel}</p>
+              </div>
+              <p className="mt-2 text-xs text-[var(--muted)]">作成者のため削除・変更できません。</p>
+            </div>
+            <AccessControlTable
+              rows={permissionRows}
+              onChange={setPermissionRows}
+              readOnly={!canManageEstimateSettings || visibilityScope !== "restricted"}
+              userSuggestions={userSuggestRows}
+              teamSuggestions={teamTagSuggestions}
+              allowedRoles={["editor", "viewer"]}
+            />
+            {userSuggestLoadError ? <p className="mt-2 text-xs text-red-500">{userSuggestLoadError}</p> : null}
             <div className="mt-2">
-              <Button type="button" variant="default" size="sm" onClick={saveVisibility}>
-                権限保存
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                onClick={() => void saveVisibilityOnly()}
+                disabled={!canManageEstimateSettings || loading}
+              >
+                権限設定を保存
               </Button>
             </div>
           </div>
 
           <div>
             <div className="space-y-1">
-              <Label htmlFor="estimate-linked-projects">紐づけProject（名称サジェスト）</Label>
+              <Label htmlFor="estimate-linked-projects">Projectを紐づける</Label>
               <div ref={projectSuggestWrapRef} className="relative min-w-0">
                 <Input
                   id="estimate-linked-projects"
                   value={projectSuggestInput}
+                  disabled={!canManageEstimateSettings}
                   onChange={(event) => {
                     setProjectSuggestInput(event.target.value);
+                    setSelectedProjectSuggestId(null);
                     setProjectSuggestOpen(true);
                   }}
-                  onFocus={() => setProjectSuggestOpen(true)}
+                  onFocus={() => {
+                    setProjectSuggestOpen(true);
+                    if (projectSuggestRows.length === 0) {
+                      void loadProjectSuggestions();
+                    }
+                  }}
                   placeholder="Project名を入力"
                   autoComplete="off"
                 />
@@ -3288,6 +4075,7 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
                           onMouseDown={(e) => e.preventDefault()}
                           onClick={() => {
                             setProjectSuggestInput(`${p.name} (#${p.id})`);
+                            setSelectedProjectSuggestId(p.id);
                             setProjectSuggestOpen(false);
                           }}
                         >
@@ -3303,41 +4091,47 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
                   </div>
                 ) : null}
               </div>
-            </div>
-            <div className="mt-2 flex gap-2">
-              <Button type="button" variant="default" size="sm" onClick={addLinkedProjectBySuggest}>
-                追加
-              </Button>
-              <Button type="button" variant="default" size="sm" onClick={saveLinkedProjects}>
-                紐づけ保存
-              </Button>
-              {estimateId ? (
-                <Button
-                  type="button"
-                  variant="default"
-                  size="sm"
-                  onClick={async () => {
-                    const projectIds = linkedProjectsText
-                      .split(",")
-                      .map((v) => Number.parseInt(v.trim(), 10))
-                      .filter((v) => Number.isFinite(v) && v > 0);
-                    if (projectIds.length === 0) {
-                      setMessage("Project ID を入力してください。");
+              {projectSuggestRows.length > 0 ? (
+                <select
+                  className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-xs"
+                  value={selectedProjectSuggestId != null ? String(selectedProjectSuggestId) : ""}
+                  disabled={!canManageEstimateSettings}
+                  onChange={(event) => {
+                    const nextId = Number.parseInt(event.target.value, 10);
+                    if (!Number.isFinite(nextId) || nextId <= 0) {
+                      setSelectedProjectSuggestId(null);
                       return;
                     }
-                    const projectId = projectIds[0]!;
-                    await fetch("/api/portal/project-estimates", {
-                      method: "PATCH",
-                      credentials: "include",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ project_id: projectId, estimate_ids: [estimateId] }),
-                    });
-                    setMessage(`Project #${projectId} からも見積紐づけを更新しました。`);
+                    const picked = projectSuggestRows.find((p) => p.id === nextId);
+                    setSelectedProjectSuggestId(nextId);
+                    if (picked) {
+                      setProjectSuggestInput(`${picked.name} (#${picked.id})`);
+                    }
                   }}
                 >
-                  Project基点で更新
-                </Button>
+                  <option value="">候補から選択...</option>
+                  {projectSuggestRows.map((p) => (
+                    <option key={`estimate-project-select-${p.id}`} value={p.id}>
+                      {p.client_name != null && p.client_name.trim() !== "" ? `${p.name} (${p.client_name}) #${p.id}` : `${p.name} #${p.id}`}
+                    </option>
+                  ))}
+                </select>
               ) : null}
+              {projectSuggestLoadError ? <p className="mt-1 text-xs text-red-500">{projectSuggestLoadError}</p> : null}
+            </div>
+            <div className="mt-2 flex gap-2">
+              <Button type="button" variant="default" size="sm" onClick={addLinkedProjectBySuggest} disabled={!canManageEstimateSettings}>
+                追加
+              </Button>
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                onClick={() => void saveProjectLinksOnly()}
+                disabled={!canManageEstimateSettings || loading}
+              >
+                Project紐づけを保存
+              </Button>
             </div>
             <div className="mt-2 flex flex-wrap gap-1">
               {linkedProjectIds.map((projectId) => {
@@ -3348,7 +4142,10 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
                     key={`linked-project-chip-${projectId}`}
                     type="button"
                     className="rounded border border-[var(--border)] px-2 py-1 text-xs hover:bg-[color:color-mix(in_srgb,var(--surface)_88%,transparent)]"
-                    onClick={() => applyLinkedProjectIds(linkedProjectIds.filter((id) => id !== projectId))}
+                    onClick={() => {
+                      if (!canManageEstimateSettings) return;
+                      applyLinkedProjectIds(linkedProjectIds.filter((id) => id !== projectId));
+                    }}
                     title="クリックで削除"
                   >
                     {label} ×
@@ -3360,22 +4157,39 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
           </div>
 
           <div>
-            <p className="mb-2 text-sm">変更履歴（監査ログ）</p>
-            <div className="max-h-48 overflow-auto rounded border border-[var(--border)]">
+            <p className="mb-2 text-sm">変更履歴</p>
+            <div className="mb-2 flex items-center justify-end">
+              {operationLogs.length > 3 ? (
+                <Button type="button" variant="ghost" size="sm" onClick={() => setShowAllOperationLogs((prev) => !prev)}>
+                  {showAllOperationLogs ? "折りたたむ" : "すべてを開く"}
+                </Button>
+              ) : null}
+            </div>
+            <div className={cn("rounded border border-[var(--border)]", showAllOperationLogs ? "max-h-64 overflow-y-auto" : "overflow-hidden")}>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-[var(--border)] text-left">
                     <th className="px-2 py-1">日時</th>
-                    <th className="px-2 py-1">操作</th>
+                    <th className="px-2 py-1">操作概要</th>
                     <th className="px-2 py-1">実行者</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {operationLogs.slice(0, 50).map((log) => (
+                  {(showAllOperationLogs ? operationLogs : operationLogs.slice(0, 3)).map((log) => (
                     <tr key={`estimate-log-${log.id}`} className="border-b border-[var(--border)]">
                       <td className="px-2 py-1">{String(log.created_at).replace("T", " ").slice(0, 19)}</td>
-                      <td className="px-2 py-1">{log.operation_type}</td>
-                      <td className="px-2 py-1">user#{log.operator_user_id}</td>
+                      <td className="px-2 py-1">
+                        {(() => {
+                          try {
+                            const detail = log.detail_json ? (JSON.parse(log.detail_json) as { summary?: string }) : null;
+                            const summary = typeof detail?.summary === "string" ? detail.summary.trim() : "";
+                            return summary !== "" ? summary : "-";
+                          } catch {
+                            return "-";
+                          }
+                        })()}
+                      </td>
+                      <td className="px-2 py-1">{String(log.operator_label ?? "").trim() || `user#${log.operator_user_id}`}</td>
                     </tr>
                   ))}
                   {operationLogs.length === 0 ? (
@@ -3776,8 +4590,8 @@ export function EstimateEditorClient({ estimateId }: EstimateEditorClientProps) 
                                 const line = lines[lineIndex];
                                 if (!line) return null;
                                 const amt = computeEstimateLineAmount({
-                                  quantity: line.quantity,
-                                  unit_price: line.unit_price,
+                                  quantity: line.quantity ?? 0,
+                                  unit_price: line.unit_price ?? 0,
                                   factor: line.factor,
                                   unit_type: line.unit_type,
                                 });

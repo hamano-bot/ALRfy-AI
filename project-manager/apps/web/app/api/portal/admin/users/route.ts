@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
-const UPSTREAM_PATH = "/portal/api/admin/users";
+const UPSTREAM_PATH = "/portal/api/get_admin_users.php";
 
 function trimTrailingSlashes(value: string): string {
   return value.replace(/\/+$/, "");

@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 /** 明細の大項目行（EstimateEditorClient と同一コード） */
 const ESTIMATE_MAJOR_LINE_ITEM_CODE = '__ESTIMATE_MAJOR__';
+/** 明細の空白行（EstimateEditorClient と同一コード） */
+const ESTIMATE_BLANK_DETAIL_LINE_ITEM_CODE = '__ESTIMATE_BLANK_DETAIL__';
 
 require_once dirname(__DIR__, 2) . '/auth/bootstrap.php';
 require_once dirname(__DIR__) . '/includes/estimate_schema.php';
@@ -54,7 +56,7 @@ function estimateFormatYen($n): string
 function estimateFormatQty($n): string
 {
     if (!is_numeric($n)) {
-        return '0';
+        return '';
     }
     $v = (float)$n;
     if (abs($v - round($v)) < 1e-9) {
@@ -231,6 +233,17 @@ foreach ($blocks as $b) {
 /** しきい値は project-manager の `ESTIMATE_A4_HTML_EXPORT_ROW_BUDGET` と同期 */
 $estimateA4HtmlExportRowBudget = 22;
 $isOverflowWarning = $rowCountForWarning > $estimateA4HtmlExportRowBudget;
+/**
+ * 少行時のみ明細領域を縦に育てる（行高 + 補完空行）。
+ * 行換算は warning と同一（見出し1 + 明細 + 小計1）。
+ */
+$estimateSparseDetailRowThreshold = 10;
+$isSparseDetailLayout = $rowCountForWarning <= $estimateSparseDetailRowThreshold;
+/** 少行時に目標とする見た目行数（行換算ベース） */
+$estimateSparseDetailTargetVisualRows = 16;
+$estimateSparseFillRows = $isSparseDetailLayout
+    ? max(0, $estimateSparseDetailTargetVisualRows - $rowCountForWarning)
+    : 0;
 
 $docTitle = ((int)($estimate['is_rough_estimate'] ?? 0) === 1) ? '概算御見積書' : '御見積書';
 $subjectTitle = isset($estimate['title']) && is_string($estimate['title']) ? trim($estimate['title']) : '';
@@ -324,12 +337,27 @@ foreach ($blocks as $block) {
         }
         $idx++;
         $zebra = ($idx % 2 === 0) ? ' est-zebra' : '';
-        $name = htmlspecialchars((string)($line['item_name'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        $pref = (str_starts_with((string)($line['item_name'] ?? ''), '・') || str_starts_with((string)($line['item_name'] ?? ''), '●')) ? '' : '・';
-        $qty = htmlspecialchars(estimateFormatQty($line['quantity'] ?? 0), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $itemCode = isset($line['item_code']) && is_string($line['item_code']) ? trim($line['item_code']) : '';
+        $isBlankRow = ($itemCode === ESTIMATE_BLANK_DETAIL_LINE_ITEM_CODE);
+        $nameRaw = (string)($line['item_name'] ?? '');
+        $name = htmlspecialchars($nameRaw, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $pref = '';
+        if (!$isBlankRow && $nameRaw !== '') {
+            $pref = (str_starts_with($nameRaw, '・') || str_starts_with($nameRaw, '●')) ? '' : '・';
+        }
+        $qty = htmlspecialchars($isBlankRow ? '' : estimateFormatQty($line['quantity'] ?? null), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $unit = htmlspecialchars(estimateUnitLabelJp(isset($line['unit_type']) && is_string($line['unit_type']) ? $line['unit_type'] : null), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        $up = estimateFormatYen($line['unit_price'] ?? 0);
-        $am = estimateFormatYen($line['line_amount'] ?? 0);
+        $up = $isBlankRow ? '' : estimateFormatYen($line['unit_price'] ?? null);
+        $am = $isBlankRow ? '' : estimateFormatYen($line['line_amount'] ?? null);
+        if ($isBlankRow) {
+            // 空白行でも通常明細行と同じ高さを維持するため、各セルに実体参照ではなく NBSP 文字を入れる。
+            $nbsp = "\u{00A0}";
+            $name = $nbsp;
+            $qty = $nbsp;
+            $unit = $nbsp;
+            $up = $nbsp;
+            $am = $nbsp;
+        }
         $tbodyHtml .= '<tr class="est-data-row' . $zebra . '"><td class="est-col-content">' . $pref . $name . '</td>'
             . '<td class="est-col-num">' . $qty . '</td>'
             . '<td class="est-col-unit">' . $unit . '</td>'
@@ -346,15 +374,28 @@ foreach ($blocks as $block) {
 if ($tbodyHtml === '') {
     $tbodyHtml = '<tr class="est-data-row"><td colspan="5" class="est-col-content">明細がありません。</td></tr>';
 }
+if ($estimateSparseFillRows > 0) {
+    for ($i = 0; $i < $estimateSparseFillRows; $i++) {
+        $tbodyHtml .= '<tr class="est-fill-row"><td class="est-col-content">&nbsp;</td><td class="est-col-num"></td><td class="est-col-unit"></td><td class="est-col-price"></td><td class="est-col-amt"></td></tr>';
+    }
+}
 
 $publicBase = getenv('APP_PUBLIC_BASE_URL') ?: '';
 $publicBase = is_string($publicBase) ? rtrim($publicBase, '/') : '';
 
-$clientLineEsc = htmlspecialchars($clientName !== '' ? $clientName : '—', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-$recipientBody = $recipient !== '' ? $recipient : '—';
-$recipientHtml = nl2br(htmlspecialchars($recipientBody, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
+$recipientTrimmed = trim($recipient);
+if ($recipientTrimmed !== '') {
+    $recipientHtml = nl2br(htmlspecialchars($recipientTrimmed . "\u{3000}" . '様', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
+    $clientLineEsc = htmlspecialchars($clientName, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+} else {
+    $recipientHtml = '';
+    $clientLineEsc = htmlspecialchars($clientName !== '' ? ($clientName . "\u{3000}" . '御中') : '', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+}
 $subjectEsc = htmlspecialchars($subjectTitle !== '' ? $subjectTitle : '—', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 $issueDateEsc = htmlspecialchars($issueDate !== '' ? $issueDate : '—', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+$sheetClass = 'estimate-export-sheet' . ($isSparseDetailLayout ? ' est-layout-sparse' : '');
+$sheetMainClass = 'est-sheet-main' . ($isSparseDetailLayout ? ' est-sheet-main-sparse' : '');
+$detailZoneClass = 'est-detail-zone' . ($isSparseDetailLayout ? ' est-detail-zone-sparse' : '');
 
 $css = <<<'CSS'
 html { box-sizing: border-box; }
@@ -373,6 +414,10 @@ body { margin: 0; font-family: system-ui, "Segoe UI", "Hiragino Sans", "Noto San
   box-sizing: border-box;
 }
 .est-sheet-main { flex: 1 1 auto; min-height: 0; }
+.est-detail-zone { min-height: 0; }
+/* 少行時もA4の白紙面は維持する（プレビュー/PDF/印刷の見え方統一） */
+.estimate-export-sheet.est-layout-sparse { min-height: 297mm; }
+.estimate-export-sheet.est-layout-sparse .est-sheet-main { flex: 1 1 auto; }
 .est-doc-title { text-align: center; margin: 0 0 4px; font-size: 20px; font-weight: 700; letter-spacing: 0.04em; }
 .est-doc-title-sub { text-align: center; margin: 0 0 12px; font-size: 11px; font-style: italic; color: #6b7280; }
 .est-header-grid {
@@ -421,7 +466,7 @@ body { margin: 0; font-family: system-ui, "Segoe UI", "Hiragino Sans", "Noto San
 .est-top3-cell .est-lbl { color: #000; }
 .est-top3-cell .est-lbl .est-lbl-en { color: #6b7280; }
 .est-top3-cell .est-val-block { color: #000; }
-.est-meta-underline { width: 100%; border-collapse: collapse; font-size: 9.5px; margin-bottom: 4px; }
+.est-meta-underline { width: calc(100% - 0.6mm); border-collapse: collapse; font-size: 9.5px; margin-bottom: 4px; margin-right: auto; }
 .est-meta-underline th, .est-meta-underline td { border: none; border-bottom: 1pt solid #000; padding: 3px 4px 4px; vertical-align: bottom; }
 .est-meta-underline th { font-weight: 600; text-align: left; width: 38%; white-space: nowrap; color: #374151; }
 .est-meta-underline td { text-align: right; font-size: 10px; }
@@ -450,7 +495,7 @@ body { margin: 0; font-family: system-ui, "Segoe UI", "Hiragino Sans", "Noto San
 .est-tb-lbl { font-size: 10px; font-weight: 600; display: inline; }
 .est-tb-lbl small { font-weight: 400; color: #6b7280; margin-left: 4px; }
 .est-tb-amt { font-size: 20px; font-weight: 800; letter-spacing: 0.02em; display: inline; line-height: 1; }
-.est-detail-table { width: 100%; border-collapse: collapse; margin-bottom: 0; font-size: 8.5px; }
+.est-detail-table { width: calc(100% - 0.6mm); border-collapse: collapse; margin-bottom: 0; font-size: 8.5px; margin-right: auto; }
 .est-detail-table th, .est-detail-table td { border: 1pt solid #000; padding: 2px 4px; vertical-align: bottom; line-height: 1.2; }
 .est-detail-table thead th { background: #333333; color: #fff; font-weight: 600; text-align: center; padding-top: 1px; padding-bottom: 2px; vertical-align: bottom; }
 .est-detail-table thead th:first-child { text-align: left; width: 46%; }
@@ -461,7 +506,27 @@ body { margin: 0; font-family: system-ui, "Segoe UI", "Hiragino Sans", "Noto San
 .est-cat-row td { background: #e8e8e8; color: #000; font-weight: 700; padding: 3px 5px; }
 .est-subtotal-row td { font-weight: 600; background: #fafafa; }
 .est-sub-lbl { text-align: right; padding-right: 8px; }
-.est-tax-footer { display: grid; grid-template-columns: 1fr 1fr 1fr; border: 1pt solid #000; border-top: none; margin-bottom: 12px; }
+.est-fill-row td {
+  background: transparent;
+}
+/* 少行時は明細の行高を拡張して、総額〜フッター間の空きを明細側で吸収する */
+.estimate-export-sheet.est-layout-sparse .est-cat-row td {
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+.estimate-export-sheet.est-layout-sparse .est-detail-table thead th {
+  padding-top: 4px;
+  padding-bottom: 4px;
+  line-height: 1.45;
+}
+.estimate-export-sheet.est-layout-sparse .est-data-row td,
+.estimate-export-sheet.est-layout-sparse .est-subtotal-row td,
+.estimate-export-sheet.est-layout-sparse .est-fill-row td {
+  padding-top: 4px;
+  padding-bottom: 4px;
+  line-height: 1.45;
+}
+.est-tax-footer { width: calc(100% - 0.6mm); display: grid; grid-template-columns: 1fr 1fr 1fr; border: 1pt solid #000; border-top: none; margin-bottom: 12px; margin-right: auto; }
 .est-tax-footer > div {
   padding: 5px 6px;
   border-right: 1pt solid #000;
@@ -541,13 +606,15 @@ body { margin: 0; font-family: system-ui, "Segoe UI", "Hiragino Sans", "Noto San
     padding: 0;
     box-shadow: none;
   }
+  .estimate-export-sheet.est-layout-sparse { min-height: 100%; }
+  .estimate-export-sheet.est-layout-sparse .est-sheet-main { flex: 1 1 auto; }
   .est-detail-table,
   .est-tax-footer,
   .est-meta-underline {
-    width: 100%;
-    max-width: 100%;
+    width: calc(100% - 0.6mm);
+    max-width: calc(100% - 0.6mm);
     margin-left: 0;
-    margin-right: 0;
+    margin-right: auto;
     box-sizing: border-box;
   }
 }
@@ -561,8 +628,8 @@ if ($publicBase !== '') {
     $html .= '<base href="' . htmlspecialchars($publicBase . '/', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">';
 }
 $html .= '<style>' . $css . '</style></head><body>'
-    . '<div class="estimate-export-sheet">'
-    . '<div class="est-sheet-main">'
+    . '<div class="' . htmlspecialchars($sheetClass, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">'
+    . '<div class="' . htmlspecialchars($sheetMainClass, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">'
     . '<h1 class="est-doc-title">' . htmlspecialchars($docTitle, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</h1>'
     . '<p class="est-doc-title-sub">Quotation</p>'
     . '<header class="est-header-grid" aria-label="見積ヘッダ">'
@@ -590,6 +657,7 @@ $html .= '<style>' . $css . '</style></head><body>'
     . '</tbody></table>'
     . '</div>'
     . '</header>'
+    . '<div class="' . htmlspecialchars($detailZoneClass, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">'
     . '<section class="est-total-bar" aria-label="税込合計">'
     . '<div class="est-total-bar-left"></div>'
     . '<div class="est-total-bar-right">'
@@ -606,6 +674,7 @@ $html .= '<style>' . $css . '</style></head><body>'
     . '<div><span class="est-tf-lbl">税抜金額</span>' . "\u{3000}" . '<span class="est-tf-val">' . htmlspecialchars($subtotal, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</span></div>'
     . '<div><span class="est-tf-lbl">消費税額（' . htmlspecialchars($taxPercentStr, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '%）</span>' . "\u{3000}" . '<span class="est-tf-val">' . htmlspecialchars($taxAmt, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</span></div>'
     . '<div><span class="est-tf-lbl">税込み合計金額</span>' . "\u{3000}" . '<span class="est-tf-val">' . htmlspecialchars($totalIncl, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</span></div>'
+    . '</div>'
     . '</div>'
     . '</div>'
     . '<footer class="est-page-footer" aria-label="フッタ">'

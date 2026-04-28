@@ -2,6 +2,8 @@ import { z, ZodIssueCode } from "zod";
 
 /** `EstimateEditorClient` / PHP `post_estimate_export_html.php` と同一。大項目行は見出し空でも保存可。 */
 export const ESTIMATE_MAJOR_LINE_ITEM_CODE = "__ESTIMATE_MAJOR__";
+/** `EstimateEditorClient` と同一。帳票/プレビュー上の空白行。 */
+export const ESTIMATE_BLANK_DETAIL_LINE_ITEM_CODE = "__ESTIMATE_BLANK_DETAIL__";
 
 /**
  * HTML 帳票 `post_estimate_export_html.php` の `$rowCountForWarning` しきい値と同期すること。
@@ -84,7 +86,7 @@ export const estimateLineSchema = z
     category: z.string().trim().max(100).nullable().optional(),
     item_code: z.string().trim().max(100).nullable().optional(),
     item_name: z.string().trim().max(255),
-    quantity: z.number().finite(),
+    quantity: z.number().finite().nullable(),
     unit_type: z
       .enum([
         "person_month",
@@ -97,14 +99,15 @@ export const estimateLineSchema = z
         "annual_fee",
       ])
       .default("set"),
-    unit_price: z.number().finite(),
+    unit_price: z.number().finite().nullable(),
     factor: z.number().finite().default(1),
   })
   .superRefine((line, ctx) => {
     const code =
       line.item_code != null && String(line.item_code).trim() !== "" ? String(line.item_code).trim() : null;
     const isMajor = code === ESTIMATE_MAJOR_LINE_ITEM_CODE;
-    if (!isMajor && line.item_name.trim().length === 0) {
+    const isBlank = code === ESTIMATE_BLANK_DETAIL_LINE_ITEM_CODE;
+    if (!isMajor && !isBlank && line.item_name.trim().length === 0) {
       ctx.addIssue({
         code: ZodIssueCode.custom,
         message: "項目名は1文字以上で入力してください。",

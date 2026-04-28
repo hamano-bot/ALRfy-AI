@@ -50,7 +50,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ja-JP" className="h-full" suppressHydrationWarning>
-      <body className={`${inter.className} ${montserrat.variable} h-full min-h-0 overflow-hidden antialiased`}>
+      <body suppressHydrationWarning className={`${inter.className} ${montserrat.variable} h-full min-h-0 overflow-hidden antialiased`}>
         <Script id="alrfy-theme-init" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: THEME_INIT_INLINE_SCRIPT }} />
         <PortalAppsProvider>
           <DashboardShell>{children}</DashboardShell>

@@ -17,9 +17,17 @@ function cloneNode(n: SitemapNode): SitemapNode {
 }
 
 export function cloneSitemapContent(c: RequirementsPageContentSitemap): RequirementsPageContentSitemap {
-  return {
+  const base = {
     schemaVersion: c.schemaVersion ?? 1,
     root: cloneNode(c.root),
+    ...(c.diagramLayout === "horizontal" || c.diagramLayout === "vertical" ? { diagramLayout: c.diagramLayout } : {}),
+  };
+  if (!c.nodePositions || Object.keys(c.nodePositions).length === 0) {
+    return base;
+  }
+  return {
+    ...base,
+    nodePositions: Object.fromEntries(Object.entries(c.nodePositions).map(([k, v]) => [k, { x: v.x, y: v.y }])),
   };
 }
 

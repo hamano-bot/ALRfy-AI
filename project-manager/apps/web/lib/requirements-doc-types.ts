@@ -4,7 +4,11 @@ import type { RequirementsPageContentSitemap } from "@/lib/requirements-sitemap-
 
 export type RequirementsInputMode = "richtext" | "table" | "split_editor_table" | "sitemap";
 
-export type { RequirementsPageContentSitemap, SitemapNode } from "@/lib/requirements-sitemap-schema";
+export type {
+  RequirementsPageContentSitemap,
+  SitemapNode,
+  SitemapNodePosition,
+} from "@/lib/requirements-sitemap-schema";
 
 export type RequirementsPageContentRichtext = {
   doc: JSONContent;

@@ -3,7 +3,7 @@
 import { Move, Printer } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Button } from "@/app/components/ui/button";
-import { absolutizeEstimateHtmlAssets } from "@/lib/estimate-print-html";
+import { absolutizeEstimateHtmlAssets, injectPrintOverridesForEstimate } from "@/lib/estimate-print-html";
 import { estimatePrintPreviewChannelName } from "@/lib/estimate-print-preview-channel";
 import { cn } from "@/lib/utils";
 
@@ -53,7 +53,7 @@ export function EstimatePreviewClient({ estimateId }: EstimatePreviewClientProps
       }
 
       const origin = typeof window !== "undefined" ? window.location.origin : "";
-      setHtml(absolutizeEstimateHtmlAssets(hData.html, origin));
+      setHtml(injectPrintOverridesForEstimate(absolutizeEstimateHtmlAssets(hData.html, origin)));
     } catch {
       setHtml("");
       setMessage("プレビュー取得に失敗しました。");

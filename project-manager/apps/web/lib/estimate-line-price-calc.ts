@@ -5,8 +5,8 @@ export type EstimateLineForPriceCalc = {
   item_code?: string | null;
   item_name: string;
   major_category?: string | null;
-  quantity: number;
-  unit_price: number;
+  quantity: number | null;
+  unit_price: number | null;
   factor: number;
   unit_type: string;
 };
@@ -90,8 +90,8 @@ export function sumCodingLineAmountsInIndices(
     const name = normalizeEstimateItemNameForKeywords(line.item_name);
     if (!name.includes(needle)) continue;
     sum += computeEstimateLineAmount({
-      quantity: line.quantity,
-      unit_price: line.unit_price,
+      quantity: line.quantity ?? 0,
+      unit_price: line.unit_price ?? 0,
       factor: line.factor,
       unit_type: line.unit_type,
     });

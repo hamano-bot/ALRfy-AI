@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Button } from "@/app/components/ui/button";
+import { Trash2 } from "lucide-react";
 import {
   PORTAL_THEMED_SUGGEST_MUTED,
   PORTAL_THEMED_SUGGEST_PANEL,
@@ -12,6 +13,7 @@ export type AccessControlRow = {
   key: string;
   subjectType: "team" | "user";
   subject: string;
+  subjectUserId?: number | null;
   role: "owner" | "editor" | "viewer";
 };
 
@@ -20,9 +22,30 @@ type AccessControlTableProps = {
   onChange: (rows: AccessControlRow[]) => void;
   readOnly?: boolean;
   userSuggestions?: Array<{ id: number; label: string }>;
+  teamSuggestions?: string[];
+  allowedRoles?: AccessControlRow["role"][];
 };
 
 const roleOptions: Array<AccessControlRow["role"]> = ["owner", "editor", "viewer"];
+const roleLabel: Record<AccessControlRow["role"], string> = {
+  owner: "オーナー",
+  editor: "編集者",
+  viewer: "閲覧者",
+};
+
+const subjectTypeLabel: Record<AccessControlRow["subjectType"], string> = {
+  team: "チーム",
+  user: "ユーザー",
+};
+
+function userPrimaryLabel(label: string): string {
+  const t = String(label ?? "").trim();
+  const m = t.match(/^(.*)\s*\(user#(\d+)\)\s*$/);
+  if (m) {
+    return m[1].trim() || t;
+  }
+  return t;
+}
 
 function useMousedownOutside(ref: RefObject<HTMLElement | null>, onOutside: () => void, active: boolean) {
   useEffect(() => {
@@ -37,7 +60,14 @@ function useMousedownOutside(ref: RefObject<HTMLElement | null>, onOutside: () =
   }, [active, onOutside, ref]);
 }
 
-export function AccessControlTable({ rows, onChange, readOnly = false, userSuggestions = [] }: AccessControlTableProps) {
+export function AccessControlTable({
+  rows,
+  onChange,
+  readOnly = false,
+  userSuggestions = [],
+  teamSuggestions = [],
+  allowedRoles = roleOptions,
+}: AccessControlTableProps) {
   const updateRow = (idx: number, patch: Partial<AccessControlRow>) => {
     onChange(rows.map((row, i) => (i === idx ? { ...row, ...patch } : row)));
   };
@@ -56,21 +86,25 @@ export function AccessControlTable({ rows, onChange, readOnly = false, userSugge
     ]);
   };
 
-  const resolveUserSubject = (rawValue: string): string => {
-    const value = rawValue.trim();
-    if (value === "") return "";
-    if (/^\d+$/.test(value)) return value;
-    const byExact = userSuggestions.find((u) => u.label === value);
-    if (byExact) return String(byExact.id);
-    const byPattern = value.match(/user#(\d+)$/i);
-    if (byPattern && byPattern[1]) return byPattern[1];
-    return value;
-  };
-
   const [userSuggestMenuKey, setUserSuggestMenuKey] = useState<string | null>(null);
+  const [remoteUserSuggestions, setRemoteUserSuggestions] = useState<Array<{ id: number; label: string }>>([]);
   const userSuggestWrapRef = useRef<HTMLDivElement | null>(null);
   const closeUserSuggestMenu = useCallback(() => setUserSuggestMenuKey(null), []);
-  const userSuggestMenuActive = userSuggestMenuKey !== null && userSuggestions.length > 0 && !readOnly;
+
+  const mergedUserSuggestions = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const u of userSuggestions) {
+      m.set(u.id, u.label);
+    }
+    for (const u of remoteUserSuggestions) {
+      if (!m.has(u.id)) m.set(u.id, u.label);
+    }
+    return Array.from(m.entries())
+      .map(([id, label]) => ({ id, label }))
+      .sort((a, b) => a.id - b.id);
+  }, [userSuggestions, remoteUserSuggestions]);
+
+  const userSuggestMenuActive = userSuggestMenuKey !== null && !readOnly;
   useMousedownOutside(userSuggestWrapRef, closeUserSuggestMenu, userSuggestMenuActive);
 
   useEffect(() => {
@@ -81,149 +115,285 @@ export function AccessControlTable({ rows, onChange, readOnly = false, userSugge
     }
   }, [rows, userSuggestMenuKey]);
 
+  useEffect(() => {
+    if (!userSuggestMenuKey || readOnly) {
+      setRemoteUserSuggestions([]);
+      return;
+    }
+    const row = rows.find((r) => r.key === userSuggestMenuKey);
+    const q = row?.subjectType === "user" ? String(row.subject ?? "").trim() : "";
+    if (q.length < 2) {
+      setRemoteUserSuggestions([]);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const res = await fetch(`/api/portal/user-suggest?q=${encodeURIComponent(q)}`, {
+            credentials: "include",
+            cache: "no-store",
+          });
+          if (!res.ok) return;
+          const data = (await res.json()) as {
+            success?: boolean;
+            users?: Array<{ id?: unknown; display_name?: unknown; email?: unknown }>;
+          };
+          if (!data.success || !Array.isArray(data.users) || cancelled) return;
+          const mapped = data.users
+            .map((u) => {
+              const id = Number(u.id);
+              if (!Number.isFinite(id) || id <= 0) return null;
+              const dn = typeof u.display_name === "string" ? u.display_name.trim() : "";
+              const em = typeof u.email === "string" ? u.email.trim() : "";
+              const labelBase = dn !== "" ? dn : em !== "" ? em : `user#${id}`;
+              return { id, label: `${labelBase} (user#${id})` };
+            })
+            .filter((v): v is { id: number; label: string } => v !== null);
+          if (!cancelled) setRemoteUserSuggestions(mapped);
+        } catch {
+          // ignore
+        }
+      })();
+    }, 180);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [rows, userSuggestMenuKey, readOnly]);
+
   const filteredUserSuggestions = useMemo(() => {
-    if (userSuggestions.length === 0) return [];
+    if (mergedUserSuggestions.length === 0) return [];
     const row = userSuggestMenuKey ? rows.find((r) => r.key === userSuggestMenuKey) : undefined;
     const raw = row?.subjectType === "user" ? String(row.subject ?? "").trim() : "";
     const q = raw.toLowerCase();
-    if (q === "") return userSuggestions.slice(0, 40);
-    return userSuggestions
+    if (q === "") return mergedUserSuggestions.slice(0, 40);
+    return mergedUserSuggestions
       .filter((u) => u.label.toLowerCase().includes(q) || String(u.id).includes(q) || q === String(u.id))
       .slice(0, 48);
-  }, [userSuggestMenuKey, userSuggestions, rows]);
+  }, [userSuggestMenuKey, mergedUserSuggestions, rows]);
+
+  const [teamSuggestMenuKey, setTeamSuggestMenuKey] = useState<string | null>(null);
+  const teamSuggestWrapRef = useRef<HTMLDivElement | null>(null);
+  const closeTeamSuggestMenu = useCallback(() => setTeamSuggestMenuKey(null), []);
+  const mergedTeamSuggestions = useMemo(() => {
+    const set = new Set<string>();
+    for (const tag of teamSuggestions) {
+      const t = String(tag ?? "").trim();
+      if (t !== "") set.add(t);
+    }
+    for (const row of rows) {
+      if (row.subjectType !== "team") continue;
+      const t = String(row.subject ?? "").trim();
+      if (t !== "") set.add(t);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "ja"));
+  }, [teamSuggestions, rows]);
+  const teamSuggestMenuActive = teamSuggestMenuKey !== null && mergedTeamSuggestions.length > 0 && !readOnly;
+  useMousedownOutside(teamSuggestWrapRef, closeTeamSuggestMenu, teamSuggestMenuActive);
+
+  useEffect(() => {
+    if (!teamSuggestMenuKey) return;
+    const r = rows.find((x) => x.key === teamSuggestMenuKey);
+    if (!r || r.subjectType !== "team") {
+      setTeamSuggestMenuKey(null);
+    }
+  }, [rows, teamSuggestMenuKey]);
+
+  const filteredTeamSuggestions = useMemo(() => {
+    if (mergedTeamSuggestions.length === 0) return [];
+    const row = teamSuggestMenuKey ? rows.find((r) => r.key === teamSuggestMenuKey) : undefined;
+    const raw = row?.subjectType === "team" ? String(row.subject ?? "").trim() : "";
+    const q = raw.toLowerCase();
+    if (q === "") return mergedTeamSuggestions.slice(0, 40);
+    return mergedTeamSuggestions.filter((t) => t.toLowerCase().includes(q)).slice(0, 48);
+  }, [teamSuggestMenuKey, mergedTeamSuggestions, rows]);
 
   return (
     <div className="space-y-2">
-      <div className="overflow-auto">
-        <table className="w-full min-w-[420px] border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-[var(--border)] text-left">
-              <th className="px-2 py-1">種別</th>
-              <th className="px-2 py-1">対象</th>
-              <th className="px-2 py-1">権限</th>
-              <th className="px-2 py-1">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, idx) => (
-              <tr key={row.key} className="border-b border-[var(--border)]">
-                <td className="px-2 py-1">
-                  <select
-                    className="w-full rounded border border-[var(--border)] bg-[var(--background)] px-2 py-1"
-                    value={row.subjectType}
-                    disabled={readOnly}
-                    onChange={(event) => updateRow(idx, { subjectType: event.target.value as "team" | "user" })}
-                  >
-                    <option value="team">team</option>
-                    <option value="user">user</option>
-                  </select>
-                </td>
-                <td className="px-2 py-1">
-                  {row.subjectType === "user" ? (
-                    <div
-                      className="relative min-w-0"
-                      ref={userSuggestMenuKey === row.key ? userSuggestWrapRef : undefined}
-                    >
-                      <input
-                        className="w-full rounded border border-[var(--border)] bg-[var(--background)] px-2 py-1"
-                        value={row.subject}
-                        disabled={readOnly}
-                        autoComplete="off"
-                        onChange={(event) =>
-                          updateRow(idx, {
-                            subject: resolveUserSubject(event.target.value),
-                          })
-                        }
-                        onFocus={() => {
-                          if (!readOnly && userSuggestions.length > 0) {
-                            setUserSuggestMenuKey(row.key);
-                          }
-                        }}
-                        placeholder="ユーザー名 / user_id"
-                      />
-                      {userSuggestMenuKey === row.key && userSuggestions.length > 0 ? (
-                        <div className={PORTAL_THEMED_SUGGEST_PANEL} role="listbox" aria-label="ユーザー候補">
-                          {filteredUserSuggestions.length === 0 ? (
-                            <p className={PORTAL_THEMED_SUGGEST_MUTED}>候補がありません</p>
-                          ) : (
-                            filteredUserSuggestions.map((u) => {
-                              const m = u.label.match(/^(.*)\s*\(user#(\d+)\)\s*$/);
-                              const primary = m ? m[1].trim() || u.label : u.label;
-                              const secondary = m ? `(user#${m[2]})` : "";
-                              return (
-                                <button
-                                  key={`access-user-suggest-${idx}-${u.id}`}
-                                  type="button"
-                                  role="option"
-                                  className={PORTAL_THEMED_SUGGEST_ROW}
-                                  onMouseDown={(e) => e.preventDefault()}
-                                  onClick={() => {
-                                    updateRow(idx, { subject: String(u.id) });
-                                    setUserSuggestMenuKey(null);
-                                  }}
-                                >
-                                  <span className="block text-sm font-medium text-[var(--foreground)]">{primary}</span>
-                                  {secondary !== "" ? (
-                                    <span className="block truncate text-xs text-[var(--muted)]">{secondary}</span>
-                                  ) : null}
-                                </button>
-                              );
-                            })
-                          )}
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <input
-                      className="w-full rounded border border-[var(--border)] bg-[var(--background)] px-2 py-1"
-                      value={row.subject}
-                      disabled={readOnly}
-                      onChange={(event) => updateRow(idx, { subject: event.target.value })}
-                      placeholder="team_tag"
-                    />
-                  )}
-                </td>
-                <td className="px-2 py-1">
-                  <select
-                    className="w-full rounded border border-[var(--border)] bg-[var(--background)] px-2 py-1"
-                    value={row.role}
-                    disabled={readOnly}
-                    onChange={(event) => updateRow(idx, { role: event.target.value as AccessControlRow["role"] })}
-                  >
-                    {roleOptions.map((role) => (
-                      <option key={role} value={role}>
-                        {role}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td className="px-2 py-1">
-                  <Button type="button" variant="default" size="sm" disabled={readOnly} onClick={() => removeRow(idx)}>
-                    削除
-                  </Button>
-                </td>
-              </tr>
-            ))}
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="px-2 py-3 text-center text-[var(--muted)]">
-                  権限設定はありません。
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </div>
       {!readOnly ? (
         <div className="flex gap-2">
           <Button type="button" variant="default" size="sm" onClick={() => addRow("team")}>
-            team追加
-          </Button>
-          <Button type="button" variant="default" size="sm" onClick={() => addRow("user")}>
-            user追加
+            追加
           </Button>
         </div>
       ) : null}
+      <div className="space-y-2">
+        {rows.map((row, idx) => (
+          <div key={row.key} className="rounded-lg border border-[var(--border)] p-3">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="space-y-1">
+                <p className="text-xs text-[var(--muted)]">種別</p>
+                <select
+                  className="w-full rounded border border-[var(--border)] bg-[var(--background)] px-2 py-1"
+                  value={row.subjectType}
+                  disabled={readOnly}
+                  onChange={(event) =>
+                    updateRow(idx, {
+                      subjectType: event.target.value as "team" | "user",
+                      subject: "",
+                      subjectUserId: null,
+                    })
+                  }
+                >
+                  <option value="team">{subjectTypeLabel.team}</option>
+                  <option value="user">{subjectTypeLabel.user}</option>
+                </select>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-[var(--muted)]">権限</p>
+                <select
+                  className="w-full rounded border border-[var(--border)] bg-[var(--background)] px-2 py-1"
+                  value={row.role}
+                  disabled={readOnly}
+                  onChange={(event) => updateRow(idx, { role: event.target.value as AccessControlRow["role"] })}
+                >
+                  {allowedRoles.map((role) => (
+                    <option key={role} value={role}>
+                      {roleLabel[role]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="mt-2 space-y-1">
+              <p className="text-xs text-[var(--muted)]">対象</p>
+              {row.subjectType === "user" ? (
+                <div className="relative min-w-0" ref={userSuggestMenuKey === row.key ? userSuggestWrapRef : undefined}>
+                  <input
+                    className="w-full rounded border border-[var(--border)] bg-[var(--background)] px-2 py-1"
+                    value={row.subject}
+                    disabled={readOnly}
+                    autoComplete="off"
+                    inputMode="text"
+                    lang="ja"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    style={{ imeMode: "active" }}
+                    onChange={(event) =>
+                      updateRow(idx, { subject: event.target.value, subjectUserId: null })
+                    }
+                    onFocus={() => {
+                      if (!readOnly) {
+                        setUserSuggestMenuKey(row.key);
+                      }
+                    }}
+                    placeholder="ユーザー名 / user_id"
+                  />
+                  {row.subjectUserId != null && row.subjectUserId > 0 ? (
+                    <p className="mt-1 text-xs text-[var(--muted)]">選択中: user#{row.subjectUserId}</p>
+                  ) : null}
+                  {mergedUserSuggestions.length > 0 ? (
+                    <select
+                      className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-xs"
+                      value={row.subjectUserId != null && row.subjectUserId > 0 ? String(row.subjectUserId) : ""}
+                      disabled={readOnly}
+                      onChange={(event) => {
+                        const nextId = Number.parseInt(event.target.value, 10);
+                        if (!Number.isFinite(nextId) || nextId <= 0) {
+                          updateRow(idx, { subjectUserId: null });
+                          return;
+                        }
+                        const picked = mergedUserSuggestions.find((u) => u.id === nextId);
+                        updateRow(idx, {
+                          subjectUserId: nextId,
+                          subject: picked ? picked.label : row.subject,
+                        });
+                      }}
+                    >
+                      <option value="">候補から選択...</option>
+                      {mergedUserSuggestions.map((u) => (
+                        <option key={`access-user-select-${u.id}`} value={u.id}>
+                          {u.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
+                  {userSuggestMenuKey === row.key ? (
+                    <div className={PORTAL_THEMED_SUGGEST_PANEL} role="listbox" aria-label="ユーザー候補">
+                      {filteredUserSuggestions.length === 0 ? (
+                        <p className={PORTAL_THEMED_SUGGEST_MUTED}>候補がありません</p>
+                      ) : (
+                        filteredUserSuggestions.map((u) => (
+                          <button
+                            key={`access-user-suggest-${idx}-${u.id}`}
+                            type="button"
+                            role="option"
+                            className={PORTAL_THEMED_SUGGEST_ROW}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              // #region agent log
+                              fetch('http://127.0.0.1:7870/ingest/d3eabf84-6c86-4277-b829-e548b07d84d8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'690a2d'},body:JSON.stringify({sessionId:'690a2d',runId:'run1',hypothesisId:'H1',location:'AccessControlTable.tsx:userSuggest:onClick',message:'user suggestion selected',data:{rowKey:row.key,suggestId:u.id,suggestLabel:u.label,appliedSubject:userPrimaryLabel(u.label)},timestamp:Date.now()})}).catch(()=>{});
+                              // #endregion
+                              updateRow(idx, { subject: u.label, subjectUserId: u.id });
+                              setUserSuggestMenuKey(null);
+                            }}
+                          >
+                            <span className="block text-sm font-medium text-[var(--foreground)]">{userPrimaryLabel(u.label)}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="relative min-w-0" ref={teamSuggestMenuKey === row.key ? teamSuggestWrapRef : undefined}>
+                  <input
+                    className="w-full rounded border border-[var(--border)] bg-[var(--background)] px-2 py-1"
+                    value={row.subject}
+                    disabled={readOnly}
+                    autoComplete="off"
+                    inputMode="text"
+                    lang="ja"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    style={{ imeMode: "active" }}
+                    onChange={(event) => updateRow(idx, { subject: event.target.value, subjectUserId: null })}
+                    onFocus={() => {
+                      if (!readOnly && mergedTeamSuggestions.length > 0) {
+                        setTeamSuggestMenuKey(row.key);
+                      }
+                    }}
+                    placeholder="チームタグ"
+                  />
+                  {teamSuggestMenuKey === row.key && mergedTeamSuggestions.length > 0 ? (
+                    <div className={PORTAL_THEMED_SUGGEST_PANEL} role="listbox" aria-label="チーム候補">
+                      {filteredTeamSuggestions.length === 0 ? (
+                        <p className={PORTAL_THEMED_SUGGEST_MUTED}>候補がありません</p>
+                      ) : (
+                        filteredTeamSuggestions.map((tag) => (
+                          <button
+                            key={`access-team-suggest-${idx}-${tag}`}
+                            type="button"
+                            role="option"
+                            className={PORTAL_THEMED_SUGGEST_ROW}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              updateRow(idx, { subject: tag });
+                              setTeamSuggestMenuKey(null);
+                            }}
+                          >
+                            <span className="block text-sm font-medium text-[var(--foreground)]">{tag}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              )}
+            </div>
+            <div className="mt-3">
+              <Button type="button" variant="default" size="sm" disabled={readOnly} onClick={() => removeRow(idx)}>
+                <Trash2 className="h-4 w-4 text-red-500" aria-hidden />
+                <span className="sr-only">削除</span>
+              </Button>
+            </div>
+          </div>
+        ))}
+        {rows.length === 0 ? (
+          <div className="rounded-lg border border-[var(--border)] px-3 py-4 text-center text-sm text-[var(--muted)]">権限設定はありません。</div>
+        ) : null}
+      </div>
     </div>
   );
 }

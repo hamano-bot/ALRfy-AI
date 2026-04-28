@@ -32,6 +32,9 @@ function compactSitemapContent(content: RequirementsPageContentSitemap): Require
   return {
     schemaVersion: 1,
     root: compactNode(content.root),
+    ...(content.diagramLayout === "horizontal" || content.diagramLayout === "vertical"
+      ? { diagramLayout: content.diagramLayout }
+      : {}),
   };
 }
 

@@ -51,6 +51,7 @@ export function ProjectDetailClient({ projectId, initialProject, canEdit }: Proj
     Array<{ id: number; estimate_number: string; title: string; estimate_status: string }>
   >([]);
   const [selectedEstimateIds, setSelectedEstimateIds] = useState<number[]>([]);
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
 
   useEffect(() => {
     setProject(initialProject);
@@ -140,7 +141,8 @@ export function ProjectDetailClient({ projectId, initialProject, canEdit }: Proj
   }, [setEditModeQuery]);
 
   const onBackToViewClick = useCallback(() => {
-    if (editFormDirty && !window.confirm(UNSAVED_LEAVE_CONFIRM_MESSAGE)) {
+    if (editFormDirty) {
+      setLeaveConfirmOpen(true);
       return;
     }
     leaveEditMode();
@@ -177,6 +179,30 @@ export function ProjectDetailClient({ projectId, initialProject, canEdit }: Proj
             router.refresh();
           }}
         />
+        <Dialog open={leaveConfirmOpen} onOpenChange={setLeaveConfirmOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>未保存の変更があります</DialogTitle>
+              <DialogDescription>{UNSAVED_LEAVE_CONFIRM_MESSAGE}</DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="default" size="sm" onClick={() => setLeaveConfirmOpen(false)}>
+                キャンセル
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  setLeaveConfirmOpen(false);
+                  leaveEditMode();
+                }}
+              >
+                破棄して戻る
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
@@ -390,7 +416,6 @@ export function ProjectDetailClient({ projectId, initialProject, canEdit }: Proj
             </span>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold leading-snug text-[var(--foreground)]">{t.title}</p>
-              <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">{t.description}</p>
             </div>
             {!open ? (
               <span

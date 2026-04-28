@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import puppeteer from "puppeteer";
-import { buildEstimateExportBasename } from "@/lib/estimate-export-filename";
+import { buildEstimatePdfExportBasename } from "@/lib/estimate-export-filename";
 import {
   absolutizeEstimateHtmlAssets,
   injectBaseHrefForEstimateHtml,
@@ -27,14 +27,6 @@ function publicOriginFromRequest(request: NextRequest): string {
     if (h) return `${proto}://${h}`;
   }
   return request.nextUrl.origin;
-}
-
-function estimatePdfFilename(estimate: Record<string, unknown> | undefined, estimateId: number): string {
-  const num =
-    typeof estimate?.estimate_number === "string" && estimate.estimate_number.trim() !== ""
-      ? estimate.estimate_number.trim()
-      : `estimate-${estimateId}`;
-  return `${num.replace(/[/\\?%*:|"<>]/g, "_")}.pdf`;
 }
 
 export async function POST(request: NextRequest) {
@@ -94,7 +86,7 @@ export async function POST(request: NextRequest) {
   const html = injectPrintOverridesForEstimate(
     injectBaseHrefForEstimateHtml(absolutizeEstimateHtmlAssets(htmlRes.html, origin), origin),
   );
-  const filename = `${buildEstimateExportBasename(estimate ?? {}, estimateId)}.pdf`;
+  const filename = `${buildEstimatePdfExportBasename(estimate ?? {}, estimateId)}.pdf`;
 
   let browser: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
   try {

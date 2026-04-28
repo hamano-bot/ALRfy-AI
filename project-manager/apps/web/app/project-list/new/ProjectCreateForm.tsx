@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { type FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ThemeDateField } from "@/app/components/ThemeDateField";
 import { Button } from "@/app/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/app/components/ui/dialog";
 import { Input } from "@/app/components/ui/input";
 import { Label } from "@/app/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select";
@@ -520,6 +521,7 @@ export function ProjectCreateForm({
   const [formError, setFormError] = useState<string | null>(null);
   const [formWarning, setFormWarning] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   /** 編集モードで initialDetail から state を流し込み終わるまで dirty にしない */
   const [editFormHydrated, setEditFormHydrated] = useState(false);
 
@@ -1162,6 +1164,31 @@ export function ProjectCreateForm({
 
   return (
     <form className="space-y-8" onSubmit={onSubmit} noValidate>
+      <Dialog open={cancelConfirmOpen} onOpenChange={setCancelConfirmOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>未保存の変更があります</DialogTitle>
+            <DialogDescription>{UNSAVED_LEAVE_CONFIRM_MESSAGE}</DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="default" size="sm" onClick={() => setCancelConfirmOpen(false)}>
+              キャンセル
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                setCancelConfirmOpen(false);
+                onEditCancel?.();
+              }}
+            >
+              破棄して戻る
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <section className="space-y-3">
         <h2 className="pm-section-heading">基本情報</h2>
         <div className="space-y-1">
@@ -1584,7 +1611,8 @@ export function ProjectCreateForm({
               className="min-w-[7rem]"
               onClick={() => {
                 if (isEditMode) {
-                  if (editFormDirty && !window.confirm(UNSAVED_LEAVE_CONFIRM_MESSAGE)) {
+                  if (editFormDirty) {
+                    setCancelConfirmOpen(true);
                     return;
                   }
                   onEditCancel?.();

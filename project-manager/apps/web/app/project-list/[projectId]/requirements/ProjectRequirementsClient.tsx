@@ -1,13 +1,26 @@
 "use client";
 
-import { ArrowDown, ArrowUp, ChevronLeft, ExternalLink, FileSpreadsheet, GripVertical, Plus, Redo2, RotateCcw, Trash2, Undo2 } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronLeft,
+  ExternalLink,
+  FileSpreadsheet,
+  FileText,
+  GripVertical,
+  Plus,
+  Redo2,
+  RotateCcw,
+  Trash2,
+  Undo2,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from "react";
 import { ThemeDateField } from "@/app/components/ThemeDateField";
 import { Button } from "@/app/components/ui/button";
 import { Card, CardContent } from "@/app/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/app/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/app/components/ui/dialog";
 import { Input } from "@/app/components/ui/input";
 import { Label } from "@/app/components/ui/label";
 import {
@@ -44,7 +57,97 @@ import { cn } from "@/lib/utils";
 import { trashDeleteIconButtonClassName } from "@/lib/trash-delete-icon-button-class";
 import { requirementsPrintPreviewChannelName } from "@/lib/requirements-print-preview-channel";
 
-const AUTO_SAVE_INTERVAL_MS = 120_000;
+const AUTO_SAVE_IDLE_MS = 7_000;
+
+type SaveMode = "manual" | "auto";
+
+type FocusSnapshot = {
+  element: HTMLElement | null;
+  id: string | null;
+  name: string | null;
+  selectionStart: number | null;
+  selectionEnd: number | null;
+};
+
+function takeFocusSnapshot(): FocusSnapshot | null {
+  if (typeof document === "undefined") {
+    return null;
+  }
+  const active = document.activeElement;
+  if (!(active instanceof HTMLElement)) {
+    return null;
+  }
+  const textLike =
+    active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement
+      ? {
+          selectionStart: active.selectionStart,
+          selectionEnd: active.selectionEnd,
+        }
+      : { selectionStart: null, selectionEnd: null };
+  return {
+    element: active,
+    id: active.id || null,
+    name: active.getAttribute("name"),
+    selectionStart: textLike.selectionStart,
+    selectionEnd: textLike.selectionEnd,
+  };
+}
+
+function restoreFocusSnapshot(snapshot: FocusSnapshot | null) {
+  if (!snapshot || typeof document === "undefined") {
+    return;
+  }
+  const resolveTarget = (): HTMLElement | null => {
+    if (snapshot.element && snapshot.element.isConnected) {
+      return snapshot.element;
+    }
+    if (snapshot.id) {
+      const byId = document.getElementById(snapshot.id);
+      if (byId instanceof HTMLElement) {
+        return byId;
+      }
+    }
+    if (snapshot.name) {
+      const byName = document.querySelector<HTMLElement>(`[name="${CSS.escape(snapshot.name)}"]`);
+      if (byName) {
+        return byName;
+      }
+    }
+    return null;
+  };
+  const target = resolveTarget();
+  if (!target) {
+    return;
+  }
+  target.focus({ preventScroll: true });
+  if (
+    (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) &&
+    snapshot.selectionStart !== null &&
+    snapshot.selectionEnd !== null
+  ) {
+    target.setSelectionRange(snapshot.selectionStart, snapshot.selectionEnd);
+  }
+}
+
+function downloadFilenameFromContentDisposition(header: string | null): string | null {
+  if (!header) {
+    return null;
+  }
+  const star = /filename\*\s*=\s*UTF-8''([^;\s]+)/i.exec(header);
+  if (star?.[1]) {
+    try {
+      return decodeURIComponent(star[1].replace(/^"+|"+$/g, ""));
+    } catch {
+      return star[1];
+    }
+  }
+  const q = /filename\s*=\s*"([^"]+)"/i.exec(header);
+  if (q?.[1]) {
+    return q[1];
+  }
+  const plain = /filename\s*=\s*([^;\s]+)/i.exec(header);
+  return plain?.[1]?.replace(/^"+|"+$/g, "") ?? null;
+}
 const DND_MIME = "application/x-alrfy-req-page";
 const RIGHT_SIDEBAR_COLLAPSED_LS_KEY = "pm-requirements-right-sidebar-collapsed";
 
@@ -561,6 +664,7 @@ export function ProjectRequirementsClient({
   const [activePageId, setActivePageId] = useState(() => visiblePages[0]?.id ?? "");
   const [pendingNewPageId, setPendingNewPageId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [pdfDownloading, setPdfDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDeleted, setShowDeleted] = useState(false);
   const [isLg, setIsLg] = useState(false);
@@ -569,6 +673,7 @@ export function ProjectRequirementsClient({
   const [tableImportOpen, setTableImportOpen] = useState(false);
   const [modeChangeDialogOpen, setModeChangeDialogOpen] = useState(false);
   const [pendingModeChange, setPendingModeChange] = useState<RequirementsInputMode | null>(null);
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
   const [dropIndicatorIndex, setDropIndicatorIndex] = useState<number | null>(null);
   const [draggingPageId, setDraggingPageId] = useState<string | null>(null);
   const dndSourceIdRef = useRef<string | null>(null);
@@ -608,10 +713,11 @@ export function ProjectRequirementsClient({
   }, [body.pages, pendingNewPageId]);
 
   const saveBody = useCallback(
-    async (next: RequirementsDocBody): Promise<boolean> => {
+    async (next: RequirementsDocBody, mode: SaveMode): Promise<boolean> => {
       if (!canEdit) {
         return false;
       }
+      const focusSnapshot = mode === "auto" ? takeFocusSnapshot() : null;
       setSaving(true);
       setError(null);
       try {
@@ -646,13 +752,33 @@ export function ProjectRequirementsClient({
           if (j.success && j.requirements?.body_json !== undefined && j.requirements.body_json !== null) {
             const { normalizeRequirementsDocBody } = await import("@/lib/requirements-doc-normalize");
             const normalized = normalizeRequirementsDocBody(j.requirements.body_json);
-            history.reset(normalized);
-            setSavedFingerprint(requirementsDocFingerprint(normalized));
+            const normalizedFingerprint = requirementsDocFingerprint(normalized);
+            const nextFingerprint = requirementsDocFingerprint(next);
+            if (mode === "manual") {
+              history.reset(normalized);
+              setSavedFingerprint(normalizedFingerprint);
+              router.refresh();
+            } else {
+              if (normalizedFingerprint !== nextFingerprint) {
+                history.reset(normalized);
+                window.setTimeout(() => restoreFocusSnapshot(focusSnapshot), 0);
+                setSavedFingerprint(normalizedFingerprint);
+              } else {
+                setSavedFingerprint(nextFingerprint);
+              }
+            }
+          } else {
+            setSavedFingerprint(requirementsDocFingerprint(next));
+            if (mode === "manual") {
+              router.refresh();
+            }
           }
         } catch {
-          /* ignore */
+          setSavedFingerprint(requirementsDocFingerprint(next));
+          if (mode === "manual") {
+            router.refresh();
+          }
         }
-        router.refresh();
         return true;
       } catch {
         setError("保存に失敗しました。");
@@ -664,46 +790,64 @@ export function ProjectRequirementsClient({
     [canEdit, projectId, router, history],
   );
 
-  const performSave = useCallback(async (): Promise<boolean> => {
-    if (!activePageId) {
-      return saveBody(body);
-    }
-    const withDates = withSaveDatesForPage(body, activePageId);
-    return saveBody(withDates);
-  }, [activePageId, body, saveBody]);
+  const performSave = useCallback(
+    async (mode: SaveMode = "manual"): Promise<boolean> => {
+      if (!activePageId) {
+        return saveBody(body, mode);
+      }
+      const withDates = withSaveDatesForPage(body, activePageId);
+      return saveBody(withDates, mode);
+    },
+    [activePageId, body, saveBody],
+  );
 
-  const performSaveRef = useRef<() => Promise<boolean>>(async () => false);
+  const performSaveRef = useRef<(mode?: SaveMode) => Promise<boolean>>(async () => false);
   performSaveRef.current = performSave;
 
   const isDirtyRef = useRef(isDirty);
   const savingRef = useRef(saving);
+  const isComposingRef = useRef(false);
   isDirtyRef.current = isDirty;
   savingRef.current = saving;
 
   useEffect(() => {
-    if (!isDirty || !canEdit) {
+    if (typeof window === "undefined") {
       return;
     }
-    const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = "";
+    const onCompositionStart = () => {
+      isComposingRef.current = true;
     };
-    window.addEventListener("beforeunload", onBeforeUnload);
-    return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [isDirty, canEdit]);
+    const onCompositionEnd = () => {
+      isComposingRef.current = false;
+      if (canEdit && isDirtyRef.current && !savingRef.current) {
+        window.setTimeout(() => {
+          if (!isDirtyRef.current || savingRef.current || isComposingRef.current) {
+            return;
+          }
+          void performSaveRef.current("auto");
+        }, AUTO_SAVE_IDLE_MS);
+      }
+    };
+    window.addEventListener("compositionstart", onCompositionStart, true);
+    window.addEventListener("compositionend", onCompositionEnd, true);
+    return () => {
+      window.removeEventListener("compositionstart", onCompositionStart, true);
+      window.removeEventListener("compositionend", onCompositionEnd, true);
+    };
+  }, [canEdit]);
 
   useEffect(() => {
-    if (!canEdit) {
+    if (!canEdit || !isDirty || saving || isComposingRef.current) {
       return;
     }
-    const id = window.setInterval(() => {
-      if (!isDirtyRef.current || savingRef.current) {
+    const id = window.setTimeout(() => {
+      if (!isDirtyRef.current || savingRef.current || isComposingRef.current) {
         return;
       }
-      void performSaveRef.current();
-    }, AUTO_SAVE_INTERVAL_MS);
-    return () => window.clearInterval(id);
-  }, [canEdit]);
+      void performSaveRef.current("auto");
+    }, AUTO_SAVE_IDLE_MS);
+    return () => window.clearTimeout(id);
+  }, [canEdit, currentFingerprint, isDirty, saving]);
 
   useEffect(() => {
     if (!canEdit) {
@@ -794,8 +938,9 @@ export function ProjectRequirementsClient({
 
   const onProjectDetailNavigate = useCallback(
     (e: MouseEvent<HTMLAnchorElement>) => {
-      if (isDirty && !window.confirm(UNSAVED_LEAVE_CONFIRM_MESSAGE)) {
+      if (isDirty) {
         e.preventDefault();
+        setLeaveConfirmOpen(true);
       }
     },
     [isDirty],
@@ -965,8 +1110,21 @@ export function ProjectRequirementsClient({
   );
 
   const handleManualSave = useCallback(async () => {
-    await performSave();
+    await performSave("manual");
   }, [performSave]);
+
+  useEffect(() => {
+    if (!isDirty || !canEdit) {
+      return;
+    }
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [isDirty, canEdit]);
+
 
   const addPageToBottom = useCallback(() => {
     if (!canEdit) {
@@ -1048,6 +1206,30 @@ export function ProjectRequirementsClient({
           </div>
         </DialogContent>
       </Dialog>
+      <Dialog open={leaveConfirmOpen} onOpenChange={setLeaveConfirmOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>未保存の変更があります</DialogTitle>
+            <DialogDescription>{UNSAVED_LEAVE_CONFIRM_MESSAGE}</DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="default" size="sm" onClick={() => setLeaveConfirmOpen(false)}>
+              キャンセル
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                setLeaveConfirmOpen(false);
+                router.push(`/project-list/${projectId}`);
+              }}
+            >
+              破棄して戻る
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <section className="surface-card pm-page-hero relative shrink-0 overflow-hidden px-5">
         <div className="pointer-events-none absolute -top-10 right-0 h-36 w-36 rounded-full bg-[color:color-mix(in_srgb,var(--accent)_22%,transparent)] blur-3xl" />
         <div className="relative flex h-full min-h-0 items-center justify-between gap-3">
@@ -1087,6 +1269,57 @@ export function ProjectRequirementsClient({
             >
               <FileSpreadsheet className="h-4 w-4 shrink-0 text-emerald-500" />
               Excel出力
+            </Button>
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              className="inline-flex shrink-0 items-center gap-1.5 self-center rounded-lg"
+              disabled={pdfDownloading}
+              onClick={async () => {
+                setPdfDownloading(true);
+                setError(null);
+                try {
+                  const res = await fetch("/api/portal/requirements-export-pdf", {
+                    method: "POST",
+                    credentials: "include",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ project_id: projectId }),
+                  });
+                  const ct = res.headers.get("content-type") ?? "";
+                  if (!res.ok) {
+                    if (ct.includes("application/json")) {
+                      const data = (await res.json()) as { message?: string };
+                      setError(data.message ?? "PDF出力に失敗しました。");
+                    } else {
+                      setError("PDF出力に失敗しました。");
+                    }
+                    return;
+                  }
+                  if (!ct.includes("application/pdf")) {
+                    setError("PDF出力の応答が不正です。");
+                    return;
+                  }
+                  const blob = await res.blob();
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download =
+                    downloadFilenameFromContentDisposition(res.headers.get("content-disposition")) ??
+                    `要件定義プレビュー_#${projectId}.pdf`;
+                  document.body.appendChild(a);
+                  a.click();
+                  a.remove();
+                  URL.revokeObjectURL(url);
+                } catch {
+                  setError("PDF出力に失敗しました。");
+                } finally {
+                  setPdfDownloading(false);
+                }
+              }}
+            >
+              <FileText className="h-4 w-4 shrink-0 text-red-600" aria-hidden />
+              {pdfDownloading ? "PDF生成中…" : "PDF出力"}
             </Button>
             {canEdit ? (
               <>
@@ -1276,6 +1509,11 @@ export function ProjectRequirementsClient({
                       key={activePage.id}
                       content={activePage.content}
                       readOnly={readOnly}
+                      sitemapWorkspaceHref={
+                        !readOnly
+                          ? `/project-list/${projectId}/requirements/sitemap-workspace?page=${encodeURIComponent(activePage.id)}`
+                          : undefined
+                      }
                       onChange={(c) => {
                         if (readOnly) {
                           return;

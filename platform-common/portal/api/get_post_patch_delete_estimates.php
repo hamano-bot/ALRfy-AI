@@ -154,6 +154,106 @@ function estimateUserIdExists(PDO $pdo, int $userId): bool
     return $chk->fetchColumn() !== false;
 }
 
+function estimateIsAdminUser(PDO $pdo, int $userId): bool
+{
+    if ($userId <= 0) {
+        return false;
+    }
+    try {
+        $stmt = $pdo->prepare('SELECT is_admin FROM users WHERE id = :id LIMIT 1');
+        $stmt->execute([':id' => $userId]);
+        $v = $stmt->fetchColumn();
+        return ((int)$v) === 1;
+    } catch (Throwable $e) {
+        error_log('[estimateIsAdminUser] ' . $e->getMessage());
+        return false;
+    }
+}
+
+function estimateLoadUserTeamTags(PDO $pdo, int $userId): array
+{
+    $teamTags = [];
+    if ($userId <= 0) {
+        return $teamTags;
+    }
+    try {
+        $userStmt = $pdo->prepare('SELECT team FROM users WHERE id = :id LIMIT 1');
+        $userStmt->execute([':id' => $userId]);
+        $u = $userStmt->fetch(PDO::FETCH_ASSOC);
+        if (is_array($u) && is_string($u['team'] ?? null) && trim($u['team']) !== '') {
+            $decoded = json_decode((string)$u['team'], true);
+            if (is_array($decoded)) {
+                foreach ($decoded as $tag) {
+                    if (is_string($tag) && trim($tag) !== '') {
+                        $teamTags[strtolower(trim($tag))] = true;
+                    }
+                }
+            }
+        }
+    } catch (Throwable $e) {
+        error_log('[estimateLoadUserTeamTags] ' . $e->getMessage());
+    }
+    return $teamTags;
+}
+
+function estimateResolveEffectiveRole(
+    PDO $pdo,
+    int $estimateId,
+    int $sessionUserId,
+    bool $isAdmin,
+    array $teamTags,
+    string $visibilityScope,
+    int $createdByUserId
+): string {
+    if ($estimateId <= 0 || $sessionUserId <= 0) {
+        return 'none';
+    }
+    $roleRank = 0;
+    if ($createdByUserId === $sessionUserId) {
+        $roleRank = 3; // owner
+    } elseif ($isAdmin) {
+        $roleRank = 2; // editor
+    } elseif ($visibilityScope === 'public_all_users') {
+        $roleRank = 1; // viewer
+    }
+
+    $userPermStmt = $pdo->prepare('SELECT role FROM estimate_user_permissions WHERE estimate_id = :estimate_id AND user_id = :user_id LIMIT 1');
+    $userPermStmt->execute([':estimate_id' => $estimateId, ':user_id' => $sessionUserId]);
+    $up = $userPermStmt->fetch(PDO::FETCH_ASSOC);
+    if (is_array($up) && is_string($up['role'] ?? null)) {
+        $r = $up['role'];
+        // owner は作成者/管理者のみ有効にする
+        if ($r === 'editor') {
+            $roleRank = max($roleRank, 2);
+        } elseif ($r === 'viewer') {
+            $roleRank = max($roleRank, 1);
+        }
+    }
+
+    if (!empty($teamTags)) {
+        $teamPermStmt = $pdo->prepare('SELECT role FROM estimate_team_permissions WHERE estimate_id = :estimate_id AND team_tag = :team_tag');
+        foreach (array_keys($teamTags) as $teamTag) {
+            $teamPermStmt->execute([':estimate_id' => $estimateId, ':team_tag' => $teamTag]);
+            $teamRows = $teamPermStmt->fetchAll(PDO::FETCH_ASSOC);
+            if (!is_array($teamRows)) {
+                continue;
+            }
+            foreach ($teamRows as $tp) {
+                if (!is_array($tp) || !is_string($tp['role'] ?? null)) {
+                    continue;
+                }
+                $r = $tp['role'];
+                if ($r === 'editor') {
+                    $roleRank = max($roleRank, 2);
+                } elseif ($r === 'viewer') {
+                    $roleRank = max($roleRank, 1);
+                }
+            }
+        }
+    }
+    return $roleRank >= 3 ? 'owner' : ($roleRank >= 2 ? 'editor' : ($roleRank >= 1 ? 'viewer' : 'none'));
+}
+
 function estimateResolveSalesUserIdForPost(PDO $pdo, array $payload, int $sessionUserId): int
 {
     $out = $sessionUserId;
@@ -217,6 +317,56 @@ function estimateInsertOperationLog(PDO $pdo, ?int $estimateId, string $operatio
     ]);
 }
 
+function estimateNormalizeScalarForDiff(mixed $v): string
+{
+    if ($v === null) {
+        return '';
+    }
+    if (is_bool($v)) {
+        return $v ? '1' : '0';
+    }
+    if (is_numeric($v)) {
+        return (string)$v;
+    }
+    if (is_string($v)) {
+        return trim($v);
+    }
+    return '';
+}
+
+function estimateBuildUpdateSummary(array $before, array $after, int $beforeLineCount, int $afterLineCount): string
+{
+    $labels = [
+        'title' => '件名',
+        'estimate_status' => 'ステータス',
+        'client_name' => 'クライアント名',
+        'client_abbr' => '略称',
+        'recipient_text' => '見積先',
+        'issue_date' => '発行日',
+        'delivery_due_text' => '納入予定',
+        'internal_memo' => '社内メモ',
+        'remarks' => '備考',
+        'sales_user_id' => '担当営業',
+        'applied_tax_rate_percent' => '税率',
+        'is_rough_estimate' => '概算フラグ',
+    ];
+    $changed = [];
+    foreach ($labels as $key => $label) {
+        $b = estimateNormalizeScalarForDiff($before[$key] ?? null);
+        $a = estimateNormalizeScalarForDiff($after[$key] ?? null);
+        if ($b !== $a) {
+            $changed[] = $label;
+        }
+    }
+    if ($beforeLineCount !== $afterLineCount) {
+        $changed[] = '明細行数';
+    }
+    if (empty($changed)) {
+        return '変更なし';
+    }
+    return '更新: ' . implode(' / ', $changed);
+}
+
 /**
  * @return array{unit_type:string,price_type:string,price_value:float|null,price_min:float|null,price_max:float|null}|null
  */
@@ -264,12 +414,24 @@ if ($method === 'GET') {
             echo json_encode(['success' => false, 'message' => '見積が見つかりません。'], JSON_UNESCAPED_UNICODE);
             exit;
         }
+        $isAdmin = estimateIsAdminUser($pdo, $sessionUserId);
+        $teamTags = estimateLoadUserTeamTags($pdo, $sessionUserId);
+        $visibility = isset($row['visibility_scope']) && is_string($row['visibility_scope']) ? $row['visibility_scope'] : 'public_all_users';
+        $createdBy = (int)($row['created_by_user_id'] ?? 0);
+        $effectiveRole = estimateResolveEffectiveRole($pdo, $estimateId, $sessionUserId, $isAdmin, $teamTags, $visibility, $createdBy);
+        if ($effectiveRole === 'none') {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'この見積を閲覧する権限がありません。'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $row['effective_role'] = $effectiveRole;
         $row['lines'] = estimateLoadLines($pdo, $estimateId);
         echo json_encode(['success' => true, 'estimate' => $row], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
     $statusFilter = isset($_GET['status']) && is_string($_GET['status']) ? trim($_GET['status']) : '';
+    $statusCsv = isset($_GET['status_csv']) && is_string($_GET['status_csv']) ? trim($_GET['status_csv']) : '';
     $projectIdFilter = isset($_GET['project_id']) && is_string($_GET['project_id']) && ctype_digit($_GET['project_id']) ? (int)$_GET['project_id'] : 0;
     $salesFilter = isset($_GET['sales_user_id']) && is_string($_GET['sales_user_id']) && ctype_digit($_GET['sales_user_id']) ? (int)$_GET['sales_user_id'] : 0;
     $teamTagFilter = isset($_GET['team_tag']) && is_string($_GET['team_tag']) ? strtolower(trim($_GET['team_tag'])) : '';
@@ -286,32 +448,36 @@ if ($method === 'GET') {
     }
     $offset = ($page - 1) * $pageSize;
 
-    $teamTags = [];
-    try {
-        $userStmt = $pdo->prepare('SELECT team FROM users WHERE id = :id LIMIT 1');
-        $userStmt->execute([':id' => $sessionUserId]);
-        $u = $userStmt->fetch(PDO::FETCH_ASSOC);
-        if (is_array($u) && is_string($u['team'] ?? null) && trim($u['team']) !== '') {
-            $decoded = json_decode((string)$u['team'], true);
-            if (is_array($decoded)) {
-                foreach ($decoded as $tag) {
-                    if (is_string($tag) && trim($tag) !== '') {
-                        $teamTags[strtolower(trim($tag))] = true;
-                    }
-                }
-            }
-        }
-    } catch (Throwable $e) {
-        // users.team カラム未適用環境でも一覧取得を継続する
-        error_log('[estimates GET team tags fallback] ' . $e->getMessage());
-    }
+    $isAdmin = estimateIsAdminUser($pdo, $sessionUserId);
+    $teamTags = estimateLoadUserTeamTags($pdo, $sessionUserId);
 
     $where = [];
     $params = [];
 
-    if ($statusFilter !== '' && in_array($statusFilter, ['draft', 'submitted', 'won', 'lost'], true)) {
+    $statusList = [];
+    if ($statusCsv !== '') {
+        foreach (explode(',', $statusCsv) as $s) {
+            $x = trim($s);
+            if (in_array($x, ['draft', 'submitted', 'won', 'lost'], true)) {
+                $statusList[$x] = true;
+            }
+        }
+    }
+    if ($statusList === [] && $statusFilter !== '' && in_array($statusFilter, ['draft', 'submitted', 'won', 'lost'], true)) {
+        $statusList[$statusFilter] = true;
+    }
+    $statusValues = array_keys($statusList);
+    if (count($statusValues) === 1) {
         $where[] = 'pe.estimate_status = :status_filter';
-        $params[':status_filter'] = $statusFilter;
+        $params[':status_filter'] = $statusValues[0];
+    } elseif (count($statusValues) > 1) {
+        $statusPh = [];
+        foreach ($statusValues as $i => $sv) {
+            $ph = ':status_filter_' . $i;
+            $statusPh[] = $ph;
+            $params[$ph] = $sv;
+        }
+        $where[] = 'pe.estimate_status IN (' . implode(',', $statusPh) . ')';
     }
     if ($projectIdFilter > 0) {
         $where[] = 'pe.project_id = :project_id_filter';
@@ -330,7 +496,13 @@ if ($method === 'GET') {
         $params[':updated_to'] = $updatedTo;
     }
     if ($keyword !== '') {
-        $where[] = '(pe.estimate_number LIKE :keyword OR pe.title LIKE :keyword OR pe.client_name LIKE :keyword)';
+        $where[] = '(
+            pe.estimate_number LIKE :keyword
+            OR pe.title LIKE :keyword
+            OR pe.client_name LIKE :keyword
+            OR pe.recipient_text LIKE :keyword
+            OR pe.internal_memo LIKE :keyword
+        )';
         $params[':keyword'] = '%' . $keyword . '%';
     }
     if ($teamTagFilter !== '') {
@@ -342,6 +514,9 @@ if ($method === 'GET') {
     $permOr[] = "pe.visibility_scope = 'public_all_users'";
     $permOr[] = 'pe.created_by_user_id = :session_user_id_created';
     $params[':session_user_id_created'] = $sessionUserId;
+    if ($isAdmin) {
+        $permOr[] = '1=1';
+    }
     $permOr[] = 'EXISTS (SELECT 1 FROM estimate_user_permissions eup WHERE eup.estimate_id = pe.id AND eup.user_id = :session_user_id_perm)';
     $params[':session_user_id_perm'] = $sessionUserId;
     if (!empty($teamTags)) {
@@ -375,6 +550,7 @@ if ($method === 'GET') {
                 pe.client_name,
                 pe.issue_date,
                 pe.sales_user_id,
+                COALESCE(NULLIF(TRIM(u.display_name), \'\'), NULLIF(TRIM(u.email), \'\')) AS sales_user_label,
                 pe.visibility_scope,
                 pe.created_by_user_id,
                 pe.total_including_tax,
@@ -385,6 +561,7 @@ if ($method === 'GET') {
                     WHERE etp.estimate_id = pe.id
                 ) AS team_tags_csv
          FROM project_estimates pe
+         LEFT JOIN users u ON u.id = pe.sales_user_id
          ' . $whereSql . '
          ORDER BY pe.updated_at DESC, pe.id DESC
          LIMIT :limit OFFSET :offset';
@@ -398,8 +575,6 @@ if ($method === 'GET') {
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $estimates = [];
     if (is_array($rows)) {
-        $userPermStmt = $pdo->prepare('SELECT role FROM estimate_user_permissions WHERE estimate_id = :estimate_id AND user_id = :user_id LIMIT 1');
-        $teamPermStmt = $pdo->prepare('SELECT role FROM estimate_team_permissions WHERE estimate_id = :estimate_id AND team_tag = :team_tag');
         foreach ($rows as $row) {
             if (!is_array($row)) {
                 continue;
@@ -408,39 +583,16 @@ if ($method === 'GET') {
             if ($estimateId <= 0) {
                 continue;
             }
-            $roleRank = 0;
             $visibility = isset($row['visibility_scope']) && is_string($row['visibility_scope']) ? $row['visibility_scope'] : 'public_all_users';
-            if ($visibility === 'public_all_users') {
-                $roleRank = max($roleRank, 1);
-            }
-            if ((int)($row['created_by_user_id'] ?? 0) === $sessionUserId) {
-                $roleRank = max($roleRank, 3);
-            }
-            $userPermStmt->execute([':estimate_id' => $estimateId, ':user_id' => $sessionUserId]);
-            $up = $userPermStmt->fetch(PDO::FETCH_ASSOC);
-            if (is_array($up) && is_string($up['role'] ?? null)) {
-                $r = $up['role'];
-                if ($r === 'owner') $roleRank = max($roleRank, 3);
-                elseif ($r === 'editor') $roleRank = max($roleRank, 2);
-                elseif ($r === 'viewer') $roleRank = max($roleRank, 1);
-            }
-            foreach (array_keys($teamTags) as $teamTag) {
-                $teamPermStmt->execute([':estimate_id' => $estimateId, ':team_tag' => $teamTag]);
-                $teamRows = $teamPermStmt->fetchAll(PDO::FETCH_ASSOC);
-                if (!is_array($teamRows)) {
-                    continue;
-                }
-                foreach ($teamRows as $tp) {
-                    if (!is_array($tp) || !is_string($tp['role'] ?? null)) {
-                        continue;
-                    }
-                    $r = $tp['role'];
-                    if ($r === 'owner') $roleRank = max($roleRank, 3);
-                    elseif ($r === 'editor') $roleRank = max($roleRank, 2);
-                    elseif ($r === 'viewer') $roleRank = max($roleRank, 1);
-                }
-            }
-            $effectiveRole = $roleRank >= 3 ? 'owner' : ($roleRank >= 2 ? 'editor' : ($roleRank >= 1 ? 'viewer' : 'none'));
+            $effectiveRole = estimateResolveEffectiveRole(
+                $pdo,
+                $estimateId,
+                $sessionUserId,
+                $isAdmin,
+                $teamTags,
+                $visibility,
+                (int)($row['created_by_user_id'] ?? 0)
+            );
             if ($effectiveRole === 'none') {
                 continue;
             }
@@ -615,6 +767,7 @@ if ($method === 'POST') {
             'estimate_created',
             $sessionUserId,
             [
+                'summary' => '新規登録: 見積を作成',
                 'estimate_number' => $estimateNumber,
                 'status' => $status,
                 'visibility_scope' => $visibility,
@@ -654,14 +807,33 @@ if ($method === 'PATCH') {
         exit;
     }
 
-    $stmt = $pdo->prepare('SELECT id FROM project_estimates WHERE id = :id LIMIT 1');
+    $stmt = $pdo->prepare('SELECT id, visibility_scope, created_by_user_id FROM project_estimates WHERE id = :id LIMIT 1');
     $stmt->execute([':id' => $estimateId]);
-    if ($stmt->fetch(PDO::FETCH_ASSOC) === false) {
+    $existing = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($existing === false || !is_array($existing)) {
         http_response_code(404);
         echo json_encode(['success' => false, 'message' => '見積が見つかりません。'], JSON_UNESCAPED_UNICODE);
         exit;
     }
+    $effectiveRole = estimateResolveEffectiveRole(
+        $pdo,
+        $estimateId,
+        $sessionUserId,
+        estimateIsAdminUser($pdo, $sessionUserId),
+        estimateLoadUserTeamTags($pdo, $sessionUserId),
+        is_string($existing['visibility_scope'] ?? null) ? (string)$existing['visibility_scope'] : 'public_all_users',
+        (int)($existing['created_by_user_id'] ?? 0)
+    );
+    if (!in_array($effectiveRole, ['owner', 'editor'], true)) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => '見積を編集する権限がありません。'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
 
+    $beforeStmt = $pdo->prepare('SELECT * FROM project_estimates WHERE id = :id LIMIT 1');
+    $beforeStmt->execute([':id' => $estimateId]);
+    $beforeEstimate = $beforeStmt->fetch(PDO::FETCH_ASSOC);
+    $beforeLines = estimateLoadLines($pdo, $estimateId);
     $title = isset($payload['title']) && is_string($payload['title']) ? trim($payload['title']) : '見積';
     $status = estimateNormalizeStatus($payload['estimate_status'] ?? 'draft');
     $recipientText = isset($payload['recipient_text']) && is_string($payload['recipient_text']) ? $payload['recipient_text'] : null;
@@ -690,6 +862,15 @@ if ($method === 'PATCH') {
             $deliveryDueTextPatch = $dt !== '' ? (mb_strlen($dt, 'UTF-8') <= 255 ? $dt : mb_substr($dt, 0, 255, 'UTF-8')) : null;
         }
     }
+    $clientAbbrSummary = array_key_exists('client_abbr', $payload)
+        ? $clientAbbrPatch
+        : (is_array($beforeEstimate) ? ($beforeEstimate['client_abbr'] ?? null) : null);
+    $issueDateSummary = $issueDatePatch !== null
+        ? $issueDatePatch
+        : (is_array($beforeEstimate) ? ($beforeEstimate['issue_date'] ?? null) : null);
+    $deliveryDueSummary = array_key_exists('delivery_due_text', $payload)
+        ? $deliveryDueTextPatch
+        : (is_array($beforeEstimate) ? ($beforeEstimate['delivery_due_text'] ?? null) : null);
 
     $lines = isset($payload['lines']) && is_array($payload['lines']) ? $payload['lines'] : [];
     $subtotal = 0.0;
@@ -827,6 +1008,25 @@ if ($method === 'PATCH') {
             'estimate_updated',
             $sessionUserId,
             [
+                'summary' => estimateBuildUpdateSummary(
+                    is_array($beforeEstimate) ? $beforeEstimate : [],
+                    [
+                        'title' => $title,
+                        'estimate_status' => $status,
+                        'client_name' => $clientName,
+                        'client_abbr' => $clientAbbrSummary,
+                        'recipient_text' => $recipientText,
+                        'issue_date' => $issueDateSummary,
+                        'delivery_due_text' => $deliveryDueSummary,
+                        'internal_memo' => $internalMemo,
+                        'remarks' => $remarks,
+                        'sales_user_id' => $salesUserIdPatch,
+                        'applied_tax_rate_percent' => $taxPercent,
+                        'is_rough_estimate' => $isRough,
+                    ],
+                    is_array($beforeLines) ? count($beforeLines) : 0,
+                    count($normalizedLines)
+                ),
                 'status' => $status,
                 'line_count' => count($normalizedLines),
                 'subtotal_excluding_tax' => $subtotal,
@@ -857,6 +1057,21 @@ if ($method === 'DELETE') {
         exit;
     }
     $id = (int)$idRaw;
+    $ownerStmt = $pdo->prepare('SELECT created_by_user_id FROM project_estimates WHERE id = :id LIMIT 1');
+    $ownerStmt->execute([':id' => $id]);
+    $ownerRow = $ownerStmt->fetch(PDO::FETCH_ASSOC);
+    if (!is_array($ownerRow)) {
+        http_response_code(404);
+        echo json_encode(['success' => false, 'message' => '見積が見つかりません。'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    $isAdmin = estimateIsAdminUser($pdo, $sessionUserId);
+    $isCreator = (int)($ownerRow['created_by_user_id'] ?? 0) === $sessionUserId;
+    if (!$isAdmin && !$isCreator) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => '削除権限がありません。'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
     try {
         $pdo->beginTransaction();
         $pdo->prepare('DELETE FROM project_estimate_lines WHERE estimate_id = :id')->execute([':id' => $id]);
@@ -866,7 +1081,7 @@ if ($method === 'DELETE') {
             $id,
             'estimate_deleted',
             $sessionUserId,
-            ['estimate_id' => $id]
+            ['estimate_id' => $id, 'summary' => '削除: 見積を削除']
         );
         $pdo->commit();
     } catch (Throwable $e) {
