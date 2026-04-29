@@ -79,7 +79,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "autoprefixer": "^10.4.20",
-    "eslint": "^9.0.0",
+    "eslint": "^10.2.1",
     "eslint-config-next": "^16.2.4",
     "kill-port": "^2.0.1",
     "postcss": "^8.4.49",
