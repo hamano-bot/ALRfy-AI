@@ -160,6 +160,7 @@ type ProjectRequirementsClientProps = {
   projectName: string;
   canEdit: boolean;
   initialBody: RequirementsDocBody;
+  initialExists: boolean;
 };
 
 function todayIsoDate(): string {
@@ -641,6 +642,7 @@ export function ProjectRequirementsClient({
   projectName,
   canEdit,
   initialBody,
+  initialExists,
 }: ProjectRequirementsClientProps) {
   const router = useRouter();
   const history = useEditHistoryState(initialBody, {
@@ -665,6 +667,7 @@ export function ProjectRequirementsClient({
   const [pendingNewPageId, setPendingNewPageId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [pdfDownloading, setPdfDownloading] = useState(false);
+  const [requirementsInitialized, setRequirementsInitialized] = useState(initialExists);
   const [error, setError] = useState<string | null>(null);
   const [showDeleted, setShowDeleted] = useState(false);
   const [isLg, setIsLg] = useState(false);
@@ -837,7 +840,7 @@ export function ProjectRequirementsClient({
   }, [canEdit]);
 
   useEffect(() => {
-    if (!canEdit || !isDirty || saving || isComposingRef.current) {
+    if (!requirementsInitialized || !canEdit || !isDirty || saving || isComposingRef.current) {
       return;
     }
     const id = window.setTimeout(() => {
@@ -847,7 +850,7 @@ export function ProjectRequirementsClient({
       void performSaveRef.current("auto");
     }, AUTO_SAVE_IDLE_MS);
     return () => window.clearTimeout(id);
-  }, [canEdit, currentFingerprint, isDirty, saving]);
+  }, [requirementsInitialized, canEdit, currentFingerprint, isDirty, saving]);
 
   useEffect(() => {
     if (!canEdit) {
@@ -1113,6 +1116,13 @@ export function ProjectRequirementsClient({
     await performSave("manual");
   }, [performSave]);
 
+  const handleInitializeRequirements = useCallback(async () => {
+    const ok = await performSave("manual");
+    if (ok) {
+      setRequirementsInitialized(true);
+    }
+  }, [performSave]);
+
   useEffect(() => {
     if (!isDirty || !canEdit) {
       return;
@@ -1373,6 +1383,25 @@ export function ProjectRequirementsClient({
         </p>
       ) : null}
 
+      {!requirementsInitialized ? (
+        <Card className="shadow-sm">
+          <CardContent className="space-y-4 p-6">
+            <h2 className="pm-section-heading">要件定義はまだ作成されていません</h2>
+            <p className="text-sm text-[var(--muted)]">
+              「作成する」を押すと、このプロジェクトの要件定義データを作成します。
+            </p>
+            {canEdit ? (
+              <div className="flex justify-end">
+                <Button type="button" variant="accent" size="sm" onClick={() => void handleInitializeRequirements()} disabled={saving}>
+                  {saving ? "作成中…" : "作成する"}
+                </Button>
+              </div>
+            ) : (
+              <p className="text-xs text-[var(--muted)]">編集権限があるユーザーのみ作成できます。</p>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
       <div className="flex min-h-0 flex-1 flex-col gap-6 pb-6 lg:flex-row lg:items-start lg:gap-6">
         <div className="min-w-0 w-full flex-1">
           <Card className="min-w-0 overflow-visible shadow-sm">
@@ -1733,6 +1762,7 @@ export function ProjectRequirementsClient({
           )}
         </aside>
       </div>
+      )}
     </div>
   );
 }

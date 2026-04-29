@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowUpRight, Search } from "lucide-react";
+import { PageSizeSelect } from "@/app/components/PageSizeSelect";
 import { useRouter } from "next/navigation";
 import {
   type Dispatch,
@@ -40,6 +41,7 @@ import {
 } from "@/lib/portal-my-projects";
 import { displayText } from "@/lib/empty-display";
 import { formatDateDisplayYmd } from "@/lib/format-date-display";
+import { DEFAULT_LIST_PAGE_SIZE } from "@/lib/list-pagination";
 import { cn } from "@/lib/utils";
 
 const SITE_TYPE_OPTIONS = Object.entries(SITE_TYPE_LABEL_JA) as [string, string][];
@@ -141,6 +143,9 @@ export function ProjectListTable({ initialProjects }: Props) {
   const [siteTypePopoverOpen, setSiteTypePopoverOpen] = useState(false);
   const [rolePopoverOpen, setRolePopoverOpen] = useState(false);
 
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_LIST_PAGE_SIZE);
+
   const openSheet = useCallback(() => {
     setDraftFilters(appliedFilters);
     setSheetOpen(true);
@@ -203,6 +208,23 @@ export function ProjectListTable({ initialProjects }: Props) {
   );
 
   const rows = useMemo(() => sortProjectRows(filtered, sortColumn, sortDir), [filtered, sortColumn, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+
+  useEffect(() => {
+    setPage(1);
+  }, [appliedFilters, ownerOnly, excludeReleased]);
+
+  useEffect(() => {
+    setPage((p) => Math.min(p, totalPages));
+  }, [totalPages]);
+
+  const currentPage = Math.min(page, totalPages);
+  const pageOffset = (currentPage - 1) * pageSize;
+  const pagedRows = useMemo(
+    () => rows.slice(pageOffset, pageOffset + pageSize),
+    [rows, pageOffset, pageSize],
+  );
 
   const onHeaderClick = useCallback(
     (col: ProjectListSortColumn) => {
@@ -277,15 +299,26 @@ export function ProjectListTable({ initialProjects }: Props) {
             </Label>
           </div>
         </div>
-        <p
-          className="ml-auto shrink-0 text-sm tabular-nums text-[var(--muted)]"
-          role="status"
-          aria-live="polite"
-          aria-atomic="true"
-        >
-          <span className="font-semibold text-[var(--foreground)]">{rows.length}</span>
-          件
-        </p>
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+          <PageSizeSelect
+            id="project-list-page-size"
+            value={pageSize}
+            onChange={(size) => {
+              setPageSize(size);
+              setPage(1);
+            }}
+          />
+          <p
+            className="shrink-0 text-sm tabular-nums text-[var(--muted)]"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            {rows.length === 0
+              ? "0 件"
+              : `${pageOffset + 1} - ${Math.min(pageOffset + pageSize, rows.length)} / ${rows.length} 件`}
+          </p>
+        </div>
       </div>
 
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
@@ -707,7 +740,7 @@ export function ProjectListTable({ initialProjects }: Props) {
                   </td>
                 </tr>
               ) : (
-                rows.map((p) => {
+                pagedRows.map((p) => {
                   const href = `/project-list/${p.id}`;
                   const label = p.name || `（無題 #${p.id}）`;
                   return (
@@ -778,6 +811,28 @@ export function ProjectListTable({ initialProjects }: Props) {
             </tbody>
         </table>
       </div>
+      {totalPages > 1 ? (
+        <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[color:color-mix(in_srgb,var(--border)_88%,transparent)] px-5 py-3 text-sm">
+          <Button
+            type="button"
+            variant="default"
+            size="sm"
+            disabled={currentPage <= 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+          >
+            前へ
+          </Button>
+          <Button
+            type="button"
+            variant="default"
+            size="sm"
+            disabled={currentPage >= totalPages}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+          >
+            次へ
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

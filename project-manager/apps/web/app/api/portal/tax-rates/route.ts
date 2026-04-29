@@ -1,19 +1,21 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { taxRatePatchSchema, taxRatePostSchema } from "@/lib/portal-estimate";
+import { resolvePhpUpstream } from "@/lib/php-upstream";
 
 export const dynamic = "force-dynamic";
 const UPSTREAM_PATH = "/portal/api/tax-rates";
 
-function trimTrailingSlashes(value: string): string {
-  return value.replace(/\/+$/, "");
-}
-
 async function proxy(request: NextRequest, method: "GET" | "POST" | "PATCH", body?: string) {
-  const rawBase = process.env.PORTAL_API_BASE_URL;
-  if (!rawBase || rawBase.trim() === "") {
-    return NextResponse.json({ success: false, code: "missing_config", message: "PORTAL_API_BASE_URL が未設定です。" }, { status: 503 });
+  const configured =
+    (process.env.PORTAL_API_INTERNAL_URL && process.env.PORTAL_API_INTERNAL_URL.trim() !== "") ||
+    (process.env.PORTAL_API_BASE_URL && process.env.PORTAL_API_BASE_URL.trim() !== "");
+  if (!configured) {
+    return NextResponse.json(
+      { success: false, code: "missing_config", message: "PORTAL_API_BASE_URL（または PORTAL_API_INTERNAL_URL）が未設定です。" },
+      { status: 503 },
+    );
   }
-  const url = `${trimTrailingSlashes(rawBase.trim())}${UPSTREAM_PATH}`;
+  const url = `${resolvePhpUpstream()}${UPSTREAM_PATH}${request.nextUrl.search}`;
   const cookie = request.headers.get("cookie");
   try {
     const upstream = await fetch(url, {

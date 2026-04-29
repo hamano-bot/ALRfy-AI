@@ -322,9 +322,6 @@ export function AccessControlTable({
                             className={PORTAL_THEMED_SUGGEST_ROW}
                             onMouseDown={(e) => {
                               e.preventDefault();
-                              // #region agent log
-                              fetch('http://127.0.0.1:7870/ingest/d3eabf84-6c86-4277-b829-e548b07d84d8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'690a2d'},body:JSON.stringify({sessionId:'690a2d',runId:'run1',hypothesisId:'H1',location:'AccessControlTable.tsx:userSuggest:onClick',message:'user suggestion selected',data:{rowKey:row.key,suggestId:u.id,suggestLabel:u.label,appliedSubject:userPrimaryLabel(u.label)},timestamp:Date.now()})}).catch(()=>{});
-                              // #endregion
                               updateRow(idx, { subject: u.label, subjectUserId: u.id });
                               setUserSuggestMenuKey(null);
                             }}

@@ -10,36 +10,11 @@ set_error_handler(static function ($severity, $message, $file = '', $line = 0): 
     error_log(sprintf('[estimate_visibility php warning] %s in %s:%d', (string)$message, (string)$file, (int)$line));
     return true;
 });
-register_shutdown_function(static function (): void {
-    $err = error_get_last();
-    if (!is_array($err)) {
-        return;
-    }
-    error_log(
-        sprintf(
-            '[estimate_visibility shutdown] type=%d message=%s file=%s line=%d',
-            (int)($err['type'] ?? 0),
-            (string)($err['message'] ?? ''),
-            (string)($err['file'] ?? ''),
-            (int)($err['line'] ?? 0)
-        )
-    );
-    $fatalTypes = [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR];
-    if (!in_array((int)($err['type'] ?? 0), $fatalTypes, true)) {
-        return;
-    }
-    if (ob_get_length() !== false && ob_get_length() > 0) {
-        ob_clean();
-    }
-    http_response_code(500);
-    echo json_encode(
-        ['success' => false, 'message' => '公開範囲APIで内部エラーが発生しました。'],
-        JSON_UNESCAPED_UNICODE
-    );
-});
 
 require_once dirname(__DIR__, 2) . '/auth/bootstrap.php';
 require_once dirname(__DIR__) . '/includes/estimate_schema.php';
+require_once dirname(__DIR__) . '/includes/portal_query_int.php';
+require_once dirname(__DIR__) . '/includes/portal_json_safe.php';
 
 header('Content-Type: application/json; charset=UTF-8');
 
@@ -88,47 +63,20 @@ function estimateVisibilityTeamTags(PDO $pdo, int $userId): array
 
 function estimateVisibilityResolveRole(PDO $pdo, int $estimateId, int $userId, bool $isAdmin, array $teamTags, string $scope, int $createdBy): string
 {
-    $rank = 0;
+    if ($estimateId <= 0 || $userId <= 0) {
+        return 'none';
+    }
     if ($createdBy === $userId) {
-        $rank = 3;
-    } elseif ($isAdmin) {
-        $rank = 2;
-    } elseif ($scope === 'public_all_users') {
-        $rank = 1;
+        return 'owner';
     }
-    $uStmt = $pdo->prepare('SELECT role FROM estimate_user_permissions WHERE estimate_id = :estimate_id AND user_id = :user_id LIMIT 1');
-    $uStmt->execute([':estimate_id' => $estimateId, ':user_id' => $userId]);
-    $u = $uStmt->fetch(PDO::FETCH_ASSOC);
-    if (is_array($u) && is_string($u['role'] ?? null)) {
-        $r = $u['role'];
-        if ($r === 'editor') {
-            $rank = max($rank, 2);
-        } elseif ($r === 'viewer') {
-            $rank = max($rank, 1);
-        }
+    if ($isAdmin) {
+        return 'editor';
     }
-    if (!empty($teamTags)) {
-        $tStmt = $pdo->prepare('SELECT role FROM estimate_team_permissions WHERE estimate_id = :estimate_id AND team_tag = :team_tag');
-        foreach (array_keys($teamTags) as $tag) {
-            $tStmt->execute([':estimate_id' => $estimateId, ':team_tag' => $tag]);
-            $rows = $tStmt->fetchAll(PDO::FETCH_ASSOC);
-            if (!is_array($rows)) {
-                continue;
-            }
-            foreach ($rows as $row) {
-                if (!is_array($row) || !is_string($row['role'] ?? null)) {
-                    continue;
-                }
-                $r = $row['role'];
-                if ($r === 'editor') {
-                    $rank = max($rank, 2);
-                } elseif ($r === 'viewer') {
-                    $rank = max($rank, 1);
-                }
-            }
-        }
+    if ($scope === 'public_all_users') {
+        return 'viewer';
     }
-    return $rank >= 3 ? 'owner' : ($rank >= 2 ? 'editor' : ($rank >= 1 ? 'viewer' : 'none'));
+
+    return 'none';
 }
 
 try {
@@ -142,49 +90,60 @@ try {
 }
 
 if ($method === 'GET') {
-    $estimateId = isset($_GET['estimate_id']) && is_string($_GET['estimate_id']) && ctype_digit($_GET['estimate_id']) ? (int)$_GET['estimate_id'] : 0;
-    if ($estimateId <= 0) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'estimate_id を指定してください。'], JSON_UNESCAPED_UNICODE);
+    try {
+        $estimateId = portal_positive_int_from_query('estimate_id');
+        if ($estimateId <= 0) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'estimate_id を指定してください。'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $stmt = $pdo->prepare('SELECT visibility_scope FROM project_estimates WHERE id = :id LIMIT 1');
+        $stmt->execute([':id' => $estimateId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!is_array($row)) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'message' => '見積が見つかりません。'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $ownerStmt = $pdo->prepare('SELECT created_by_user_id FROM project_estimates WHERE id = :id LIMIT 1');
+        $ownerStmt->execute([':id' => $estimateId]);
+        $ownerRow = $ownerStmt->fetch(PDO::FETCH_ASSOC);
+        $effectiveRole = estimateVisibilityResolveRole(
+            $pdo,
+            $estimateId,
+            $sessionUserId,
+            estimateVisibilityIsAdminUser($pdo, $sessionUserId),
+            estimateVisibilityTeamTags($pdo, $sessionUserId),
+            (string)($row['visibility_scope'] ?? 'public_all_users'),
+            is_array($ownerRow) ? (int)($ownerRow['created_by_user_id'] ?? 0) : 0
+        );
+        if ($effectiveRole === 'none') {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'アクセス権限がありません。'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $teamStmt = $pdo->prepare('SELECT team_tag, role FROM estimate_team_permissions WHERE estimate_id = :id ORDER BY id ASC');
+        $teamStmt->execute([':id' => $estimateId]);
+        $teamPermissionsRows = $teamStmt->fetchAll(PDO::FETCH_ASSOC);
+        $userStmt = $pdo->prepare('SELECT user_id, role FROM estimate_user_permissions WHERE estimate_id = :id ORDER BY id ASC');
+        $userStmt->execute([':id' => $estimateId]);
+        $userPermissionsRows = $userStmt->fetchAll(PDO::FETCH_ASSOC);
+        portal_json_echo_db(
+            [
+                'success' => true,
+                'effective_role' => $effectiveRole,
+                'visibility_scope' => $row['visibility_scope'] ?? 'public_all_users',
+                'team_permissions' => is_array($teamPermissionsRows) ? $teamPermissionsRows : [],
+                'user_permissions' => is_array($userPermissionsRows) ? $userPermissionsRows : [],
+            ],
+        );
+        exit;
+    } catch (Throwable $e) {
+        error_log('[estimate_visibility get] ' . $e->getMessage());
+        http_response_code(500);
+        echo json_encode(['success' => false, 'message' => '公開範囲の取得に失敗しました。'], JSON_UNESCAPED_UNICODE);
         exit;
     }
-    $stmt = $pdo->prepare('SELECT visibility_scope FROM project_estimates WHERE id = :id LIMIT 1');
-    $stmt->execute([':id' => $estimateId]);
-    $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    if (!is_array($row)) {
-        http_response_code(404);
-        echo json_encode(['success' => false, 'message' => '見積が見つかりません。'], JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-    $ownerStmt = $pdo->prepare('SELECT created_by_user_id FROM project_estimates WHERE id = :id LIMIT 1');
-    $ownerStmt->execute([':id' => $estimateId]);
-    $ownerRow = $ownerStmt->fetch(PDO::FETCH_ASSOC);
-    $effectiveRole = estimateVisibilityResolveRole(
-        $pdo,
-        $estimateId,
-        $sessionUserId,
-        estimateVisibilityIsAdminUser($pdo, $sessionUserId),
-        estimateVisibilityTeamTags($pdo, $sessionUserId),
-        (string)($row['visibility_scope'] ?? 'public_all_users'),
-        is_array($ownerRow) ? (int)($ownerRow['created_by_user_id'] ?? 0) : 0
-    );
-    if ($effectiveRole === 'none') {
-        http_response_code(403);
-        echo json_encode(['success' => false, 'message' => 'アクセス権限がありません。'], JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-    $teamStmt = $pdo->prepare('SELECT team_tag, role FROM estimate_team_permissions WHERE estimate_id = :id ORDER BY id ASC');
-    $teamStmt->execute([':id' => $estimateId]);
-    $userStmt = $pdo->prepare('SELECT user_id, role FROM estimate_user_permissions WHERE estimate_id = :id ORDER BY id ASC');
-    $userStmt->execute([':id' => $estimateId]);
-    echo json_encode([
-        'success' => true,
-        'effective_role' => $effectiveRole,
-        'visibility_scope' => $row['visibility_scope'] ?? 'public_all_users',
-        'team_permissions' => $teamStmt->fetchAll(PDO::FETCH_ASSOC) ?: [],
-        'user_permissions' => $userStmt->fetchAll(PDO::FETCH_ASSOC) ?: [],
-    ], JSON_UNESCAPED_UNICODE);
-    exit;
 }
 
 if ($method === 'PATCH') {
@@ -246,12 +205,6 @@ if ($method === 'PATCH') {
         }
         $normalizedUsers[] = ['user_id' => $userId, 'role' => $role];
     }
-    if ($scope === 'restricted' && count($normalizedTeams) === 0 && count($normalizedUsers) === 0) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'message' => '個別制限ではチームまたは個人のいずれかを設定してください。'], JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-
     try {
         $pdo->beginTransaction();
         $upd = $pdo->prepare('UPDATE project_estimates SET visibility_scope = :scope, updated_by_user_id = :uid WHERE id = :id');

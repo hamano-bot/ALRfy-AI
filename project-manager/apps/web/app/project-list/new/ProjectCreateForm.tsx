@@ -7,6 +7,7 @@ import { Button } from "@/app/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/app/components/ui/dialog";
 import { Input } from "@/app/components/ui/input";
 import { Label } from "@/app/components/ui/label";
+import { ConfirmDeleteButton } from "@/app/components/ConfirmDeleteButton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select";
 import {
   portalProjectCreateBodySchema,
@@ -19,7 +20,7 @@ import { PROJECT_ROLE_LABEL_JA } from "@/lib/project-role-labels";
 import { projectEditFormFingerprintFromDetail, projectEditFormFingerprintFromFormState } from "@/lib/project-edit-form-fingerprint";
 import { UNSAVED_LEAVE_CONFIRM_MESSAGE } from "@/lib/unsaved-navigation";
 import { cn } from "@/lib/utils";
-import { GripVertical } from "lucide-react";
+import { GripVertical, Trash2 } from "lucide-react";
 
 const SITE_TYPES = [
   { value: "corporate", label: "コーポレート" },
@@ -208,6 +209,7 @@ function ParticipantAddInput({
         className="h-8 min-w-0 flex-1 px-2 py-1 text-xs"
         placeholder="名前・メール・ID"
         autoComplete="off"
+        name="participant-suggest"
         value={value}
         onChange={(e) => {
           onChange(e.target.value);
@@ -408,6 +410,7 @@ function RedmineSuggestRow({
           className="w-full"
           placeholder={configured ? "プロジェクト名・identifier で検索（スペース=AND）" : "Redmine 未設定"}
           disabled={!configured}
+          name="redmine-project-suggest"
           value={value ? value.label : q}
           onChange={(e) => {
             const v = e.target.value;
@@ -464,6 +467,7 @@ export type ProjectCreateFormProps = {
   initialDetail?: PortalProjectDetail;
   onEditCancel?: () => void;
   onEditSaved?: (savedProject: PortalProjectDetail) => void;
+  canDeleteProject?: boolean;
   /** 編集モードでフォームが初期値から変わったか（離脱確認用） */
   onEditDirtyChange?: (dirty: boolean) => void;
 };
@@ -474,6 +478,7 @@ export function ProjectCreateForm({
   initialDetail,
   onEditCancel,
   onEditSaved,
+  canDeleteProject = false,
   onEditDirtyChange,
 }: ProjectCreateFormProps = {}) {
   const router = useRouter();
@@ -521,6 +526,7 @@ export function ProjectCreateForm({
   const [formError, setFormError] = useState<string | null>(null);
   const [formWarning, setFormWarning] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   /** 編集モードで initialDetail から state を流し込み終わるまで dirty にしない */
   const [editFormHydrated, setEditFormHydrated] = useState(false);
@@ -1162,6 +1168,42 @@ export function ProjectCreateForm({
     }
   };
 
+  const deleteProject = async () => {
+    if (!isEditMode || !canDeleteProject) {
+      setFormError("このプロジェクトを削除する権限がありません。");
+      return;
+    }
+    setFormError(null);
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/portal/project?project_id=${editProjectId}`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      const text = await res.text();
+      let msg = `削除に失敗しました（${res.status}）`;
+      try {
+        const j = JSON.parse(text) as { message?: string };
+        if (typeof j.message === "string" && j.message.trim() !== "") {
+          msg = j.message;
+        }
+      } catch {
+        // ignore
+      }
+      if (!res.ok) {
+        setFormError(msg);
+        return;
+      }
+      router.push("/project-list");
+      router.refresh();
+    } catch {
+      setFormError("通信に失敗しました。");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <form className="space-y-8" onSubmit={onSubmit} noValidate>
       <Dialog open={cancelConfirmOpen} onOpenChange={setCancelConfirmOpen}>
@@ -1197,6 +1239,7 @@ export function ProjectCreateForm({
           </Label>
           <Input
             id={`${idPrefix}-name`}
+            name={`${idPrefix}-name`}
             required
             className="mt-1 w-1/2 max-w-full"
             value={name}
@@ -1208,6 +1251,7 @@ export function ProjectCreateForm({
           <div ref={clientSuggestRef} className="relative mt-1 w-1/2 max-w-full">
             <Input
               id={`${idPrefix}-client`}
+              name={`${idPrefix}-client`}
               className="w-full"
               autoComplete="off"
               value={clientName}
@@ -1297,6 +1341,7 @@ export function ProjectCreateForm({
             </Label>
             <Input
               id={`${idPrefix}-site-other`}
+              name={`${idPrefix}-site-other`}
               required
               className="mt-1 w-1/2 max-w-full"
               value={siteTypeOther}
@@ -1349,6 +1394,7 @@ export function ProjectCreateForm({
               <div key={i} className="flex gap-2">
                 <Input
                   className="min-w-0 flex-1"
+                  name={`renewal-url-${i}`}
                   placeholder="https://..."
                   value={u}
                   onChange={(e) => {
@@ -1421,6 +1467,7 @@ export function ProjectCreateForm({
             <div key={i} className="flex gap-2">
               <Input
                 className="min-w-0 w-36 shrink-0"
+                name={`misc-link-label-${i}`}
                 placeholder="表示名"
                 value={m.label}
                 onChange={(e) => {
@@ -1431,6 +1478,7 @@ export function ProjectCreateForm({
               />
               <Input
                 className="min-w-0 flex-1"
+                name={`misc-link-url-${i}`}
                 placeholder="https://..."
                 value={m.url}
                 onChange={(e) => {
@@ -1594,17 +1642,37 @@ export function ProjectCreateForm({
       ) : null}
 
       <div className="flex flex-wrap justify-center gap-3">
-        {submitting ? (
+        {submitting || deleting ? (
           <>
             <Button type="button" variant="default" disabled className="min-w-[7rem]">
               キャンセル
             </Button>
             <Button type="button" variant="accent" disabled className="min-w-[7rem]">
-              Saving…
+              {deleting ? "削除中…" : "Saving…"}
             </Button>
           </>
         ) : (
           <>
+            {isEditMode ? (
+              <ConfirmDeleteButton
+                buttonLabel="削除"
+                buttonTitle={canDeleteProject ? undefined : "削除できるのはオーナーのみです"}
+                buttonIcon={<Trash2 className="h-4 w-4" aria-hidden />}
+                buttonClassName="min-w-[7rem] gap-1.5"
+                confirmTitle="プロジェクトを削除しますか？"
+                confirmDescription={
+                  <>
+                    <p>この操作は取り消せません。</p>
+                    <p className="text-[1.5em] font-bold text-red-500 dark:text-red-400">
+                      ヒアリングシート・要件定義を含む関連データも削除されます。
+                    </p>
+                  </>
+                }
+                confirmLabel="削除する"
+                disabled={!canDeleteProject}
+                onConfirm={deleteProject}
+              />
+            ) : null}
             <Button
               type="button"
               variant="default"

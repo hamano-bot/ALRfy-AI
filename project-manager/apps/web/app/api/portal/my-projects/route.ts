@@ -4,7 +4,8 @@ import { fetchPortalMyProjectsRaw } from "@/lib/portal-my-projects";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const raw = await fetchPortalMyProjectsRaw(request.headers.get("cookie"));
+  const search = request.nextUrl.search;
+  const raw = await fetchPortalMyProjectsRaw(request.headers.get("cookie"), search);
   if (raw.ok === false && raw.reason === "missing_config") {
     return NextResponse.json(
       {

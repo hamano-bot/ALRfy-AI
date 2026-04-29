@@ -119,6 +119,7 @@ if ($method === 'GET') {
     }
 
     $row = fetchRequirementsRow($pdo, $projectId);
+    $existsRow = $row !== null;
     if ($row === null) {
         $row = [
             'project_id' => $projectId,
@@ -132,6 +133,7 @@ if ($method === 'GET') {
             'requirements' => [
                 'project_id' => $row['project_id'],
                 'body_json' => $row['body_json'],
+                'exists' => $existsRow,
             ],
         ],
         JSON_UNESCAPED_UNICODE

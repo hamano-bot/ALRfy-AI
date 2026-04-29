@@ -1,6 +1,5 @@
 import { normalizeHearingRows } from "@/lib/hearing-sheet-body-utils";
-import { getDefaultRowsForTemplate } from "@/lib/hearing-sheet-template-rows";
-import { resolveHearingTemplateId, shouldSeedHearingTemplate } from "@/lib/hearing-sheet-template-matrix";
+import { resolveHearingTemplateId } from "@/lib/hearing-sheet-template-matrix";
 import {
   fetchPortalHearingSheetRaw,
   parsePortalHearingSheetSuccess,
@@ -137,13 +136,11 @@ export default async function ProjectHearingView({ projectId }: ProjectHearingVi
 
   let initialStatus: "draft" | "finalized" | "archived" = "draft";
   let initialRows = normalizeHearingRows(null);
-  let bodyRaw: unknown = null;
 
   if (hearRaw.ok && hearRaw.status === 200) {
     const h = parsePortalHearingSheetSuccess(hearRaw.text);
     if (h) {
       initialStatus = h.status;
-      bodyRaw = h.body_json;
       initialRows = normalizeHearingRows(h.body_json);
     }
   } else if (hearRaw.ok && hearRaw.status === 401) {
@@ -170,9 +167,6 @@ export default async function ProjectHearingView({ projectId }: ProjectHearingVi
   }
 
   const resolvedTemplateId = resolveHearingTemplateId(project);
-  if (shouldSeedHearingTemplate(project, bodyRaw) && initialRows.length === 0) {
-    initialRows = getDefaultRowsForTemplate(resolvedTemplateId);
-  }
 
   return (
     <ProjectHearingSheetClient

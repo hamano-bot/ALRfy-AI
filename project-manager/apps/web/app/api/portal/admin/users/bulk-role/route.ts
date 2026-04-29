@@ -1,7 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { resolvePhpUpstream } from "@/lib/php-upstream";
 
 export const dynamic = "force-dynamic";
 const UPSTREAM_PATH = "/portal/api/admin/users/bulk-role";
+const UPSTREAM_FALLBACK_PATH = "/portal/api/patch_admin_users_bulk_role.php";
 
 function trimTrailingSlashes(value: string): string {
   return value.replace(/\/+$/, "");
@@ -14,23 +16,35 @@ export async function PATCH(request: NextRequest) {
   } catch {
     return NextResponse.json({ success: false, message: "JSON ボディが不正です。" }, { status: 400 });
   }
-  const rawBase = process.env.PORTAL_API_BASE_URL;
-  if (!rawBase || rawBase.trim() === "") {
-    return NextResponse.json({ success: false, code: "missing_config", message: "PORTAL_API_BASE_URL が未設定です。" }, { status: 503 });
+  const configured =
+    (process.env.PORTAL_API_INTERNAL_URL && process.env.PORTAL_API_INTERNAL_URL.trim() !== "") ||
+    (process.env.PORTAL_API_BASE_URL && process.env.PORTAL_API_BASE_URL.trim() !== "");
+  if (!configured) {
+    return NextResponse.json(
+      { success: false, code: "missing_config", message: "PORTAL_API_BASE_URL（または PORTAL_API_INTERNAL_URL）が未設定です。" },
+      { status: 503 },
+    );
   }
-  const url = `${trimTrailingSlashes(rawBase.trim())}${UPSTREAM_PATH}`;
+  const base = trimTrailingSlashes(resolvePhpUpstream());
+  const url = `${base}${UPSTREAM_PATH}`;
+  const fallbackUrl = `${base}${UPSTREAM_FALLBACK_PATH}`;
   const cookie = request.headers.get("cookie");
   try {
-    const upstream = await fetch(url, {
-      method: "PATCH",
-      cache: "no-store",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json; charset=utf-8",
-        ...(cookie ? { Cookie: cookie } : {}),
-      },
-      body: JSON.stringify(json),
-    });
+    const doFetch = (targetUrl: string) =>
+      fetch(targetUrl, {
+        method: "PATCH",
+        cache: "no-store",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json; charset=utf-8",
+          ...(cookie ? { Cookie: cookie } : {}),
+        },
+        body: JSON.stringify(json),
+      });
+    let upstream = await doFetch(url);
+    if (upstream.status === 404 || upstream.status === 405) {
+      upstream = await doFetch(fallbackUrl);
+    }
     const text = await upstream.text();
     return new NextResponse(text, {
       status: upstream.status,

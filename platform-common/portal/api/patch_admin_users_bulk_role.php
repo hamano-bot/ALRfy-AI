@@ -28,6 +28,32 @@ try {
     exit;
 }
 
+function adminRoleHasUsersColumn(PDO $pdo, string $column): bool
+{
+    try {
+        $stmt = $pdo->prepare('SHOW COLUMNS FROM users LIKE :col');
+        $stmt->execute([':col' => $column]);
+        return $stmt->fetch(PDO::FETCH_ASSOC) !== false;
+    } catch (Throwable $e) {
+        error_log('[admin_users_bulk_role has column] ' . $e->getMessage());
+        return false;
+    }
+}
+
+function adminRoleEnsureColumn(PDO $pdo, string $column, string $ddl): void
+{
+    if (adminRoleHasUsersColumn($pdo, $column)) {
+        return;
+    }
+    try {
+        $pdo->exec($ddl);
+    } catch (Throwable $e) {
+        error_log('[admin_users_bulk_role ensure column] ' . $e->getMessage());
+    }
+}
+
+adminRoleEnsureColumn($pdo, 'is_admin', "ALTER TABLE users ADD COLUMN is_admin TINYINT(1) NOT NULL DEFAULT 0");
+
 $meStmt = $pdo->prepare('SELECT is_admin FROM users WHERE id = :id LIMIT 1');
 $meStmt->execute([':id' => $sessionUserId]);
 $me = $meStmt->fetch(PDO::FETCH_ASSOC);

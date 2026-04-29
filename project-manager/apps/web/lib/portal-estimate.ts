@@ -2,6 +2,8 @@ import { z, ZodIssueCode } from "zod";
 
 /** `EstimateEditorClient` / PHP `post_estimate_export_html.php` と同一。大項目行は見出し空でも保存可。 */
 export const ESTIMATE_MAJOR_LINE_ITEM_CODE = "__ESTIMATE_MAJOR__";
+/** 新規明細の空の通常行など。項目名が空でも下書き保存できるように Zod で大項目・空白行と同様に除外する。 */
+export const ESTIMATE_MANUAL_DETAIL_LINE_ITEM_CODE = "__ESTIMATE_MANUAL_DETAIL__";
 /** `EstimateEditorClient` と同一。帳票/プレビュー上の空白行。 */
 export const ESTIMATE_BLANK_DETAIL_LINE_ITEM_CODE = "__ESTIMATE_BLANK_DETAIL__";
 
@@ -107,7 +109,8 @@ export const estimateLineSchema = z
       line.item_code != null && String(line.item_code).trim() !== "" ? String(line.item_code).trim() : null;
     const isMajor = code === ESTIMATE_MAJOR_LINE_ITEM_CODE;
     const isBlank = code === ESTIMATE_BLANK_DETAIL_LINE_ITEM_CODE;
-    if (!isMajor && !isBlank && line.item_name.trim().length === 0) {
+    const isManualDetail = code === ESTIMATE_MANUAL_DETAIL_LINE_ITEM_CODE;
+    if (!isMajor && !isBlank && !isManualDetail && line.item_name.trim().length === 0) {
       ctx.addIssue({
         code: ZodIssueCode.custom,
         message: "項目名は1文字以上で入力してください。",
@@ -118,6 +121,8 @@ export const estimateLineSchema = z
 
 export const estimateUpsertSchema = z.object({
   id: z.number().int().positive().optional(),
+  /** 複数案件リンク（保存時はこちらを優先。先頭が project_estimates.project_id に同期） */
+  project_ids: z.array(z.number().int().positive()).max(30).optional(),
   project_id: z.number().int().positive().nullable().optional(),
   title: z.string().trim().min(1).max(255),
   estimate_status: z.enum(["draft", "submitted", "won", "lost"]).default("draft"),

@@ -4,10 +4,6 @@ import {
   parsePortalRequirementsSuccess,
 } from "@/lib/portal-requirements-fetch";
 import {
-  fetchPortalProjectPermissionRaw,
-  parseProjectPermissionSuccess,
-} from "@/lib/portal-project-permission";
-import {
   fetchPortalProjectRaw,
   parsePortalJsonMessage,
   parsePortalProjectSuccess,
@@ -28,9 +24,8 @@ export default async function ProjectRequirementsView({ projectId }: ProjectRequ
 
   const cookie = (await headers()).get("cookie");
 
-  const [projRaw, permRaw, reqRaw] = await Promise.all([
+  const [projRaw, reqRaw] = await Promise.all([
     fetchPortalProjectRaw(cookie, pid),
-    fetchPortalProjectPermissionRaw(cookie, pid),
     fetchPortalRequirementsRaw(cookie, pid),
   ]);
 
@@ -124,18 +119,18 @@ export default async function ProjectRequirementsView({ projectId }: ProjectRequ
     );
   }
 
-  let canEdit = false;
-  if (permRaw.ok && permRaw.status === 200) {
-    const p = parseProjectPermissionSuccess(permRaw.text);
-    if (p) {
-      const er = p.effective_role.trim().toLowerCase();
-      canEdit = er === "owner" || er === "editor";
-    }
-  }
+  const canEdit = project.effective_role === "owner" || project.effective_role === "editor";
 
   let initialBody = normalizeRequirementsDocBody({});
+  let requirementsExists = false;
 
   if (reqRaw.ok && reqRaw.status === 200) {
+    try {
+      const parsedRaw = JSON.parse(reqRaw.text) as { requirements?: { exists?: unknown } };
+      requirementsExists = parsedRaw?.requirements?.exists === true;
+    } catch {
+      requirementsExists = false;
+    }
     const r = parsePortalRequirementsSuccess(reqRaw.text);
     if (r) {
       initialBody = normalizeRequirementsDocBody(r.body_json);
@@ -166,6 +161,12 @@ export default async function ProjectRequirementsView({ projectId }: ProjectRequ
   const projectName = project.name?.trim() !== "" ? project.name : `プロジェクト #${pid}`;
 
   return (
-    <ProjectRequirementsClient projectId={pid} projectName={projectName} canEdit={canEdit} initialBody={initialBody} />
+    <ProjectRequirementsClient
+      projectId={pid}
+      projectName={projectName}
+      canEdit={canEdit}
+      initialBody={initialBody}
+      initialExists={requirementsExists}
+    />
   );
 }

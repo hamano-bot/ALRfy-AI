@@ -3,30 +3,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/app/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/app/components/ui/dialog";
-
-type AdminUser = {
-  id: number;
-  email: string;
-  display_name: string | null;
-  team: string | null;
-  is_admin: number;
-  created_at: string;
-  updated_at: string;
-};
-
-function parseTeamTags(raw: string | null): string[] {
-  if (!raw || raw.trim() === "") return [];
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((v): v is string => typeof v === "string");
-  } catch {
-    return [];
-  }
-}
+import { Input } from "@/app/components/ui/input";
+import { cn } from "@/lib/utils";
+import {
+  formatUserDisplayName,
+  normalizeTagsInput,
+  parseTeamTags,
+  toggleSelectedIds,
+  type SettingsAdminUser,
+} from "@/lib/settings-users-utils";
 
 export function SettingsUsersClient() {
-  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [users, setUsers] = useState<SettingsAdminUser[]>([]);
+  const [canAdmin, setCanAdmin] = useState(false);
   const [loading, setLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [message, setMessage] = useState<string | null>(null);
@@ -42,12 +31,21 @@ export function SettingsUsersClient() {
     setMessage(null);
     try {
       const res = await fetch("/api/portal/admin/users", { credentials: "include", cache: "no-store" });
-      const data = (await res.json()) as { success?: boolean; users?: AdminUser[]; message?: string };
+      const rawText = await res.text();
+      let data: { success?: boolean; users?: SettingsAdminUser[]; message?: string; can_admin?: boolean } = {};
+      try {
+        data = JSON.parse(rawText) as { success?: boolean; users?: SettingsAdminUser[]; message?: string; can_admin?: boolean };
+      } catch {
+        setMessage(`ユーザー取得に失敗しました（HTTP ${res.status}）。`);
+        return;
+      }
       if (!res.ok || !data.success || !Array.isArray(data.users)) {
         setMessage(data.message ?? "ユーザー取得に失敗しました。");
         return;
       }
       setUsers(data.users);
+      setCanAdmin(data.can_admin === true);
+      setSelectedIds([]);
     } catch {
       setMessage("ユーザー取得に失敗しました。");
     } finally {
@@ -60,14 +58,15 @@ export function SettingsUsersClient() {
   }, []);
 
   const openConfirmForTags = async (mode: "tag-add" | "tag-replace") => {
+    if (!canAdmin) {
+      setMessage("管理者権限が必要です。");
+      return;
+    }
     if (selectedIds.length === 0) {
       setMessage("対象ユーザーを選択してください。");
       return;
     }
-    const tags = tagInput
-      .split(",")
-      .map((v) => v.trim().toLowerCase())
-      .filter((v) => v !== "");
+    const tags = normalizeTagsInput(tagInput);
     if (tags.length === 0) {
       setMessage("タグを入力してください。");
       return;
@@ -100,6 +99,10 @@ export function SettingsUsersClient() {
   };
 
   const openConfirmForAdmin = async (toAdmin: boolean) => {
+    if (!canAdmin) {
+      setMessage("管理者権限が必要です。");
+      return;
+    }
     if (selectedIds.length === 0) {
       setMessage("対象ユーザーを選択してください。");
       return;
@@ -131,10 +134,7 @@ export function SettingsUsersClient() {
   const runConfirmed = async () => {
     try {
       if (confirmMode === "tag-add" || confirmMode === "tag-replace") {
-        const tags = tagInput
-          .split(",")
-          .map((v) => v.trim().toLowerCase())
-          .filter((v) => v !== "");
+        const tags = normalizeTagsInput(tagInput);
         const res = await fetch("/api/portal/admin/user-team-tags/bulk", {
           method: "PATCH",
           credentials: "include",
@@ -194,83 +194,116 @@ export function SettingsUsersClient() {
         </div>
       </section>
 
-      <section className="surface-card p-4">
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <span className="text-sm">選択中 {selectedIds.length} 件</span>
-          <input
-            className="rounded border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-sm"
+      <section className="surface-card flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[color:color-mix(in_srgb,var(--border)_88%,transparent)] px-5 py-3">
+          <span className="rounded-md border border-[color:color-mix(in_srgb,var(--border)_86%,transparent)] bg-[color:color-mix(in_srgb,var(--surface)_94%,transparent)] px-2 py-1 text-sm">
+            選択中 {selectedIds.length} 件
+          </span>
+          {!canAdmin ? <span className="text-xs text-[var(--muted)]">閲覧モード（更新は管理者のみ）</span> : null}
+          <Input
+            className="h-8 w-[16rem]"
             placeholder="タグ（カンマ区切り: sales,tokyo）"
             value={tagInput}
             onChange={(e) => setTagInput(e.target.value)}
+            disabled={!canAdmin}
           />
-          <Button type="button" variant="default" size="sm" onClick={() => void openConfirmForTags("tag-add")}>
+          <Button type="button" variant="default" size="sm" className="h-8 rounded-md" disabled={!canAdmin} onClick={() => void openConfirmForTags("tag-add")}>
             タグ一括追加
           </Button>
-          <Button type="button" variant="default" size="sm" onClick={() => void openConfirmForTags("tag-replace")}>
+          <Button type="button" variant="default" size="sm" className="h-8 rounded-md" disabled={!canAdmin} onClick={() => void openConfirmForTags("tag-replace")}>
             タグ一括置換
           </Button>
-          <Button type="button" variant="default" size="sm" onClick={() => void openConfirmForAdmin(true)}>
+          <Button type="button" variant="default" size="sm" className="h-8 rounded-md" disabled={!canAdmin} onClick={() => void openConfirmForAdmin(true)}>
             管理者付与
           </Button>
-          <Button type="button" variant="default" size="sm" onClick={() => void openConfirmForAdmin(false)}>
+          <Button type="button" variant="default" size="sm" className="h-8 rounded-md" disabled={!canAdmin} onClick={() => void openConfirmForAdmin(false)}>
             管理者解除
           </Button>
         </div>
 
-        {message ? <p className="mb-2 text-sm text-[var(--muted)]">{message}</p> : null}
-        {loading ? <p className="mb-2 text-sm text-[var(--muted)]">読み込み中…</p> : null}
+        {message ? (
+          <div className="px-5 pt-3">
+            <p className="text-sm text-[var(--muted)]">{message}</p>
+          </div>
+        ) : null}
+        {loading ? (
+          <div className="px-5 pt-3">
+            <p className="text-sm text-[var(--muted)]">読み込み中…</p>
+          </div>
+        ) : null}
 
-        <div className="overflow-auto">
-          <table className="w-full min-w-[980px] border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-[var(--border)] text-left">
-                <th className="px-2 py-1">
+        <div className="modern-scrollbar min-h-0 flex-1 overflow-x-auto overflow-y-auto">
+          <table className="w-full min-w-[980px] table-auto text-left text-sm">
+            <thead className="pm-table-head sticky top-0 z-10 text-sm font-semibold normal-case tracking-normal text-[var(--foreground)]">
+              <tr>
+                <th className="px-5 py-3">
                   <input
                     type="checkbox"
                     checked={users.length > 0 && selectedIds.length === users.length}
                     onChange={(e) => setSelectedIds(e.target.checked ? users.map((u) => u.id) : [])}
                   />
                 </th>
-                <th className="px-2 py-1">ユーザー名</th>
-                <th className="px-2 py-1">メール</th>
-                <th className="px-2 py-1">teamタグ</th>
-                <th className="px-2 py-1">管理者</th>
-                <th className="px-2 py-1">最終更新</th>
+                <th className="px-3 py-3">ユーザー名</th>
+                <th className="px-3 py-3">メール</th>
+                <th className="px-3 py-3">teamタグ</th>
+                <th className="px-3 py-3">管理者</th>
+                <th className="px-3 py-3">作成日</th>
+                <th className="px-3 py-3">最終更新</th>
               </tr>
             </thead>
             <tbody>
               {users.map((user) => (
-                <tr key={`settings-user-${user.id}`} className="border-b border-[var(--border)]">
-                  <td className="px-2 py-1">
+                <tr
+                  key={`settings-user-${user.id}`}
+                  className="group border-b border-[color:color-mix(in_srgb,var(--border)_88%,transparent)] transition-colors duration-150 hover:bg-[color:color-mix(in_srgb,var(--accent)_12%,var(--surface)_88%)]"
+                >
+                  <td className="px-5 py-3">
                     <input
                       type="checkbox"
                       checked={selectedSet.has(user.id)}
                       onChange={(e) => {
-                        setSelectedIds((prev) => (e.target.checked ? [...prev, user.id] : prev.filter((id) => id !== user.id)));
+                        setSelectedIds((prev) => toggleSelectedIds(prev, user.id, e.target.checked));
                       }}
                     />
                   </td>
-                  <td className="px-2 py-1">{user.display_name && user.display_name.trim() !== "" ? user.display_name : `user#${user.id}`}</td>
-                  <td className="px-2 py-1">{user.email}</td>
-                  <td className="px-2 py-1">
-                    <div className="flex flex-wrap gap-1">
+                  <td className="px-3 py-3 font-medium text-[var(--foreground)]">{formatUserDisplayName(user)}</td>
+                  <td className="px-3 py-3 text-[var(--muted)]">{user.email}</td>
+                  <td className="px-3 py-3">
+                    <div className="flex flex-wrap gap-1.5">
                       {parseTeamTags(user.team).map((tag) => (
                         <span
                           key={`user-team-${user.id}-${tag}`}
-                          className="inline-flex rounded border border-[var(--border)] bg-[color:color-mix(in_srgb,var(--surface)_92%,transparent)] px-2 py-0.5 text-xs"
+                          className="inline-flex rounded-full border border-[color:color-mix(in_srgb,var(--border)_85%,transparent)] bg-[color:color-mix(in_srgb,var(--surface)_94%,transparent)] px-2 py-0.5 text-xs text-[var(--muted)]"
                         >
                           #{tag}
                         </span>
                       ))}
+                      {parseTeamTags(user.team).length === 0 ? <span className="text-xs text-[var(--muted)]">-</span> : null}
                     </div>
                   </td>
-                  <td className="px-2 py-1">{Number(user.is_admin) === 1 ? "ON" : "OFF"}</td>
-                  <td className="px-2 py-1">{user.updated_at}</td>
+                  <td className="px-3 py-3">
+                    <span
+                      className={cn(
+                        "inline-block rounded-full px-2 py-0.5 text-[11px] font-medium leading-tight",
+                        Number(user.is_admin) === 1
+                          ? "bg-[color:color-mix(in_srgb,#16a34a_22%,transparent)] text-[color:color-mix(in_srgb,#16a34a_86%,var(--foreground)_14%)]"
+                          : "bg-[color:color-mix(in_srgb,var(--muted)_22%,transparent)] text-[color:color-mix(in_srgb,var(--muted)_86%,var(--foreground)_14%)]",
+                      )}
+                    >
+                      {Number(user.is_admin) === 1 ? "ON" : "OFF"}
+                    </span>
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-3 font-mono text-xs text-[var(--muted)] tabular-nums">
+                    {String(user.created_at ?? "").slice(0, 10) || "-"}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-3 font-mono text-xs text-[var(--muted)] tabular-nums">
+                    {String(user.updated_at ?? "").slice(0, 10) || "-"}
+                  </td>
                 </tr>
               ))}
               {users.length === 0 && !loading ? (
                 <tr>
-                  <td colSpan={6} className="px-2 py-4 text-center text-[var(--muted)]">
+                  <td colSpan={7} className="px-5 py-8 text-center text-sm text-[var(--muted)]">
                     データがありません。再読込してください。
                   </td>
                 </tr>

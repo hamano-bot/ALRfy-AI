@@ -96,15 +96,17 @@ export default async function ProjectDetailView({ projectId }: ProjectDetailView
   }
 
   let canEdit = false;
+  let canDeleteProject = false;
   if (permRaw.ok && permRaw.status === 200) {
     const p = parseProjectPermissionSuccess(permRaw.text);
     if (p) {
       const er = p.effective_role.trim().toLowerCase();
       canEdit = er === "owner" || er === "editor";
+      canDeleteProject = er === "owner";
     }
   }
 
   return (
-    <ProjectDetailClient projectId={pid} initialProject={project} canEdit={canEdit} />
+    <ProjectDetailClient projectId={pid} initialProject={project} canEdit={canEdit} canDeleteProject={canDeleteProject} />
   );
 }

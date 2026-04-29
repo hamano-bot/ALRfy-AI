@@ -1,19 +1,21 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { resolvePhpUpstream } from "@/lib/php-upstream";
 
 export const dynamic = "force-dynamic";
 const UPSTREAM_PATH = "/portal/api/estimate-suggestions";
 
-function trimTrailingSlashes(value: string): string {
-  return value.replace(/\/+$/, "");
-}
-
 export async function GET(request: NextRequest) {
-  const rawBase = process.env.PORTAL_API_BASE_URL;
-  if (!rawBase || rawBase.trim() === "") {
-    return NextResponse.json({ success: false, code: "missing_config", message: "PORTAL_API_BASE_URL が未設定です。" }, { status: 503 });
+  const configured =
+    (process.env.PORTAL_API_INTERNAL_URL && process.env.PORTAL_API_INTERNAL_URL.trim() !== "") ||
+    (process.env.PORTAL_API_BASE_URL && process.env.PORTAL_API_BASE_URL.trim() !== "");
+  if (!configured) {
+    return NextResponse.json(
+      { success: false, code: "missing_config", message: "PORTAL_API_BASE_URL（または PORTAL_API_INTERNAL_URL）が未設定です。" },
+      { status: 503 },
+    );
   }
   const cookie = request.headers.get("cookie");
-  const url = `${trimTrailingSlashes(rawBase.trim())}${UPSTREAM_PATH}${request.nextUrl.search}`;
+  const url = `${resolvePhpUpstream()}${UPSTREAM_PATH}${request.nextUrl.search}`;
   try {
     const upstream = await fetch(url, {
       method: "GET",

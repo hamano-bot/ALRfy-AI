@@ -340,29 +340,31 @@ foreach ($blocks as $block) {
         $itemCode = isset($line['item_code']) && is_string($line['item_code']) ? trim($line['item_code']) : '';
         $isBlankRow = ($itemCode === ESTIMATE_BLANK_DETAIL_LINE_ITEM_CODE);
         $nameRaw = (string)($line['item_name'] ?? '');
-        $name = htmlspecialchars($nameRaw, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $nameEsc = htmlspecialchars($nameRaw, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $pref = '';
-        if (!$isBlankRow && $nameRaw !== '') {
+        if ($nameRaw !== '') {
             $pref = (str_starts_with($nameRaw, '・') || str_starts_with($nameRaw, '●')) ? '' : '・';
         }
-        $qty = htmlspecialchars($isBlankRow ? '' : estimateFormatQty($line['quantity'] ?? null), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        $unit = htmlspecialchars(estimateUnitLabelJp(isset($line['unit_type']) && is_string($line['unit_type']) ? $line['unit_type'] : null), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        $up = $isBlankRow ? '' : estimateFormatYen($line['unit_price'] ?? null);
-        $am = $isBlankRow ? '' : estimateFormatYen($line['line_amount'] ?? null);
+        $nbsp = "\u{00A0}";
         if ($isBlankRow) {
-            // 空白行でも通常明細行と同じ高さを維持するため、各セルに実体参照ではなく NBSP 文字を入れる。
-            $nbsp = "\u{00A0}";
-            $name = $nbsp;
+            // 項目名は入力があれば表示。数値列はレイアウト用に NBSP。
+            $nameCell = $nameRaw !== '' ? ($pref . $nameEsc) : $nbsp;
             $qty = $nbsp;
             $unit = $nbsp;
             $up = $nbsp;
             $am = $nbsp;
+        } else {
+            $nameCell = $pref . $nameEsc;
+            $qty = htmlspecialchars(estimateFormatQty($line['quantity'] ?? null), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $unit = htmlspecialchars(estimateUnitLabelJp(isset($line['unit_type']) && is_string($line['unit_type']) ? $line['unit_type'] : null), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $up = estimateFormatYen($line['unit_price'] ?? null);
+            $am = estimateFormatYen($line['line_amount'] ?? null);
         }
-        $tbodyHtml .= '<tr class="est-data-row' . $zebra . '"><td class="est-col-content">' . $pref . $name . '</td>'
+        $tbodyHtml .= '<tr class="est-data-row' . $zebra . '"><td class="est-col-content">' . $nameCell . '</td>'
             . '<td class="est-col-num">' . $qty . '</td>'
             . '<td class="est-col-unit">' . $unit . '</td>'
-            . '<td class="est-col-price">' . htmlspecialchars($up, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</td>'
-            . '<td class="est-col-amt">' . htmlspecialchars($am, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</td></tr>';
+            . '<td class="est-col-price">' . htmlspecialchars((string)$up, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</td>'
+            . '<td class="est-col-amt">' . htmlspecialchars((string)$am, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</td></tr>';
     }
     if (count($rows) > 0) {
         $sub = estimateFormatYen(estimateBlockSubtotal($rows));

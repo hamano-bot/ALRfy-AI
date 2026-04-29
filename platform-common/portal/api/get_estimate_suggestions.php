@@ -75,22 +75,27 @@ if ($fieldType === 'item_name') {
     }
 }
 
-$historyStmt = $pdo->prepare(
-    'SELECT value
-     FROM estimate_input_history
-     WHERE user_id = :uid AND field_type = :field_type
-     ORDER BY used_count DESC, last_used_at DESC
-     LIMIT 100'
-);
-$historyStmt->execute([':uid' => $userId, ':field_type' => $fieldType]);
-$historyRows = $historyStmt->fetchAll(PDO::FETCH_ASSOC);
 $history = [];
-if (is_array($historyRows)) {
-    foreach ($historyRows as $row) {
-        if (is_array($row) && is_string($row['value'] ?? null)) {
-            $history[] = $row['value'];
+try {
+    $historyStmt = $pdo->prepare(
+        'SELECT value
+         FROM estimate_input_history
+         WHERE user_id = :uid AND field_type = :field_type
+         ORDER BY used_count DESC, last_used_at DESC
+         LIMIT 100'
+    );
+    $historyStmt->execute([':uid' => $userId, ':field_type' => $fieldType]);
+    $historyRows = $historyStmt->fetchAll(PDO::FETCH_ASSOC);
+    if (is_array($historyRows)) {
+        foreach ($historyRows as $row) {
+            if (is_array($row) && is_string($row['value'] ?? null)) {
+                $history[] = $row['value'];
+            }
         }
     }
+} catch (Throwable $e) {
+    // 未マイグレーション等で estimate_input_history が無い場合でもマスタ候補は返す
+    error_log('[estimate_suggestions history] ' . $e->getMessage());
 }
 
 echo json_encode([

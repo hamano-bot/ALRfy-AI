@@ -58,14 +58,19 @@ export type MyProjectsFetchResult =
   | { ok: false; reason: "missing_config" }
   | { ok: false; reason: "upstream_unreachable" };
 
-export async function fetchPortalMyProjectsRaw(cookieHeader: string | null): Promise<MyProjectsFetchResult> {
+/** `search` は `?page=1&page_size=20` 形式（先頭 `?` 必須）または空文字 */
+export async function fetchPortalMyProjectsRaw(
+  cookieHeader: string | null,
+  search?: string | null,
+): Promise<MyProjectsFetchResult> {
   const rawBase = process.env.PORTAL_API_BASE_URL;
   if (!rawBase || rawBase.trim() === "") {
     return { ok: false, reason: "missing_config" };
   }
 
   const base = trimTrailingSlashes(rawBase.trim());
-  const url = `${base}${UPSTREAM_PATH}`;
+  const q = typeof search === "string" && search !== "" ? (search.startsWith("?") ? search : `?${search}`) : "";
+  const url = `${base}${UPSTREAM_PATH}${q}`;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
 

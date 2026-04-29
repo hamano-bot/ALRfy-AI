@@ -1,13 +1,13 @@
-import type { NextRequest } from "next/server";
-
-import { proxyRequestToPhp } from "@/lib/php-portal-proxy";
+import { NextResponse, type NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  return proxyRequestToPhp(request, "/minutes");
+  const destination = new URL("/meetings", request.url);
+  return NextResponse.redirect(destination, { status: 307 });
 }
 
 export async function HEAD(request: NextRequest) {
-  return proxyRequestToPhp(request, "/minutes");
+  const destination = new URL("/meetings", request.url);
+  return NextResponse.redirect(destination, { status: 307 });
 }

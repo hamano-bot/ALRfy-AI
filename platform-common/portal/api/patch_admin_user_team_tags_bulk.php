@@ -28,6 +28,33 @@ try {
     exit;
 }
 
+function adminBulkHasUsersColumn(PDO $pdo, string $column): bool
+{
+    try {
+        $stmt = $pdo->prepare('SHOW COLUMNS FROM users LIKE :col');
+        $stmt->execute([':col' => $column]);
+        return $stmt->fetch(PDO::FETCH_ASSOC) !== false;
+    } catch (Throwable $e) {
+        error_log('[admin_user_team_tags has column] ' . $e->getMessage());
+        return false;
+    }
+}
+
+function adminBulkEnsureColumn(PDO $pdo, string $column, string $ddl): void
+{
+    if (adminBulkHasUsersColumn($pdo, $column)) {
+        return;
+    }
+    try {
+        $pdo->exec($ddl);
+    } catch (Throwable $e) {
+        error_log('[admin_user_team_tags ensure column] ' . $e->getMessage());
+    }
+}
+
+adminBulkEnsureColumn($pdo, 'is_admin', "ALTER TABLE users ADD COLUMN is_admin TINYINT(1) NOT NULL DEFAULT 0");
+adminBulkEnsureColumn($pdo, 'team', "ALTER TABLE users ADD COLUMN team TEXT NULL");
+
 $meStmt = $pdo->prepare('SELECT is_admin FROM users WHERE id = :id LIMIT 1');
 $meStmt->execute([':id' => $sessionUserId]);
 $me = $meStmt->fetch(PDO::FETCH_ASSOC);

@@ -1,21 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Eye, Loader2, Search } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/app/components/ui/hover-card";
 import { Input } from "@/app/components/ui/input";
+import { PageSizeSelect } from "@/app/components/PageSizeSelect";
 import { Label } from "@/app/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/app/components/ui/sheet";
+import { DEFAULT_LIST_PAGE_SIZE } from "@/lib/list-pagination";
 import { cn } from "@/lib/utils";
 
 type EstimateListItem = {
   id: number;
   project_id: number | null;
   estimate_number: string;
+  /** 見積番号表示は編集画面と同様に略称＋連番へ寄せる（DB の estimate_number が旧略称のままの場合がある） */
+  client_abbr?: string | null;
   estimate_status: "draft" | "submitted" | "won" | "lost";
   title: string;
   client_name: string | null;
@@ -23,6 +27,7 @@ type EstimateListItem = {
   sales_user_id: number | null;
   sales_user_label?: string | null;
   team_tags_csv: string | null;
+  owner_team_tags_csv?: string | null;
   effective_role?: "owner" | "editor" | "viewer" | "none";
   total_including_tax: number;
   updated_at: string;
@@ -66,6 +71,160 @@ function estimateNumberShort(estimateNumber: string): string {
   return stripped !== "" ? stripped : raw;
 }
 
+/** `EstimateEditorClient` の `estimateNumberTailSequence` と同じ（末尾 _0001 の 0001） */
+function estimateNumberTailSequence(estimateNumber: string): string | null {
+  const m = String(estimateNumber ?? "").trim().match(/_(\d{4})$/);
+  return m ? m[1] : null;
+}
+
+/** 編集ヒーロー「見積編集 {略称} {連番}」の略称＋連番と揃える */
+function estimateListDisplayNumber(item: EstimateListItem): string {
+  const seq = estimateNumberTailSequence(item.estimate_number);
+  const cab = typeof item.client_abbr === "string" ? item.client_abbr.trim() : "";
+  if (cab !== "") {
+    return seq != null ? `${cab} ${seq}` : `#${item.id}`;
+  }
+  return estimateNumberShort(item.estimate_number);
+}
+
+/** ホバーで開いたときだけ使う HTML（一覧の行をまたいでも同一見積は再取得しない） */
+const estimateListHoverExportHtmlCache = new Map<number, string>();
+
+/** 印刷プレビュー系 HTML が想定しやすい幅（A4 相当・96dpi 目安） */
+const HOVER_PREVIEW_DOC_WIDTH_PX = 794;
+
+function EstimateListPreviewHoverCard({ estimateId, children }: { estimateId: number; children: ReactNode }) {
+  const openRef = useRef(false);
+  const fetchGenRef = useRef(0);
+  const [panel, setPanel] = useState<"idle" | "loading" | "ready" | "error">("idle");
+
+  const handleOpenChange = (open: boolean) => {
+    openRef.current = open;
+    if (!open) {
+      fetchGenRef.current += 1;
+      return;
+    }
+    const cached = estimateListHoverExportHtmlCache.get(estimateId);
+    if (cached) {
+      setPanel("ready");
+      return;
+    }
+    setPanel("loading");
+    const gen = fetchGenRef.current;
+    void (async () => {
+      try {
+        const res = await fetch("/api/portal/estimate-export-html", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ estimate_id: estimateId }),
+        });
+        const data = (await res.json()) as { success?: boolean; html?: string };
+        if (!openRef.current || gen !== fetchGenRef.current) {
+          return;
+        }
+        if (!res.ok || !data.success || typeof data.html !== "string" || data.html.trim() === "") {
+          setPanel("error");
+          return;
+        }
+        estimateListHoverExportHtmlCache.set(estimateId, data.html);
+        setPanel("ready");
+      } catch {
+        if (!openRef.current || gen !== fetchGenRef.current) {
+          return;
+        }
+        setPanel("error");
+      }
+    })();
+  };
+
+  const html = estimateListHoverExportHtmlCache.get(estimateId);
+
+  const previewFrameClass = "h-[min(72vh,540px)]";
+
+  return (
+    <HoverCard openDelay={180} closeDelay={140} onOpenChange={handleOpenChange}>
+      <HoverCardTrigger asChild>{children}</HoverCardTrigger>
+      <HoverCardContent
+        side="left"
+        align="start"
+        sideOffset={12}
+        className={cn(
+          "w-[min(96vw,780px)] max-w-[780px] overflow-hidden p-0",
+          "rounded-2xl border border-[color:color-mix(in_srgb,var(--border)_78%,transparent)]",
+          "bg-[var(--surface)] shadow-[0_24px_64px_rgba(0,0,0,0.42)] ring-1 ring-[color:color-mix(in_srgb,var(--accent)_18%,transparent)]",
+        )}
+      >
+        <div className="h-1 w-full bg-[color:color-mix(in_srgb,var(--accent)_65%,var(--foreground)_35%)]" aria-hidden />
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[color:color-mix(in_srgb,var(--border)_72%,transparent)] px-4 py-2.5">
+          <div className="flex min-w-0 items-center gap-2">
+            <Eye className="h-4 w-4 shrink-0 text-[color:color-mix(in_srgb,var(--accent)_80%,var(--muted)_20%)]" aria-hidden />
+            <span className="truncate text-sm font-semibold tracking-tight text-[var(--foreground)]">見積プレビュー</span>
+          </div>
+          <span className="shrink-0 text-xs text-[var(--muted)]">アイコンをクリックで別タブ</span>
+        </div>
+
+        {panel === "loading" || (panel === "idle" && !html) ? (
+          <div
+            className={cn(
+              "modern-scrollbar flex flex-col items-center justify-center gap-3 bg-[color:color-mix(in_srgb,var(--background)_55%,var(--surface)_45%)]",
+              previewFrameClass,
+            )}
+          >
+            <Loader2 className="h-8 w-8 shrink-0 animate-spin text-[color:color-mix(in_srgb,var(--accent)_55%,var(--muted)_45%)]" aria-hidden />
+            <p className="text-sm text-[var(--muted)]">レイアウトを読み込んでいます…</p>
+            <div className="mt-2 w-[min(280px,70%)] space-y-2 opacity-60">
+              <div className="h-2.5 w-full rounded bg-[color:color-mix(in_srgb,var(--border)_80%,transparent)]" />
+              <div className="h-2.5 w-[80%] rounded bg-[color:color-mix(in_srgb,var(--border)_70%,transparent)]" />
+              <div className="h-2.5 w-full rounded bg-[color:color-mix(in_srgb,var(--border)_75%,transparent)]" />
+            </div>
+          </div>
+        ) : null}
+
+        {panel === "error" ? (
+          <div
+            className={cn(
+              "flex flex-col items-center justify-center gap-2 bg-[color:color-mix(in_srgb,var(--background)_40%,var(--surface)_60%)] px-6 text-center",
+              previewFrameClass,
+            )}
+          >
+            <p className="text-sm text-[var(--muted)]">プレビューを表示できませんでした。</p>
+            <p className="text-xs text-[var(--muted)]">別タブのフルプレビューをお試しください。</p>
+          </div>
+        ) : null}
+
+        {panel === "ready" && html ? (
+          <div
+            className={cn(
+              "modern-scrollbar bg-[color:color-mix(in_srgb,#94a3b8_14%,var(--background)_86%)]",
+              previewFrameClass,
+              "overflow-auto",
+            )}
+          >
+            <div className="flex justify-center p-3 sm:p-5">
+              <div
+                className="shrink-0 rounded-xl bg-white shadow-[0_8px_30px_rgba(15,23,42,0.12)] ring-1 ring-[color:color-mix(in_srgb,var(--border)_55%,transparent)]"
+                style={{ width: HOVER_PREVIEW_DOC_WIDTH_PX }}
+              >
+                <iframe
+                  title={`estimate-hover-preview-${estimateId}`}
+                  srcDoc={html}
+                  sandbox=""
+                  className="block w-full rounded-xl border-0 bg-white"
+                  style={{
+                    width: HOVER_PREVIEW_DOC_WIDTH_PX,
+                    height: "min(66vh, 520px)",
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </HoverCardContent>
+    </HoverCard>
+  );
+}
+
 export function EstimatesListClient() {
   const router = useRouter();
   const [items, setItems] = useState<EstimateListItem[]>([]);
@@ -77,6 +236,7 @@ export function EstimatesListClient() {
   });
   const [projectFilter, setProjectFilter] = useState<"all" | string>("all");
   const [teamTagFilter, setTeamTagFilter] = useState<"all" | string>("all");
+  const [ownerTeamFilter, setOwnerTeamFilter] = useState<"all" | string>("all");
   const [salesFilter, setSalesFilter] = useState<"all" | string>("all");
   const [updatedFrom, setUpdatedFrom] = useState("");
   const [updatedTo, setUpdatedTo] = useState("");
@@ -84,16 +244,16 @@ export function EstimatesListClient() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [draftProjectFilter, setDraftProjectFilter] = useState<"all" | string>("all");
   const [draftTeamTagFilter, setDraftTeamTagFilter] = useState<"all" | string>("all");
+  const [draftOwnerTeamFilter, setDraftOwnerTeamFilter] = useState<"all" | string>("all");
   const [draftSalesFilter, setDraftSalesFilter] = useState<"all" | string>("all");
   const [draftUpdatedFrom, setDraftUpdatedFrom] = useState("");
   const [draftUpdatedTo, setDraftUpdatedTo] = useState("");
   const [draftKeyword, setDraftKeyword] = useState("");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [pageSize, setPageSize] = useState(DEFAULT_LIST_PAGE_SIZE);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
-  const [previewStateById, setPreviewStateById] = useState<Record<number, "idle" | "loading" | "ready" | "error">>({});
 
   const load = async () => {
     setLoading(true);
@@ -109,6 +269,7 @@ export function EstimatesListClient() {
       }
       if (projectFilter !== "all") params.set("project_id", projectFilter);
       if (teamTagFilter !== "all") params.set("team_tag", teamTagFilter);
+      if (ownerTeamFilter !== "all") params.set("owner_team_tag", ownerTeamFilter);
       if (salesFilter !== "all") params.set("sales_user_id", salesFilter);
       if (updatedFrom !== "") params.set("updated_from", updatedFrom);
       if (updatedTo !== "") params.set("updated_to", updatedTo);
@@ -131,7 +292,7 @@ export function EstimatesListClient() {
 
   useEffect(() => {
     void load();
-  }, [page, pageSize, statusChecks, projectFilter, teamTagFilter, salesFilter, updatedFrom, updatedTo, keyword]);
+  }, [page, pageSize, statusChecks, projectFilter, teamTagFilter, ownerTeamFilter, salesFilter, updatedFrom, updatedTo, keyword]);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const currentPage = Math.min(page, totalPages);
@@ -159,13 +320,25 @@ export function EstimatesListClient() {
     return ids;
   })();
 
+  const ownerTeamOptions = (() => {
+    const tags = new Set<string>();
+    for (const item of items) {
+      for (const tag of (item.owner_team_tags_csv ?? "").split(",")) {
+        const t = tag.trim();
+        if (t !== "") tags.add(t);
+      }
+    }
+    return Array.from(tags).sort((a, b) => a.localeCompare(b, "ja"));
+  })();
+
   useEffect(() => {
     setPage(1);
-  }, [statusChecks, projectFilter, teamTagFilter, salesFilter, updatedFrom, updatedTo, keyword]);
+  }, [statusChecks, projectFilter, teamTagFilter, ownerTeamFilter, salesFilter, updatedFrom, updatedTo, keyword]);
 
   const openDetailFilter = () => {
     setDraftProjectFilter(projectFilter);
     setDraftTeamTagFilter(teamTagFilter);
+    setDraftOwnerTeamFilter(ownerTeamFilter);
     setDraftSalesFilter(salesFilter);
     setDraftUpdatedFrom(updatedFrom);
     setDraftUpdatedTo(updatedTo);
@@ -176,6 +349,7 @@ export function EstimatesListClient() {
   const applyDetailFilter = () => {
     setProjectFilter(draftProjectFilter);
     setTeamTagFilter(draftTeamTagFilter);
+    setOwnerTeamFilter(draftOwnerTeamFilter);
     setSalesFilter(draftSalesFilter);
     setUpdatedFrom(draftUpdatedFrom);
     setUpdatedTo(draftUpdatedTo);
@@ -187,6 +361,7 @@ export function EstimatesListClient() {
   const clearDraftFilters = () => {
     setDraftProjectFilter("all");
     setDraftTeamTagFilter("all");
+    setDraftOwnerTeamFilter("all");
     setDraftSalesFilter("all");
     setDraftUpdatedFrom("");
     setDraftUpdatedTo("");
@@ -197,6 +372,7 @@ export function EstimatesListClient() {
     setStatusChecks({ draft: false, submitted: false, won: false, lost: false });
     setProjectFilter("all");
     setTeamTagFilter("all");
+    setOwnerTeamFilter("all");
     setSalesFilter("all");
     setUpdatedFrom("");
     setUpdatedTo("");
@@ -224,42 +400,6 @@ export function EstimatesListClient() {
         setMessage("複製に失敗しました。");
       }
     })();
-  };
-
-  const ensurePreviewReady = async (estimateId: number) => {
-    let shouldFetch = false;
-    setPreviewStateById((prev) => {
-      const current = prev[estimateId] ?? "idle";
-      if (current === "loading" || current === "ready") {
-        return prev;
-      }
-      shouldFetch = true;
-      return { ...prev, [estimateId]: "loading" };
-    });
-    if (!shouldFetch) {
-      return;
-    }
-    const startedAt = Date.now();
-    try {
-      const res = await fetch("/api/portal/estimate-export-html", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ estimate_id: estimateId }),
-      });
-      const data = (await res.json()) as { success?: boolean; html?: string };
-      const elapsed = Date.now() - startedAt;
-      if (elapsed < 180) {
-        await new Promise((resolve) => window.setTimeout(resolve, 180 - elapsed));
-      }
-      if (!res.ok || !data.success || typeof data.html !== "string" || data.html.trim() === "") {
-        setPreviewStateById((prev) => ({ ...prev, [estimateId]: "error" }));
-        return;
-      }
-      setPreviewStateById((prev) => ({ ...prev, [estimateId]: "ready" }));
-    } catch {
-      setPreviewStateById((prev) => ({ ...prev, [estimateId]: "error" }));
-    }
   };
 
   return (
@@ -293,26 +433,14 @@ export function EstimatesListClient() {
             クリア
           </Button>
           <div className="ml-auto flex items-center gap-2">
-            <Label htmlFor="estimate-page-size" className="whitespace-nowrap text-sm text-[var(--muted)]">
-              表示件数
-            </Label>
-            <Select
-              value={String(pageSize)}
-              onValueChange={(value) => {
-                const size = Number.parseInt(value, 10);
-                setPageSize(Number.isFinite(size) && size > 0 ? size : 20);
+            <PageSizeSelect
+              id="estimate-page-size"
+              value={pageSize}
+              onChange={(size) => {
+                setPageSize(size);
                 setPage(1);
               }}
-            >
-              <SelectTrigger id="estimate-page-size" className="h-9 w-[100px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="20">20</SelectItem>
-                <SelectItem value="50">50</SelectItem>
-                <SelectItem value="100">100</SelectItem>
-              </SelectContent>
-            </Select>
+            />
           </div>
           <p className="shrink-0 text-sm tabular-nums text-[var(--muted)]">
             {totalCount === 0 ? "0 件" : `${(currentPage - 1) * pageSize + 1} - ${Math.min(currentPage * pageSize, totalCount)} / ${totalCount} 件`}
@@ -383,6 +511,22 @@ export function EstimatesListClient() {
                 </Select>
               </div>
               <div className="space-y-1.5">
+                <Label htmlFor="estimate-owner-team-filter-sheet">オーナーチーム</Label>
+                <Select value={draftOwnerTeamFilter} onValueChange={setDraftOwnerTeamFilter}>
+                  <SelectTrigger id="estimate-owner-team-filter-sheet">
+                    <SelectValue placeholder="全て" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全て</SelectItem>
+                    {ownerTeamOptions.map((tag) => (
+                      <SelectItem key={`owner-team-filter-sheet-${tag}`} value={tag}>
+                        #{tag}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
                 <Label htmlFor="estimate-keyword-filter-sheet">キーワード</Label>
                 <Input
                   id="estimate-keyword-filter-sheet"
@@ -423,7 +567,7 @@ export function EstimatesListClient() {
       </Sheet>
 
       <div className="modern-scrollbar min-h-0 flex-1 overflow-x-auto overflow-y-auto">
-        <table className="w-full min-w-[1080px] table-auto text-left text-sm">
+        <table className="w-full min-w-[1180px] table-auto text-left text-sm">
           <thead className="pm-table-head sticky top-0 z-10 text-sm font-semibold normal-case tracking-normal text-[var(--foreground)]">
             <tr>
               <th className="px-5 py-3">見積番号</th>
@@ -431,6 +575,7 @@ export function EstimatesListClient() {
               <th className="px-3 py-3">顧客名</th>
               <th className="px-3 py-3">ステータス</th>
               <th className="px-3 py-3">チームタグ</th>
+              <th className="px-3 py-3">オーナーチーム</th>
               <th className="px-3 py-3">担当営業</th>
               <th className="px-3 py-3">発行日</th>
               <th className="px-3 py-3">更新日</th>
@@ -442,21 +587,20 @@ export function EstimatesListClient() {
             {items.map((item) => (
               <tr
                 key={item.id}
-                onPointerEnter={() => {
-                  if (["owner", "editor", "viewer"].includes(item.effective_role ?? "")) {
-                    void ensurePreviewReady(item.id);
-                  }
-                }}
-                onMouseEnter={() => {
-                  if (["owner", "editor", "viewer"].includes(item.effective_role ?? "")) {
-                    void ensurePreviewReady(item.id);
-                  }
-                }}
                 className="group border-b border-[color:color-mix(in_srgb,var(--border)_88%,transparent)] transition-colors duration-150 hover:bg-[color:color-mix(in_srgb,var(--accent)_12%,var(--surface)_88%)]"
               >
-                <td className="px-5 py-3 font-mono text-xs text-[var(--muted)]">{estimateNumberShort(item.estimate_number)}</td>
-                <td className="max-w-[20rem] truncate px-3 py-3 font-medium text-[var(--foreground)]" title={item.title}>
-                  {item.title}
+                <td className="px-5 py-3 font-mono text-xs text-[var(--muted)]">{estimateListDisplayNumber(item)}</td>
+                <td className="max-w-[20rem] px-3 py-3">
+                  <Link
+                    href={`/estimates/${item.id}`}
+                    className={cn(
+                      "block truncate font-medium text-[color:color-mix(in_srgb,var(--accent)_88%,var(--foreground)_12%)] underline-offset-2 group-hover:underline",
+                      "outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] rounded-sm",
+                    )}
+                    title={item.title}
+                  >
+                    {item.title.trim() !== "" ? item.title : "（件名なし）"}
+                  </Link>
                 </td>
                 <td className="max-w-[16rem] truncate px-3 py-3 text-[var(--muted)]" title={item.client_name ?? undefined}>
                   {item.client_name ?? "-"}
@@ -480,6 +624,20 @@ export function EstimatesListClient() {
                     .join(" ")}
                 >
                   {(item.team_tags_csv ?? "")
+                    .split(",")
+                    .filter((v) => v.trim() !== "")
+                    .map((v) => `#${v.trim()}`)
+                    .join(" ") || "-"}
+                </td>
+                <td
+                  className="max-w-[14rem] truncate px-3 py-3 text-[var(--muted)]"
+                  title={(item.owner_team_tags_csv ?? "")
+                    .split(",")
+                    .filter((v) => v.trim() !== "")
+                    .map((v) => `#${v.trim()}`)
+                    .join(" ")}
+                >
+                  {(item.owner_team_tags_csv ?? "")
                     .split(",")
                     .filter((v) => v.trim() !== "")
                     .map((v) => `#${v.trim()}`)
@@ -520,43 +678,18 @@ export function EstimatesListClient() {
                       複製
                     </Button>
                     {["owner", "editor", "viewer"].includes(item.effective_role ?? "") ? (
-                      (previewStateById[item.id] ?? "idle") === "loading" ? (
-                        <span
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[color:color-mix(in_srgb,var(--border)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--surface)_92%,transparent)] text-[color:color-mix(in_srgb,var(--muted)_90%,var(--foreground)_10%)]"
-                          title="プレビューを読み込み中"
-                          aria-label="プレビューを読み込み中"
+                      <EstimateListPreviewHoverCard estimateId={item.id}>
+                        <a
+                          href={`/estimates/${item.id}/preview`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[color:color-mix(in_srgb,var(--border)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--surface)_92%,transparent)] text-[color:color-mix(in_srgb,var(--muted)_90%,var(--foreground)_10%)] transition-colors hover:border-[color:color-mix(in_srgb,var(--accent)_45%,var(--border)_55%)] hover:bg-[color:color-mix(in_srgb,var(--accent)_12%,var(--surface)_88%)] hover:text-[var(--accent)]"
+                          title="ホバーで一覧用プレビュー、クリックで別タブのフルプレビュー"
+                          aria-label="見積プレビュー（別タブで開く）"
                         >
-                          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                        </span>
-                      ) : (previewStateById[item.id] ?? "idle") === "ready" ? (
-                      <HoverCard openDelay={180} closeDelay={120}>
-                        <HoverCardTrigger asChild>
-                          <a
-                            href={`/estimates/${item.id}/preview`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[color:color-mix(in_srgb,var(--border)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--surface)_92%,transparent)] text-[color:color-mix(in_srgb,var(--muted)_90%,var(--foreground)_10%)] transition-colors hover:border-[color:color-mix(in_srgb,var(--accent)_45%,var(--border)_55%)] hover:bg-[color:color-mix(in_srgb,var(--accent)_12%,var(--surface)_88%)] hover:text-[var(--accent)]"
-                            title="プレビューを別タブで開く"
-                            aria-label="プレビューを別タブで開く"
-                          >
-                            <Eye className="h-4 w-4" aria-hidden />
-                          </a>
-                        </HoverCardTrigger>
-                        <HoverCardContent side="left" align="start" className="p-0">
-                          <div className="w-[min(72vw,880px)] bg-white p-2 [--background:#ffffff] [--surface:#ffffff] [--foreground:#0f172a] [--muted:#475569] [--border:#cbd5e1]">
-                            <p className="px-2 pb-2 text-xs text-[var(--muted)]">クリックで別タブに開きます</p>
-                            <iframe
-                              title={`estimate-preview-${item.id}`}
-                              src={`/estimates/${item.id}/preview`}
-                              loading="lazy"
-                              className="h-[440px] w-full rounded-md border border-[var(--border)] bg-white"
-                            />
-                          </div>
-                        </HoverCardContent>
-                      </HoverCard>
-                      ) : (
-                        <span className="inline-flex h-8 w-8" aria-hidden />
-                      )
+                          <Eye className="h-4 w-4" aria-hidden />
+                        </a>
+                      </EstimateListPreviewHoverCard>
                     ) : (
                       <Button
                         type="button"
@@ -575,7 +708,7 @@ export function EstimatesListClient() {
             ))}
             {!loading && items.length === 0 ? (
               <tr>
-                <td colSpan={11} className="px-5 py-8 text-center text-sm text-[var(--muted)]">
+                <td colSpan={12} className="px-5 py-8 text-center text-sm text-[var(--muted)]">
                   データがありません。
                 </td>
               </tr>
@@ -583,18 +716,26 @@ export function EstimatesListClient() {
           </tbody>
         </table>
       </div>
-      {totalPages > 1 && currentPage >= 2 ? (
+      {totalPages > 1 ? (
         <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[color:color-mix(in_srgb,var(--border)_88%,transparent)] px-5 py-3 text-sm">
-          {currentPage > 1 ? (
-            <Button type="button" variant="default" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))}>
-              前へ
-            </Button>
-          ) : null}
-          {currentPage < totalPages ? (
-            <Button type="button" variant="default" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>
-              次へ
-            </Button>
-          ) : null}
+          <Button
+            type="button"
+            variant="default"
+            size="sm"
+            disabled={currentPage <= 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+          >
+            前へ
+          </Button>
+          <Button
+            type="button"
+            variant="default"
+            size="sm"
+            disabled={currentPage >= totalPages}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+          >
+            次へ
+          </Button>
         </div>
       ) : null}
     </section>

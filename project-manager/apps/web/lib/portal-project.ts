@@ -46,6 +46,7 @@ export type PortalProjectDetail = {
   }[];
   misc_links: { label: string; url: string }[];
   participants: PortalProjectParticipant[];
+  effective_role?: "owner" | "editor" | "viewer" | "none" | null;
 };
 
 export type PortalProjectFetchResult =
@@ -194,6 +195,11 @@ export function parsePortalProjectSuccess(text: string): PortalProjectDetail | n
       }
     }
 
+    const effectiveRoleRaw =
+      p.effective_role === "owner" || p.effective_role === "editor" || p.effective_role === "viewer" || p.effective_role === "none"
+        ? p.effective_role
+        : null;
+
     return {
       id,
       name,
@@ -210,6 +216,7 @@ export function parsePortalProjectSuccess(text: string): PortalProjectDetail | n
       redmine_links,
       misc_links,
       participants,
+      effective_role: effectiveRoleRaw,
     };
   } catch {
     return null;

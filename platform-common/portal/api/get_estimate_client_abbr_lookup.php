@@ -49,44 +49,24 @@ try {
     exit;
 }
 
-$teamTags = [];
+$isAdmin = false;
 try {
-    $userStmt = $pdo->prepare('SELECT team FROM users WHERE id = :id LIMIT 1');
-    $userStmt->execute([':id' => $sessionUserId]);
-    $u = $userStmt->fetch(PDO::FETCH_ASSOC);
-    if (is_array($u) && is_string($u['team'] ?? null) && trim($u['team']) !== '') {
-        $decoded = json_decode((string)$u['team'], true);
-        if (is_array($decoded)) {
-            foreach ($decoded as $tag) {
-                if (is_string($tag) && trim($tag) !== '') {
-                    $teamTags[strtolower(trim($tag))] = true;
-                }
-            }
-        }
-    }
+    $admStmt = $pdo->prepare('SELECT is_admin FROM users WHERE id = :id LIMIT 1');
+    $admStmt->execute([':id' => $sessionUserId]);
+    $isAdmin = ((int)$admStmt->fetchColumn()) === 1;
 } catch (Throwable $e) {
-    error_log('[estimate_client_abbr_lookup team tags] ' . $e->getMessage());
+    error_log('[estimate_client_abbr_lookup admin] ' . $e->getMessage());
 }
 
 $permOr = [];
 $permOr[] = "pe.visibility_scope = 'public_all_users'";
 $permOr[] = 'pe.created_by_user_id = :session_user_id_created';
-$permOr[] = 'EXISTS (SELECT 1 FROM estimate_user_permissions eup WHERE eup.estimate_id = pe.id AND eup.user_id = :session_user_id_perm)';
 $params = [
     ':session_user_id_created' => $sessionUserId,
-    ':session_user_id_perm' => $sessionUserId,
     ':client_name' => $clientNameRaw,
 ];
-if (!empty($teamTags)) {
-    $tagPlaceholders = [];
-    $i = 0;
-    foreach (array_keys($teamTags) as $tag) {
-        $ph = ':perm_team_tag_' . $i;
-        $tagPlaceholders[] = $ph;
-        $params[$ph] = $tag;
-        $i++;
-    }
-    $permOr[] = 'EXISTS (SELECT 1 FROM estimate_team_permissions etp2 WHERE etp2.estimate_id = pe.id AND etp2.team_tag IN (' . implode(',', $tagPlaceholders) . '))';
+if ($isAdmin) {
+    $permOr[] = '1=1';
 }
 $permSql = '(' . implode(' OR ', $permOr) . ')';
 

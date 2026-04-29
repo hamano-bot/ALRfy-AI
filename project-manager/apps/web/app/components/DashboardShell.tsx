@@ -317,6 +317,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
                   height={40}
                   className="h-8 w-auto object-contain [filter:drop-shadow(0_1px_2px_rgba(0,0,0,0.35))] md:h-9"
                   decoding="async"
+                  fetchPriority="low"
                 />
               </span>
               <div className="min-w-0">

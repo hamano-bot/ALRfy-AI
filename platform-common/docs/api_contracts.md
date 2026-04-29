@@ -92,6 +92,9 @@
 ### request
 - 公開URL（開発時 `router.php` 利用時）: `GET /portal/api/my-projects`
 - 実装ファイル: `portal/api/get_my_projects.php`
+- クエリ（任意）:
+  - `page_size`: 1〜100 の整数を指定すると **ページング**有効。未指定または範囲外は **全件**（従来どおり）。
+  - `page`: ページ番号（1 始まり）。`page_size` 指定時のみ有効。省略時は `1`。
 
 ### response (200)
 ```json
@@ -113,6 +116,8 @@
   ]
 }
 ```
+
+ページング時（`page_size` 有効）は上記に加えて `total`（条件に一致する総件数）、`page`、`page_size` が付与される。
 
 `slug` は未設定時 `null`。`client_name` / `site_type` / 日付などはマイグレーション [`20260420_project_registration_fields.sql`](../database/migrations/20260420_project_registration_fields.sql) 適用後に返る（未適用の DB では一覧取得が 500 になる）。`409` / `401` は他 API と同様。
 

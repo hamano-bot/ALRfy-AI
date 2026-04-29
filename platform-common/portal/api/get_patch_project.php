@@ -50,7 +50,7 @@ try {
 /**
  * @return array<string,mixed>|null
  */
-function buildProjectAggregate(PDO $pdo, int $projectId): ?array
+function buildProjectAggregate(PDO $pdo, int $projectId, ?string $effectiveRole = null): ?array
 {
     $stmt = $pdo->prepare(
         'SELECT p.id, p.name, p.slug, p.client_name, p.site_type, p.site_type_other,
@@ -185,6 +185,7 @@ function buildProjectAggregate(PDO $pdo, int $projectId): ?array
         'redmine_links' => $redmineLinks,
         'misc_links' => $miscLinks,
         'participants' => $participants,
+        'effective_role' => is_string($effectiveRole) && $effectiveRole !== '' ? $effectiveRole : null,
     ];
 }
 
@@ -226,7 +227,7 @@ if ($method === 'GET') {
         exit;
     }
 
-    $project = buildProjectAggregate($pdo, $projectId);
+    $project = buildProjectAggregate($pdo, $projectId, $role);
     if ($project === null) {
         http_response_code(404);
         echo json_encode(['success' => false, 'message' => 'プロジェクトが見つかりません。'], JSON_UNESCAPED_UNICODE);
@@ -419,7 +420,7 @@ if ($method === 'PATCH') {
         exit;
     }
 
-    $project = buildProjectAggregate($pdo, $projectId);
+    $project = buildProjectAggregate($pdo, $projectId, $memberRole);
     if ($project === null) {
         http_response_code(500);
         echo json_encode(['success' => false, 'message' => '更新後の取得に失敗しました。'], JSON_UNESCAPED_UNICODE);
@@ -430,5 +431,72 @@ if ($method === 'PATCH') {
     exit;
 }
 
+if ($method === 'DELETE') {
+    $pidRaw = $_GET['project_id'] ?? '';
+    if (!is_string($pidRaw) || !ctype_digit($pidRaw)) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'project_id は正の整数で指定してください。'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    $projectId = (int)$pidRaw;
+    if ($projectId <= 0) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'project_id は正の整数で指定してください。'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $memberRole = projectMemberRole($pdo, $projectId, $sessionUserId);
+    if ($memberRole === null) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'このプロジェクトへのアクセス権限がありません。'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    if ($memberRole !== 'owner') {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => '削除できるのはオーナーのみです。'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    try {
+        $pdo->beginTransaction();
+
+        $check = $pdo->prepare('SELECT id FROM projects WHERE id = :id FOR UPDATE');
+        $check->execute([':id' => $projectId]);
+        if ($check->fetch() === false) {
+            $pdo->rollBack();
+            http_response_code(404);
+            echo json_encode(['success' => false, 'message' => 'プロジェクトが見つかりません。'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        // 案件に紐づく見積リンク系を先に解除する（見積本体は削除しない）
+        $pdo->prepare('UPDATE project_estimates SET project_id = NULL WHERE project_id = :pid')->execute([':pid' => $projectId]);
+        $pdo->prepare('DELETE FROM estimate_project_links WHERE project_id = :pid')->execute([':pid' => $projectId]);
+
+        // 案件横断データ（ヒアリング/要件定義）は明示削除
+        $pdo->prepare('DELETE FROM project_hearing_sheets WHERE project_id = :pid')->execute([':pid' => $projectId]);
+        $pdo->prepare('DELETE FROM project_requirements WHERE project_id = :pid')->execute([':pid' => $projectId]);
+
+        // projects 削除で project_members / misc / redmine / renewal_urls は FK CASCADE で削除
+        $pdo->prepare('DELETE FROM projects WHERE id = :id')->execute([':id' => $projectId]);
+
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        error_log('[platform-common/delete_project] ' . $e->getMessage());
+        http_response_code(500);
+        echo json_encode(['success' => false, 'message' => 'プロジェクトの削除に失敗しました。'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    echo json_encode([
+        'success' => true,
+        'deleted_project_id' => $projectId,
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 http_response_code(405);
-echo json_encode(['success' => false, 'message' => 'GET または PATCH メソッドで実行してください。'], JSON_UNESCAPED_UNICODE);
+echo json_encode(['success' => false, 'message' => 'GET / PATCH / DELETE メソッドで実行してください。'], JSON_UNESCAPED_UNICODE);

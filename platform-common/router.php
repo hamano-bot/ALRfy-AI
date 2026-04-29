@@ -28,6 +28,8 @@ $routes = [
     '/portal/api/project' => __DIR__ . '/portal/api/get_patch_project.php',
     '/portal/api/project-hearing-sheet' => __DIR__ . '/portal/api/get_patch_project_hearing_sheet.php',
     '/portal/api/project-requirements' => __DIR__ . '/portal/api/get_patch_project_requirements.php',
+    '/portal/api/project-team-permissions' => __DIR__ . '/portal/api/get_patch_project_team_permissions.php',
+    '/portal/api/project-estimates' => __DIR__ . '/portal/api/get_patch_project_estimates.php',
     '/portal/api/requirements-editor-templates' => __DIR__ . '/portal/api/get_post_patch_delete_requirements_editor_templates.php',
     '/portal/api/hearing-insight-batch-state' => __DIR__ . '/portal/api/get_hearing_insight_batch_state.php',
     '/portal/api/hearing-insight-export' => __DIR__ . '/portal/api/get_hearing_insight_export.php',
@@ -45,6 +47,22 @@ $routes = [
     '/portal/api/estimate-export-html' => __DIR__ . '/portal/api/post_estimate_export_html.php',
     '/portal/api/estimate-export' => __DIR__ . '/portal/api/post_estimate_export.php',
     '/portal/api/estimate-client-abbr' => __DIR__ . '/portal/api/get_estimate_client_abbr_lookup.php',
+    /** Next BFF が論理パスで呼ぶ API（実体は *.php） */
+    '/portal/api/tax-rates' => __DIR__ . '/portal/api/get_post_patch_tax_rates.php',
+    '/portal/api/estimate-suggestions' => __DIR__ . '/portal/api/get_estimate_suggestions.php',
+    '/portal/api/estimate-visibility' => __DIR__ . '/portal/api/get_patch_estimate_visibility.php',
+    '/portal/api/estimate-project-links' => __DIR__ . '/portal/api/get_patch_estimate_project_links.php',
+    /** BFF が *.php 直指定で呼ぶ見積まわり（$routes 外だと cli-server のフォールスルーで $_GET が欠けることがある） */
+    '/portal/api/get_patch_estimate_visibility.php' => __DIR__ . '/portal/api/get_patch_estimate_visibility.php',
+    '/portal/api/get_patch_estimate_project_links.php' => __DIR__ . '/portal/api/get_patch_estimate_project_links.php',
+    '/portal/api/get_estimate_operation_logs.php' => __DIR__ . '/portal/api/get_estimate_operation_logs.php',
+    '/portal/api/estimate-operation-logs' => __DIR__ . '/portal/api/get_estimate_operation_logs.php',
+    '/portal/api/get_admin_users.php' => __DIR__ . '/portal/api/get_admin_users.php',
+    '/portal/api/admin-users' => __DIR__ . '/portal/api/get_admin_users.php',
+    '/portal/api/admin/user-team-tags/bulk' => __DIR__ . '/portal/api/patch_admin_user_team_tags_bulk.php',
+    '/portal/api/admin/users/bulk-role' => __DIR__ . '/portal/api/patch_admin_users_bulk_role.php',
+    '/portal/api/patch_admin_user_team_tags_bulk.php' => __DIR__ . '/portal/api/patch_admin_user_team_tags_bulk.php',
+    '/portal/api/patch_admin_users_bulk_role.php' => __DIR__ . '/portal/api/patch_admin_users_bulk_role.php',
 ];
 
 if (isset($routes[$path])) {
@@ -82,6 +100,19 @@ if ($path === '/project-list' || str_starts_with($path, '/project-list/')
     echo '<p><a href="/dashboard">platform-common ダッシュボード</a>（PHP が 8001 のとき）</p>';
     echo '</body></html>';
     exit;
+}
+
+// /portal/api/*.php が $routes に無い場合、cli-server のフォールスルー経由だと QUERY / $_GET が欠落することがあるため、ここで明示 require する。
+if (str_starts_with($path, '/portal/api/') && str_ends_with($path, '.php')) {
+    if (preg_match('#^/portal/api/[a-zA-Z0-9_.-]+\\.php$#', $path) === 1) {
+        $file = __DIR__ . $path;
+        $realFile = realpath($file);
+        $apiDir = realpath(__DIR__ . '/portal/api');
+        if ($realFile !== false && $apiDir !== false && str_starts_with($realFile, $apiDir) && is_file($realFile)) {
+            require $realFile;
+            return true;
+        }
+    }
 }
 
 return false;

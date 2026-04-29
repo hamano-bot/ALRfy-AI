@@ -8,6 +8,7 @@ type HearingAutoTextareaProps = {
   value: string;
   onChange: (e: ChangeEvent<HTMLTextAreaElement>) => void;
   className?: string;
+  placeholder?: string;
   readOnly?: boolean;
   /** readOnly より強く編集・フォーカスを抑止（下書きロック等） */
   disabled?: boolean;
@@ -23,6 +24,7 @@ export function HearingAutoTextarea({
   value,
   onChange,
   className,
+  placeholder,
   readOnly,
   disabled,
   onFocus,
@@ -72,6 +74,7 @@ export function HearingAutoTextarea({
       ref={ref}
       id={id}
       name={name}
+      placeholder={placeholder}
       autoComplete={autoComplete}
       readOnly={readOnly}
       disabled={disabled}

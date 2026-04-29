@@ -14,16 +14,18 @@ import { projectPageLgMainSidebarGridClassName } from "@/lib/project-page-layout
 import { PROJECT_ROLE_LABEL_JA } from "@/lib/project-role-labels";
 import { UNSAVED_LEAVE_CONFIRM_MESSAGE } from "@/lib/unsaved-navigation";
 import { cn } from "@/lib/utils";
-import { AccessControlTable, type AccessControlRow } from "@/app/components/AccessControlTable";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/app/components/ui/dialog";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/app/components/ui/hover-card";
+import { Eye, Loader2, PlusCircle, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 type ProjectDetailClientProps = {
   projectId: number;
   initialProject: PortalProjectDetail;
   canEdit: boolean;
+  canDeleteProject: boolean;
 };
 
 function ReadOnlyField({ label, children }: { label: string; children: React.ReactNode }) {
@@ -35,22 +37,136 @@ function ReadOnlyField({ label, children }: { label: string; children: React.Rea
   );
 }
 
-export function ProjectDetailClient({ projectId, initialProject, canEdit }: ProjectDetailClientProps) {
+const projectDetailHoverExportHtmlCache = new Map<number, string>();
+const HOVER_PREVIEW_DOC_WIDTH_PX = 794;
+
+function ProjectEstimatePreviewHoverCard({ estimateId, children }: { estimateId: number; children: ReactNode }) {
+  const openRef = useRef(false);
+  const fetchGenRef = useRef(0);
+  const [panel, setPanel] = useState<"idle" | "loading" | "ready" | "error">("idle");
+
+  const handleOpenChange = (open: boolean) => {
+    openRef.current = open;
+    if (!open) {
+      fetchGenRef.current += 1;
+      return;
+    }
+    const cached = projectDetailHoverExportHtmlCache.get(estimateId);
+    if (cached) {
+      setPanel("ready");
+      return;
+    }
+    setPanel("loading");
+    const gen = fetchGenRef.current;
+    void (async () => {
+      try {
+        const res = await fetch("/api/portal/estimate-export-html", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ estimate_id: estimateId }),
+        });
+        const data = (await res.json()) as { success?: boolean; html?: string };
+        if (!openRef.current || gen !== fetchGenRef.current) {
+          return;
+        }
+        if (!res.ok || !data.success || typeof data.html !== "string" || data.html.trim() === "") {
+          setPanel("error");
+          return;
+        }
+        projectDetailHoverExportHtmlCache.set(estimateId, data.html);
+        setPanel("ready");
+      } catch {
+        if (!openRef.current || gen !== fetchGenRef.current) {
+          return;
+        }
+        setPanel("error");
+      }
+    })();
+  };
+
+  const html = projectDetailHoverExportHtmlCache.get(estimateId);
+
+  return (
+    <HoverCard openDelay={180} closeDelay={140} onOpenChange={handleOpenChange}>
+      <HoverCardTrigger asChild>{children}</HoverCardTrigger>
+      <HoverCardContent
+        side="left"
+        align="start"
+        sideOffset={12}
+        className={cn(
+          "w-[min(96vw,780px)] max-w-[780px] overflow-hidden p-0",
+          "rounded-2xl border border-[color:color-mix(in_srgb,var(--border)_78%,transparent)]",
+          "bg-[var(--surface)] shadow-[0_24px_64px_rgba(0,0,0,0.42)] ring-1 ring-[color:color-mix(in_srgb,var(--accent)_18%,transparent)]",
+        )}
+      >
+        <div className="h-1 w-full bg-[color:color-mix(in_srgb,var(--accent)_65%,var(--foreground)_35%)]" aria-hidden />
+        <div className="flex items-center justify-between gap-2 border-b border-[color:color-mix(in_srgb,var(--border)_72%,transparent)] px-4 py-2.5">
+          <div className="flex min-w-0 items-center gap-2">
+            <Eye className="h-4 w-4 shrink-0 text-[color:color-mix(in_srgb,var(--accent)_80%,var(--muted)_20%)]" aria-hidden />
+            <span className="truncate text-sm font-semibold tracking-tight text-[var(--foreground)]">見積プレビュー</span>
+          </div>
+          <span className="shrink-0 text-xs text-[var(--muted)]">クリックで別タブ</span>
+        </div>
+        {panel === "loading" || (panel === "idle" && !html) ? (
+          <div className="modern-scrollbar flex h-[min(72vh,540px)] flex-col items-center justify-center gap-3 bg-[color:color-mix(in_srgb,var(--background)_55%,var(--surface)_45%)]">
+            <Loader2 className="h-8 w-8 shrink-0 animate-spin text-[color:color-mix(in_srgb,var(--accent)_55%,var(--muted)_45%)]" aria-hidden />
+            <p className="text-sm text-[var(--muted)]">レイアウトを読み込んでいます…</p>
+          </div>
+        ) : null}
+        {panel === "error" ? (
+          <div className="flex h-[min(72vh,540px)] flex-col items-center justify-center gap-2 bg-[color:color-mix(in_srgb,var(--background)_40%,var(--surface)_60%)] px-6 text-center">
+            <p className="text-sm text-[var(--muted)]">プレビューを表示できませんでした。</p>
+            <p className="text-xs text-[var(--muted)]">別タブのフルプレビューをお試しください。</p>
+          </div>
+        ) : null}
+        {panel === "ready" && html ? (
+          <div className="modern-scrollbar h-[min(72vh,540px)] overflow-auto bg-[color:color-mix(in_srgb,#94a3b8_14%,var(--background)_86%)]">
+            <div className="flex justify-center p-3 sm:p-5">
+              <div
+                className="shrink-0 rounded-xl bg-white shadow-[0_8px_30px_rgba(15,23,42,0.12)] ring-1 ring-[color:color-mix(in_srgb,var(--border)_55%,transparent)]"
+                style={{ width: HOVER_PREVIEW_DOC_WIDTH_PX }}
+              >
+                <iframe
+                  title={`estimate-hover-preview-${estimateId}`}
+                  srcDoc={html}
+                  sandbox=""
+                  className="block w-full rounded-xl border-0 bg-white"
+                  style={{ width: HOVER_PREVIEW_DOC_WIDTH_PX, height: "min(66vh, 520px)" }}
+                />
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </HoverCardContent>
+    </HoverCard>
+  );
+}
+
+export function ProjectDetailClient({ projectId, initialProject, canEdit, canDeleteProject }: ProjectDetailClientProps) {
+  type EstimateSummary = {
+    id: number;
+    estimate_number: string;
+    title: string;
+    estimate_status: string;
+    client_name?: string | null;
+    issue_date?: string | null;
+    sales_user_label?: string | null;
+    total_including_tax?: number | null;
+    effective_role?: string;
+  };
+
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [editing, setEditing] = useState(false);
   const [editFormDirty, setEditFormDirty] = useState(false);
   const [project, setProject] = useState<PortalProjectDetail>(initialProject);
-  const [teamPermissionRows, setTeamPermissionRows] = useState<AccessControlRow[]>([]);
-  const [linkedEstimates, setLinkedEstimates] = useState<
-    Array<{ id: number; estimate_number: string; title: string; estimate_status: string; effective_role?: string }>
-  >([]);
+  const [linkedEstimates, setLinkedEstimates] = useState<EstimateSummary[]>([]);
   const [isEstimateLinkModalOpen, setIsEstimateLinkModalOpen] = useState(false);
-  const [allEstimates, setAllEstimates] = useState<
-    Array<{ id: number; estimate_number: string; title: string; estimate_status: string }>
-  >([]);
+  const [allEstimates, setAllEstimates] = useState<EstimateSummary[]>([]);
   const [selectedEstimateIds, setSelectedEstimateIds] = useState<number[]>([]);
+  const [estimateClientFilter, setEstimateClientFilter] = useState("");
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
 
   useEffect(() => {
@@ -60,30 +176,11 @@ export function ProjectDetailClient({ projectId, initialProject, canEdit }: Proj
   useEffect(() => {
     const loadRelations = async () => {
       try {
-        const [permRes, estRes] = await Promise.all([
-          fetch(`/api/portal/project-team-permissions?project_id=${projectId}`, { credentials: "include", cache: "no-store" }),
-          fetch(`/api/portal/project-estimates?project_id=${projectId}`, { credentials: "include", cache: "no-store" }),
-        ]);
-        if (permRes.ok) {
-          const permData = (await permRes.json()) as {
-            success?: boolean;
-            permissions?: Array<{ team_tag: string; role: "owner" | "editor" | "viewer" }>;
-          };
-          if (permData.success && Array.isArray(permData.permissions)) {
-            setTeamPermissionRows(
-              permData.permissions.map((row, idx) => ({
-                key: `project-team-${idx}-${row.team_tag}`,
-                subjectType: "team",
-                subject: row.team_tag,
-                role: row.role,
-              })),
-            );
-          }
-        }
+        const estRes = await fetch(`/api/portal/project-estimates?project_id=${projectId}`, { credentials: "include", cache: "no-store" });
         if (estRes.ok) {
           const estimateData = (await estRes.json()) as {
             success?: boolean;
-            estimates?: Array<{ id: number; estimate_number: string; title: string; estimate_status: string; effective_role?: string }>;
+            estimates?: EstimateSummary[];
           };
           if (estimateData.success && Array.isArray(estimateData.estimates)) {
             setLinkedEstimates(estimateData.estimates);
@@ -171,6 +268,7 @@ export function ProjectDetailClient({ projectId, initialProject, canEdit }: Proj
           mode="edit"
           editProjectId={projectId}
           initialDetail={project}
+          canDeleteProject={canDeleteProject}
           onEditDirtyChange={setEditFormDirty}
           onEditCancel={leaveEditMode}
           onEditSaved={(savedProject) => {
@@ -467,33 +565,19 @@ export function ProjectDetailClient({ projectId, initialProject, canEdit }: Proj
     </ul>
   );
 
-  const saveProjectTeamPermissions = async () => {
-    const payload = {
-      project_id: projectId,
-      permissions: teamPermissionRows
-        .filter((row) => row.subjectType === "team" && row.subject.trim() !== "")
-        .map((row) => ({ team_tag: row.subject.trim(), role: row.role })),
-    };
-    await fetch("/api/portal/project-team-permissions", {
-      method: "PATCH",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-  };
-
   const openEstimateLinkModal = async () => {
     try {
       const res = await fetch("/api/portal/estimates", { credentials: "include", cache: "no-store" });
       const data = (await res.json()) as {
         success?: boolean;
-        estimates?: Array<{ id: number; estimate_number: string; title: string; estimate_status: string; effective_role?: string }>;
+        estimates?: EstimateSummary[];
       };
       if (!res.ok || !data.success || !Array.isArray(data.estimates)) {
         return;
       }
       setAllEstimates(data.estimates);
       setSelectedEstimateIds(linkedEstimates.map((estimate) => estimate.id));
+      setEstimateClientFilter((project.client_name ?? "").trim());
       setIsEstimateLinkModalOpen(true);
     } catch {
       // ignore
@@ -514,7 +598,7 @@ export function ProjectDetailClient({ projectId, initialProject, canEdit }: Proj
       const res = await fetch(`/api/portal/project-estimates?project_id=${projectId}`, { credentials: "include", cache: "no-store" });
       const data = (await res.json()) as {
         success?: boolean;
-        estimates?: Array<{ id: number; estimate_number: string; title: string; estimate_status: string }>;
+        estimates?: EstimateSummary[];
       };
       if (res.ok && data.success && Array.isArray(data.estimates)) {
         setLinkedEstimates(data.estimates);
@@ -524,6 +608,40 @@ export function ProjectDetailClient({ projectId, initialProject, canEdit }: Proj
     }
     setIsEstimateLinkModalOpen(false);
   };
+
+  const unlinkSingleEstimate = async (estimateId: number) => {
+    const nextEstimateIds = linkedEstimates.filter((estimate) => estimate.id !== estimateId).map((estimate) => estimate.id);
+    await fetch("/api/portal/project-estimates", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        project_id: projectId,
+        estimate_ids: nextEstimateIds,
+      }),
+    });
+    setLinkedEstimates((prev) => prev.filter((estimate) => estimate.id !== estimateId));
+  };
+
+  const normalizedProjectClientName = (project.client_name ?? "").trim().toLowerCase();
+  const normalizedClientFilter = estimateClientFilter.trim().toLowerCase();
+  const estimateCandidates = [...allEstimates]
+    .filter((estimate) => {
+      if (normalizedClientFilter === "") {
+        return true;
+      }
+      return (estimate.client_name ?? "").toLowerCase().includes(normalizedClientFilter);
+    })
+    .sort((a, b) => {
+      const aClient = (a.client_name ?? "").trim().toLowerCase();
+      const bClient = (b.client_name ?? "").trim().toLowerCase();
+      const aMatched = normalizedProjectClientName !== "" && aClient === normalizedProjectClientName;
+      const bMatched = normalizedProjectClientName !== "" && bClient === normalizedProjectClientName;
+      if (aMatched !== bMatched) {
+        return aMatched ? -1 : 1;
+      }
+      return a.id - b.id;
+    });
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5">
@@ -553,92 +671,64 @@ export function ProjectDetailClient({ projectId, initialProject, canEdit }: Proj
 
             <Card className="overflow-hidden shadow-sm">
               <CardContent className="space-y-3 p-4 sm:p-5">
-                <h3 className="text-sm font-semibold text-[var(--foreground)]">アクセス設定（共通UI）</h3>
-                <AccessControlTable rows={teamPermissionRows} onChange={setTeamPermissionRows} readOnly={!canEdit} />
-                {canEdit ? (
-                  <Button type="button" variant="default" size="sm" onClick={() => void saveProjectTeamPermissions()}>
-                    保存
-                  </Button>
-                ) : null}
-              </CardContent>
-            </Card>
-
-            <Card className="overflow-hidden shadow-sm">
-              <CardContent className="space-y-3 p-4 sm:p-5">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-[var(--foreground)]">紐づき見積</h3>
+                  <h3 className="text-sm font-semibold text-[var(--foreground)]">関連見積</h3>
                   {canEdit ? (
-                    <Button type="button" variant="default" size="sm" onClick={() => void openEstimateLinkModal()}>
-                      見積を紐づける
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button type="button" variant="default" size="sm" onClick={() => void openEstimateLinkModal()} className="gap-1.5">
+                        追加する
+                        <PlusCircle className="h-4 w-4" aria-hidden />
+                      </Button>
+                    </div>
                   ) : null}
                 </div>
-                <div className="overflow-auto">
-                  <table className="w-full min-w-[520px] border-collapse text-sm">
-                    <thead>
-                      <tr className="border-b border-[var(--border)] text-left">
-                        <th className="px-2 py-1">見積番号</th>
-                        <th className="px-2 py-1">件名</th>
-                        <th className="px-2 py-1">ステータス</th>
-                        <th className="px-2 py-1">操作</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {linkedEstimates.map((estimate) => (
-                        <tr key={`project-estimate-${estimate.id}`} className="border-b border-[var(--border)]">
-                          <td className="px-2 py-1">{estimate.estimate_number}</td>
-                          <td className="px-2 py-1">{estimate.title}</td>
-                          <td className="px-2 py-1">{estimate.estimate_status}</td>
-                          <td className="px-2 py-1">
-                            <div className="flex gap-1">
-                              <Button
-                                asChild
-                                type="button"
-                                variant="default"
-                                size="sm"
-                                disabled={!["owner", "editor"].includes(estimate.effective_role ?? "")}
-                                title={!["owner", "editor"].includes(estimate.effective_role ?? "") ? "編集権限がありません" : undefined}
-                              >
-                                <Link href={`/estimates/${estimate.id}`}>{["owner", "editor"].includes(estimate.effective_role ?? "") ? "編集へ" : "詳細へ"}</Link>
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="default"
-                                size="sm"
-                                disabled={!["owner", "editor", "viewer"].includes(estimate.effective_role ?? "")}
-                                onClick={async () => {
-                                  const res = await fetch("/api/portal/estimate-export-html", {
-                                    method: "POST",
-                                    credentials: "include",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ estimate_id: estimate.id }),
-                                  });
-                                  const data = (await res.json()) as { success?: boolean; html?: string };
-                                  if (data.success && data.html) {
-                                    const w = window.open("", "_blank");
-                                    if (w) {
-                                      w.document.open();
-                                      w.document.write(data.html);
-                                      w.document.close();
-                                    }
-                                  }
-                                }}
-                              >
-                                HTML出力へ
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                      {linkedEstimates.length === 0 ? (
-                        <tr>
-                          <td colSpan={4} className="px-2 py-3 text-center text-[var(--muted)]">
-                            紐づき見積はありません。
-                          </td>
-                        </tr>
+                <div className="space-y-2">
+                  {linkedEstimates.map((estimate) => (
+                    <div
+                      key={`project-estimate-${estimate.id}`}
+                      className="relative rounded-xl border border-[color:color-mix(in_srgb,var(--border)_88%,transparent)] bg-[color:color-mix(in_srgb,var(--surface)_96%,transparent)] p-3"
+                    >
+                      {canEdit ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="absolute right-2 top-2 h-6 w-6 shrink-0 p-0"
+                          onClick={() => void unlinkSingleEstimate(estimate.id)}
+                          title="関連見積の紐づきを解除"
+                          aria-label="関連見積の紐づきを解除"
+                        >
+                          <X className="h-3 w-3" aria-hidden />
+                        </Button>
                       ) : null}
-                    </tbody>
-                  </table>
+                      <div className="space-y-1 pr-8">
+                        <p className="line-clamp-2 text-sm font-semibold text-[var(--foreground)]">{displayText(estimate.title)}</p>
+                        <p className="text-xs text-[var(--muted)]">{displayText(estimate.client_name)}</p>
+                      </div>
+                      <div className="mt-2.5 flex items-center justify-between gap-2">
+                        <ProjectEstimatePreviewHoverCard estimateId={estimate.id}>
+                          <a
+                            href={`/estimates/${estimate.id}/preview`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[color:color-mix(in_srgb,var(--border)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--surface)_92%,transparent)] text-[color:color-mix(in_srgb,var(--muted)_90%,var(--foreground)_10%)] transition-colors hover:border-[color:color-mix(in_srgb,var(--accent)_45%,var(--border)_55%)] hover:bg-[color:color-mix(in_srgb,var(--accent)_12%,var(--surface)_88%)] hover:text-[var(--accent)]"
+                            title="ホバーで一覧用プレビュー、クリックで別タブのフルプレビュー"
+                            aria-label="見積プレビュー（別タブで開く）"
+                          >
+                            <Eye className="h-4 w-4" aria-hidden />
+                          </a>
+                        </ProjectEstimatePreviewHoverCard>
+                        <Button asChild type="button" variant="default" size="sm" className="h-8 rounded-md">
+                          <Link href={`/estimates/${estimate.id}`}>詳細へ</Link>
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  {linkedEstimates.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-[color:color-mix(in_srgb,var(--border)_80%,transparent)] px-3 py-5 text-center text-sm text-[var(--muted)]">
+                      関連見積はありません。
+                    </div>
+                  ) : null}
                 </div>
               </CardContent>
             </Card>
@@ -647,23 +737,40 @@ export function ProjectDetailClient({ projectId, initialProject, canEdit }: Proj
       </div>
 
       <Dialog open={isEstimateLinkModalOpen} onOpenChange={setIsEstimateLinkModalOpen}>
-        <DialogContent aria-label="見積を紐づける">
+        <DialogContent aria-label="関連見積を追加する" className="w-[min(96vw,1180px)] max-w-[1180px]">
           <DialogHeader>
-            <DialogTitle>見積を紐づける</DialogTitle>
-            <DialogDescription>Project側から紐づける見積を選択してください。</DialogDescription>
+            <DialogTitle>関連見積を追加する</DialogTitle>
+            <DialogDescription>クライアント名で絞り込みしながら、案件に紐づける見積を選択できます。</DialogDescription>
           </DialogHeader>
-          <div className="max-h-[60vh] overflow-auto">
-            <table className="w-full min-w-[520px] border-collapse text-sm">
+          <div className="space-y-3">
+            <div className="grid gap-2">
+              <label htmlFor="estimate-client-filter" className="text-xs font-medium text-[var(--muted)]">
+                クライアント名で絞り込み
+              </label>
+              <input
+                id="estimate-client-filter"
+                type="text"
+                value={estimateClientFilter}
+                onChange={(e) => setEstimateClientFilter(e.target.value)}
+                className="h-9 w-full rounded-md border border-[color:color-mix(in_srgb,var(--border)_90%,transparent)] bg-[color:color-mix(in_srgb,var(--surface)_97%,transparent)] px-3 text-sm outline-none ring-0 transition-colors placeholder:text-[color:color-mix(in_srgb,var(--muted)_78%,transparent)] focus:border-[color:color-mix(in_srgb,var(--accent)_55%,var(--border)_45%)]"
+                placeholder="クライアント名を入力"
+              />
+            </div>
+            <div className="max-h-[70vh] overflow-auto rounded-lg border border-[color:color-mix(in_srgb,var(--border)_88%,transparent)]">
+              <table className="w-full border-collapse text-sm">
               <thead>
-                <tr className="border-b border-[var(--border)] text-left">
+                <tr className="pm-table-head text-left">
                   <th className="px-2 py-1">選択</th>
                   <th className="px-2 py-1">見積番号</th>
                   <th className="px-2 py-1">件名</th>
-                  <th className="px-2 py-1">ステータス</th>
+                  <th className="px-2 py-1">顧客名</th>
+                  <th className="px-2 py-1">担当営業</th>
+                  <th className="px-2 py-1">発行日</th>
+                  <th className="px-2 py-1 text-right">税込合計</th>
                 </tr>
               </thead>
               <tbody>
-                {allEstimates.map((estimate) => {
+                {estimateCandidates.map((estimate) => {
                   const checked = selectedEstimateIds.includes(estimate.id);
                   return (
                     <tr key={`estimate-link-candidate-${estimate.id}`} className="border-b border-[var(--border)]">
@@ -680,12 +787,25 @@ export function ProjectDetailClient({ projectId, initialProject, canEdit }: Proj
                       </td>
                       <td className="px-2 py-1">{estimate.estimate_number}</td>
                       <td className="px-2 py-1">{estimate.title}</td>
-                      <td className="px-2 py-1">{estimate.estimate_status}</td>
+                      <td className="px-2 py-1">{displayText(estimate.client_name)}</td>
+                      <td className="px-2 py-1">{displayText(estimate.sales_user_label)}</td>
+                      <td className="px-2 py-1">{String(estimate.issue_date ?? "").slice(0, 10)}</td>
+                      <td className="px-2 py-1 text-right font-mono tabular-nums">
+                        {Number(estimate.total_including_tax ?? 0).toLocaleString("ja-JP")}
+                      </td>
                     </tr>
                   );
                 })}
+                {estimateCandidates.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-2 py-4 text-center text-[var(--muted)]">
+                      条件に一致する見積がありません。
+                    </td>
+                  </tr>
+                ) : null}
               </tbody>
             </table>
+          </div>
           </div>
           <div className="mt-3 flex justify-end gap-2">
             <Button type="button" variant="default" size="sm" onClick={() => setIsEstimateLinkModalOpen(false)}>

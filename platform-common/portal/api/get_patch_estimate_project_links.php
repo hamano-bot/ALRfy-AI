@@ -10,36 +10,11 @@ set_error_handler(static function ($severity, $message, $file = '', $line = 0): 
     error_log(sprintf('[estimate_project_links php warning] %s in %s:%d', (string)$message, (string)$file, (int)$line));
     return true;
 });
-register_shutdown_function(static function (): void {
-    $err = error_get_last();
-    if (!is_array($err)) {
-        return;
-    }
-    error_log(
-        sprintf(
-            '[estimate_project_links shutdown] type=%d message=%s file=%s line=%d',
-            (int)($err['type'] ?? 0),
-            (string)($err['message'] ?? ''),
-            (string)($err['file'] ?? ''),
-            (int)($err['line'] ?? 0)
-        )
-    );
-    $fatalTypes = [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR];
-    if (!in_array((int)($err['type'] ?? 0), $fatalTypes, true)) {
-        return;
-    }
-    if (ob_get_length() !== false && ob_get_length() > 0) {
-        ob_clean();
-    }
-    http_response_code(500);
-    echo json_encode(
-        ['success' => false, 'message' => 'Project紐づけAPIで内部エラーが発生しました。'],
-        JSON_UNESCAPED_UNICODE
-    );
-});
 
 require_once dirname(__DIR__, 2) . '/auth/bootstrap.php';
 require_once dirname(__DIR__) . '/includes/estimate_schema.php';
+require_once dirname(__DIR__) . '/includes/portal_query_int.php';
+require_once dirname(__DIR__) . '/includes/portal_json_safe.php';
 
 header('Content-Type: application/json; charset=UTF-8');
 
@@ -145,28 +120,35 @@ try {
 }
 
 if ($method === 'GET') {
-    $estimateId = isset($_GET['estimate_id']) && is_string($_GET['estimate_id']) && ctype_digit($_GET['estimate_id']) ? (int)$_GET['estimate_id'] : 0;
-    if ($estimateId <= 0) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'estimate_id を指定してください。'], JSON_UNESCAPED_UNICODE);
+    try {
+        $estimateId = portal_positive_int_from_query('estimate_id');
+        if ($estimateId <= 0) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'estimate_id を指定してください。'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        if (estimateProjectLinksRole($pdo, $estimateId, $sessionUserId) === 'none') {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'アクセス権限がありません。'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $stmt = $pdo->prepare(
+            'SELECT epl.project_id, epl.link_type, p.name AS project_name
+             FROM estimate_project_links epl
+             INNER JOIN projects p ON p.id = epl.project_id
+             WHERE epl.estimate_id = :estimate_id
+             ORDER BY epl.id ASC'
+        );
+        $stmt->execute([':estimate_id' => $estimateId]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        portal_json_echo_db(['success' => true, 'links' => is_array($rows) ? $rows : []]);
+        exit;
+    } catch (Throwable $e) {
+        error_log('[estimate_project_links get] ' . $e->getMessage());
+        http_response_code(500);
+        echo json_encode(['success' => false, 'message' => 'Project紐づけの取得に失敗しました。'], JSON_UNESCAPED_UNICODE);
         exit;
     }
-    if (estimateProjectLinksRole($pdo, $estimateId, $sessionUserId) === 'none') {
-        http_response_code(403);
-        echo json_encode(['success' => false, 'message' => 'アクセス権限がありません。'], JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-    $stmt = $pdo->prepare(
-        'SELECT epl.project_id, epl.link_type, p.name AS project_name
-         FROM estimate_project_links epl
-         INNER JOIN projects p ON p.id = epl.project_id
-         WHERE epl.estimate_id = :estimate_id
-         ORDER BY epl.id ASC'
-    );
-    $stmt->execute([':estimate_id' => $estimateId]);
-    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    echo json_encode(['success' => true, 'links' => is_array($rows) ? $rows : []], JSON_UNESCAPED_UNICODE);
-    exit;
 }
 
 if ($method === 'PATCH') {

@@ -196,6 +196,34 @@ function estimateLoadUserTeamTags(PDO $pdo, int $userId): array
     return $teamTags;
 }
 
+function estimateNormalizeTeamTagsCsvFromJson(mixed $raw): string
+{
+    if (!is_string($raw) || trim($raw) === '') {
+        return '';
+    }
+    $decoded = json_decode($raw, true);
+    if (!is_array($decoded)) {
+        return '';
+    }
+    $tags = [];
+    foreach ($decoded as $tag) {
+        if (!is_string($tag)) {
+            continue;
+        }
+        $v = strtolower(trim($tag));
+        if ($v === '') {
+            continue;
+        }
+        $tags[$v] = true;
+    }
+    if ($tags === []) {
+        return '';
+    }
+    $out = array_keys($tags);
+    sort($out, SORT_STRING);
+    return implode(',', $out);
+}
+
 function estimateResolveEffectiveRole(
     PDO $pdo,
     int $estimateId,
@@ -208,50 +236,17 @@ function estimateResolveEffectiveRole(
     if ($estimateId <= 0 || $sessionUserId <= 0) {
         return 'none';
     }
-    $roleRank = 0;
     if ($createdByUserId === $sessionUserId) {
-        $roleRank = 3; // owner
-    } elseif ($isAdmin) {
-        $roleRank = 2; // editor
-    } elseif ($visibilityScope === 'public_all_users') {
-        $roleRank = 1; // viewer
+        return 'owner';
+    }
+    if ($isAdmin) {
+        return 'editor';
+    }
+    if ($visibilityScope === 'public_all_users') {
+        return 'viewer';
     }
 
-    $userPermStmt = $pdo->prepare('SELECT role FROM estimate_user_permissions WHERE estimate_id = :estimate_id AND user_id = :user_id LIMIT 1');
-    $userPermStmt->execute([':estimate_id' => $estimateId, ':user_id' => $sessionUserId]);
-    $up = $userPermStmt->fetch(PDO::FETCH_ASSOC);
-    if (is_array($up) && is_string($up['role'] ?? null)) {
-        $r = $up['role'];
-        // owner は作成者/管理者のみ有効にする
-        if ($r === 'editor') {
-            $roleRank = max($roleRank, 2);
-        } elseif ($r === 'viewer') {
-            $roleRank = max($roleRank, 1);
-        }
-    }
-
-    if (!empty($teamTags)) {
-        $teamPermStmt = $pdo->prepare('SELECT role FROM estimate_team_permissions WHERE estimate_id = :estimate_id AND team_tag = :team_tag');
-        foreach (array_keys($teamTags) as $teamTag) {
-            $teamPermStmt->execute([':estimate_id' => $estimateId, ':team_tag' => $teamTag]);
-            $teamRows = $teamPermStmt->fetchAll(PDO::FETCH_ASSOC);
-            if (!is_array($teamRows)) {
-                continue;
-            }
-            foreach ($teamRows as $tp) {
-                if (!is_array($tp) || !is_string($tp['role'] ?? null)) {
-                    continue;
-                }
-                $r = $tp['role'];
-                if ($r === 'editor') {
-                    $roleRank = max($roleRank, 2);
-                } elseif ($r === 'viewer') {
-                    $roleRank = max($roleRank, 1);
-                }
-            }
-        }
-    }
-    return $roleRank >= 3 ? 'owner' : ($roleRank >= 2 ? 'editor' : ($roleRank >= 1 ? 'viewer' : 'none'));
+    return 'none';
 }
 
 function estimateResolveSalesUserIdForPost(PDO $pdo, array $payload, int $sessionUserId): int
@@ -301,6 +296,37 @@ function estimateResolveSalesUserIdForPatch(PDO $pdo, array $payload, int $estim
     }
 
     return $sid;
+}
+
+/**
+ * @param list<mixed> $list
+ * @return list<int>
+ */
+function estimateNormalizeProjectIdsFromList(PDO $pdo, array $list): array
+{
+    $out = [];
+    $seen = [];
+    $pchk = $pdo->prepare('SELECT id FROM projects WHERE id = :id LIMIT 1');
+    foreach ($list as $v) {
+        if (!is_numeric($v)) {
+            continue;
+        }
+        $pid = (int)$v;
+        if ($pid <= 0 || isset($seen[$pid])) {
+            continue;
+        }
+        $pchk->execute([':id' => $pid]);
+        if ($pchk->fetchColumn() === false) {
+            continue;
+        }
+        $seen[$pid] = true;
+        $out[] = $pid;
+        if (count($out) >= 30) {
+            break;
+        }
+    }
+
+    return $out;
 }
 
 function estimateInsertOperationLog(PDO $pdo, ?int $estimateId, string $operationType, int $operatorUserId, array $detail): void
@@ -364,7 +390,8 @@ function estimateBuildUpdateSummary(array $before, array $after, int $beforeLine
     if (empty($changed)) {
         return '変更なし';
     }
-    return '更新: ' . implode(' / ', $changed);
+    // 画面上の差分が分かりにくい（税率のみ等）ことがあるため、一覧は出さず固定文言にする
+    return '更新';
 }
 
 /**
@@ -426,6 +453,23 @@ if ($method === 'GET') {
         }
         $row['effective_role'] = $effectiveRole;
         $row['lines'] = estimateLoadLines($pdo, $estimateId);
+        $linkStmt = $pdo->prepare(
+            'SELECT project_id FROM estimate_project_links WHERE estimate_id = :id ORDER BY CASE link_type WHEN \'primary\' THEN 0 ELSE 1 END, id ASC'
+        );
+        $linkStmt->execute([':id' => $estimateId]);
+        $projectIds = [];
+        while ($lr = $linkStmt->fetch(PDO::FETCH_ASSOC)) {
+            if (is_array($lr) && isset($lr['project_id']) && is_numeric($lr['project_id'])) {
+                $projectIds[] = (int)$lr['project_id'];
+            }
+        }
+        if ($projectIds === []) {
+            $pidCol = isset($row['project_id']) && is_numeric($row['project_id']) ? (int)$row['project_id'] : 0;
+            if ($pidCol > 0) {
+                $projectIds = [$pidCol];
+            }
+        }
+        $row['project_ids'] = $projectIds;
         echo json_encode(['success' => true, 'estimate' => $row], JSON_UNESCAPED_UNICODE);
         exit;
     }
@@ -435,6 +479,7 @@ if ($method === 'GET') {
     $projectIdFilter = isset($_GET['project_id']) && is_string($_GET['project_id']) && ctype_digit($_GET['project_id']) ? (int)$_GET['project_id'] : 0;
     $salesFilter = isset($_GET['sales_user_id']) && is_string($_GET['sales_user_id']) && ctype_digit($_GET['sales_user_id']) ? (int)$_GET['sales_user_id'] : 0;
     $teamTagFilter = isset($_GET['team_tag']) && is_string($_GET['team_tag']) ? strtolower(trim($_GET['team_tag'])) : '';
+    $ownerTeamTagFilter = isset($_GET['owner_team_tag']) && is_string($_GET['owner_team_tag']) ? strtolower(trim($_GET['owner_team_tag'])) : '';
     $updatedFrom = isset($_GET['updated_from']) && is_string($_GET['updated_from']) ? trim($_GET['updated_from']) : '';
     $updatedTo = isset($_GET['updated_to']) && is_string($_GET['updated_to']) ? trim($_GET['updated_to']) : '';
     $keyword = isset($_GET['keyword']) && is_string($_GET['keyword']) ? trim($_GET['keyword']) : '';
@@ -509,6 +554,10 @@ if ($method === 'GET') {
         $where[] = 'EXISTS (SELECT 1 FROM estimate_team_permissions etf WHERE etf.estimate_id = pe.id AND etf.team_tag = :team_tag_filter)';
         $params[':team_tag_filter'] = $teamTagFilter;
     }
+    if ($ownerTeamTagFilter !== '') {
+        $where[] = 'LOWER(COALESCE(owner_u.team, \'\')) LIKE :owner_team_tag_filter';
+        $params[':owner_team_tag_filter'] = '%"' . $ownerTeamTagFilter . '"%';
+    }
 
     $permOr = [];
     $permOr[] = "pe.visibility_scope = 'public_all_users'";
@@ -517,23 +566,10 @@ if ($method === 'GET') {
     if ($isAdmin) {
         $permOr[] = '1=1';
     }
-    $permOr[] = 'EXISTS (SELECT 1 FROM estimate_user_permissions eup WHERE eup.estimate_id = pe.id AND eup.user_id = :session_user_id_perm)';
-    $params[':session_user_id_perm'] = $sessionUserId;
-    if (!empty($teamTags)) {
-        $tagPlaceholders = [];
-        $i = 0;
-        foreach (array_keys($teamTags) as $tag) {
-            $ph = ':perm_team_tag_' . $i;
-            $tagPlaceholders[] = $ph;
-            $params[$ph] = $tag;
-            $i++;
-        }
-        $permOr[] = 'EXISTS (SELECT 1 FROM estimate_team_permissions etp2 WHERE etp2.estimate_id = pe.id AND etp2.team_tag IN (' . implode(',', $tagPlaceholders) . '))';
-    }
     $where[] = '(' . implode(' OR ', $permOr) . ')';
     $whereSql = $where === [] ? '' : ('WHERE ' . implode(' AND ', $where));
 
-    $countSql = 'SELECT COUNT(*) FROM project_estimates pe ' . $whereSql;
+    $countSql = 'SELECT COUNT(*) FROM project_estimates pe LEFT JOIN users owner_u ON owner_u.id = pe.created_by_user_id ' . $whereSql;
     $countStmt = $pdo->prepare($countSql);
     foreach ($params as $k => $v) {
         $countStmt->bindValue($k, $v);
@@ -548,6 +584,7 @@ if ($method === 'GET') {
                 pe.estimate_status,
                 pe.title,
                 pe.client_name,
+                pe.client_abbr,
                 pe.issue_date,
                 pe.sales_user_id,
                 COALESCE(NULLIF(TRIM(u.display_name), \'\'), NULLIF(TRIM(u.email), \'\')) AS sales_user_label,
@@ -555,6 +592,7 @@ if ($method === 'GET') {
                 pe.created_by_user_id,
                 pe.total_including_tax,
                 pe.updated_at,
+                owner_u.team AS owner_team_tags_json,
                 (
                     SELECT GROUP_CONCAT(DISTINCT etp.team_tag ORDER BY etp.team_tag SEPARATOR ",")
                     FROM estimate_team_permissions etp
@@ -562,6 +600,7 @@ if ($method === 'GET') {
                 ) AS team_tags_csv
          FROM project_estimates pe
          LEFT JOIN users u ON u.id = pe.sales_user_id
+         LEFT JOIN users owner_u ON owner_u.id = pe.created_by_user_id
          ' . $whereSql . '
          ORDER BY pe.updated_at DESC, pe.id DESC
          LIMIT :limit OFFSET :offset';
@@ -597,6 +636,8 @@ if ($method === 'GET') {
                 continue;
             }
             $row['effective_role'] = $effectiveRole;
+            $row['owner_team_tags_csv'] = estimateNormalizeTeamTagsCsvFromJson($row['owner_team_tags_json'] ?? null);
+            unset($row['owner_team_tags_json']);
             $estimates[] = $row;
         }
     }
@@ -640,7 +681,13 @@ if ($method === 'POST') {
         }
     }
     $isRough = ($payload['is_rough_estimate'] ?? false) ? 1 : 0;
-    $projectId = (isset($payload['project_id']) && is_numeric($payload['project_id'])) ? (int)$payload['project_id'] : null;
+    $linkedProjectIdsPost = [];
+    if (array_key_exists('project_ids', $payload) && is_array($payload['project_ids'])) {
+        $linkedProjectIdsPost = estimateNormalizeProjectIdsFromList($pdo, $payload['project_ids']);
+    } elseif (isset($payload['project_id']) && is_numeric($payload['project_id']) && (int)$payload['project_id'] > 0) {
+        $linkedProjectIdsPost = estimateNormalizeProjectIdsFromList($pdo, [(int)$payload['project_id']]);
+    }
+    $projectId = $linkedProjectIdsPost[0] ?? null;
     $clientAbbr = isset($payload['client_abbr']) && is_string($payload['client_abbr']) ? trim($payload['client_abbr']) : '';
     $estimateNumber = estimateGenerateNumber($pdo, $clientAbbr);
     $clientAbbrStored = $clientAbbr === '' ? null : (mb_strlen($clientAbbr, 'UTF-8') <= 64 ? $clientAbbr : mb_substr($clientAbbr, 0, 64, 'UTF-8'));
@@ -777,6 +824,19 @@ if ($method === 'POST') {
                 'total_including_tax' => $total,
             ]
         );
+        if ($linkedProjectIdsPost !== []) {
+            $linkIns = $pdo->prepare(
+                'INSERT INTO estimate_project_links (estimate_id, project_id, link_type) VALUES (:estimate_id, :project_id, :link_type)'
+            );
+            foreach ($linkedProjectIdsPost as $i => $pid) {
+                $linkType = $i === 0 ? 'primary' : 'related';
+                $linkIns->execute([
+                    ':estimate_id' => $estimateId,
+                    ':project_id' => $pid,
+                    ':link_type' => $linkType,
+                ]);
+            }
+        }
         $pdo->commit();
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) {
@@ -928,9 +988,23 @@ if ($method === 'PATCH') {
 
     try {
         $pdo->beginTransaction();
+        $projectPatchUseIds = array_key_exists('project_ids', $payload) || array_key_exists('project_id', $payload);
+        $linkedPatchIds = [];
+        if (array_key_exists('project_ids', $payload) && is_array($payload['project_ids'])) {
+            $linkedPatchIds = estimateNormalizeProjectIdsFromList($pdo, $payload['project_ids']);
+        } elseif (array_key_exists('project_id', $payload)) {
+            $pidRaw = $payload['project_id'];
+            if ($pidRaw === null || $pidRaw === '' || $pidRaw === false) {
+                $linkedPatchIds = [];
+            } elseif (is_numeric($pidRaw) && (int)$pidRaw > 0) {
+                $linkedPatchIds = estimateNormalizeProjectIdsFromList($pdo, [(int)$pidRaw]);
+            }
+        }
         $issueDateSql = $issueDatePatch !== null ? 'issue_date = :issue_date,' : '';
         $deliverySql = array_key_exists('delivery_due_text', $payload) ? 'delivery_due_text = :delivery_due_text,' : '';
         $clientAbbrSql = array_key_exists('client_abbr', $payload) ? 'client_abbr = :client_abbr,' : '';
+        $visibilitySql = array_key_exists('visibility_scope', $payload) ? 'visibility_scope = :visibility_scope,' : '';
+        $projectIdSql = $projectPatchUseIds ? 'project_id = :project_id,' : '';
         $upd = $pdo->prepare(
             'UPDATE project_estimates SET
              estimate_status = :estimate_status,
@@ -943,6 +1017,8 @@ if ($method === 'PATCH') {
              internal_memo = :internal_memo,
              ' . $issueDateSql . '
              ' . $deliverySql . '
+             ' . $visibilitySql . '
+             ' . $projectIdSql . '
              applied_tax_rate_percent = :applied_tax_rate_percent,
              subtotal_excluding_tax = :subtotal_excluding_tax,
              tax_amount = :tax_amount,
@@ -976,7 +1052,36 @@ if ($method === 'PATCH') {
         if (array_key_exists('client_abbr', $payload)) {
             $execParams[':client_abbr'] = $clientAbbrPatch;
         }
+        if (array_key_exists('visibility_scope', $payload)) {
+            $vs = $payload['visibility_scope'];
+            $execParams[':visibility_scope'] = ($vs === 'restricted') ? 'restricted' : 'public_all_users';
+        }
+        if ($projectPatchUseIds) {
+            $execParams[':project_id'] = $linkedPatchIds[0] ?? null;
+        }
         $upd->execute($execParams);
+
+        if (array_key_exists('visibility_scope', $payload)) {
+            $pdo->prepare('DELETE FROM estimate_team_permissions WHERE estimate_id = :id')->execute([':id' => $estimateId]);
+            $pdo->prepare('DELETE FROM estimate_user_permissions WHERE estimate_id = :id')->execute([':id' => $estimateId]);
+        }
+
+        if ($projectPatchUseIds) {
+            $pdo->prepare('DELETE FROM estimate_project_links WHERE estimate_id = :id')->execute([':id' => $estimateId]);
+            if ($linkedPatchIds !== []) {
+                $linkIns = $pdo->prepare(
+                    'INSERT INTO estimate_project_links (estimate_id, project_id, link_type) VALUES (:estimate_id, :project_id, :link_type)'
+                );
+                foreach ($linkedPatchIds as $i => $pid) {
+                    $linkType = $i === 0 ? 'primary' : 'related';
+                    $linkIns->execute([
+                        ':estimate_id' => $estimateId,
+                        ':project_id' => $pid,
+                        ':link_type' => $linkType,
+                    ]);
+                }
+            }
+        }
 
         $pdo->prepare('DELETE FROM project_estimate_lines WHERE estimate_id = :id')->execute([':id' => $estimateId]);
         if ($normalizedLines !== []) {

@@ -1,19 +1,21 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { resolvePhpUpstream } from "@/lib/php-upstream";
 
 export const dynamic = "force-dynamic";
-const UPSTREAM_PATH = "/portal/api/get_patch_estimate_visibility.php";
-
-function trimTrailingSlashes(value: string): string {
-  return value.replace(/\/+$/, "");
-}
+const UPSTREAM_PATH = "/portal/api/estimate-visibility";
 
 async function proxy(request: NextRequest, method: "GET" | "PATCH", body?: string) {
-  const rawBase = process.env.PORTAL_API_BASE_URL;
-  if (!rawBase || rawBase.trim() === "") {
-    return NextResponse.json({ success: false, code: "missing_config", message: "PORTAL_API_BASE_URL が未設定です。" }, { status: 503 });
+  const configured =
+    (process.env.PORTAL_API_INTERNAL_URL && process.env.PORTAL_API_INTERNAL_URL.trim() !== "") ||
+    (process.env.PORTAL_API_BASE_URL && process.env.PORTAL_API_BASE_URL.trim() !== "");
+  if (!configured) {
+    return NextResponse.json(
+      { success: false, code: "missing_config", message: "PORTAL_API_BASE_URL（または PORTAL_API_INTERNAL_URL）が未設定です。" },
+      { status: 503 },
+    );
   }
   const query = request.nextUrl.search ? request.nextUrl.search : "";
-  const url = `${trimTrailingSlashes(rawBase.trim())}${UPSTREAM_PATH}${query}`;
+  const url = `${resolvePhpUpstream()}${UPSTREAM_PATH}${query}`;
   const cookie = request.headers.get("cookie");
   try {
     const upstream = await fetch(url, {
@@ -51,6 +53,11 @@ async function proxy(request: NextRequest, method: "GET" | "PATCH", body?: strin
         headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" },
       });
     } catch {
+      console.warn("[estimate-visibility upstream non-json]", {
+        method,
+        status: upstream.status,
+        bodyPreview: text.slice(0, 500),
+      });
       console.info("[estimate-visibility upstream]", { method, status: upstream.status, non_json: true });
       return NextResponse.json(
         {
@@ -87,8 +94,5 @@ export async function PATCH(request: NextRequest) {
     team_count: Array.isArray(payload.team_permissions) ? payload.team_permissions.length : null,
     user_count: Array.isArray(payload.user_permissions) ? payload.user_permissions.length : null,
   });
-  // #region agent log
-  fetch('http://127.0.0.1:7870/ingest/d3eabf84-6c86-4277-b829-e548b07d84d8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'690a2d'},body:JSON.stringify({sessionId:'690a2d',runId:'run3',hypothesisId:'H6',location:'estimate-visibility/route.ts:PATCH',message:'visibility patch received by bff',data:{estimateId:Number(payload.estimate_id??0),visibilityScope:String(payload.visibility_scope??''),teamCount:Array.isArray(payload.team_permissions)?payload.team_permissions.length:null,userCount:Array.isArray(payload.user_permissions)?payload.user_permissions.length:null},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
   return proxy(request, "PATCH", JSON.stringify(json));
 }

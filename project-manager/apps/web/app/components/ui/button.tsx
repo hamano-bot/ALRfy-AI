@@ -18,6 +18,8 @@ const buttonVariants = cva(
         accent: `${accentButtonSurfaceBaseClassName} hover:brightness-110`,
         ghost:
           "text-[var(--muted)] hover:bg-[color:color-mix(in_srgb,var(--surface)_92%,black_8%)] hover:text-[var(--foreground)]",
+        outline:
+          "border-2 border-[color:color-mix(in_srgb,var(--border)_95%,transparent)] bg-transparent text-[var(--foreground)] shadow-sm hover:bg-[color:color-mix(in_srgb,var(--surface)_90%,black_10%)]",
         destructive:
           "border border-red-500/40 bg-[color:color-mix(in_srgb,var(--surface)_92%,black_8%)] text-red-500 hover:border-red-500/55 hover:bg-red-500/10 hover:text-red-400",
       },

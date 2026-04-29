@@ -14,6 +14,13 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
+$sessionUserId = (int)$_SESSION['user_id'];
+if ($sessionUserId <= 0) {
+    http_response_code(401);
+    echo json_encode(['success' => false, 'message' => 'ログインが必要です。'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 try {
     $pdo = createPdoFromApplicationEnv();
     ensureEstimateSchema($pdo);
@@ -41,23 +48,9 @@ if ($method === 'GET') {
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $estimates = [];
     if (is_array($rows)) {
-        $teamTags = [];
-        $userStmt = $pdo->prepare('SELECT team FROM users WHERE id = :id LIMIT 1');
-        $userStmt->execute([':id' => $sessionUserId]);
-        $u = $userStmt->fetch(PDO::FETCH_ASSOC);
-        if (is_array($u) && is_string($u['team'] ?? null) && trim($u['team']) !== '') {
-            $decoded = json_decode((string)$u['team'], true);
-            if (is_array($decoded)) {
-                foreach ($decoded as $tag) {
-                    if (is_string($tag) && trim($tag) !== '') {
-                        $teamTags[strtolower(trim($tag))] = true;
-                    }
-                }
-            }
-        }
-
-        $userPermStmt = $pdo->prepare('SELECT role FROM estimate_user_permissions WHERE estimate_id = :estimate_id AND user_id = :user_id LIMIT 1');
-        $teamPermStmt = $pdo->prepare('SELECT role FROM estimate_team_permissions WHERE estimate_id = :estimate_id AND team_tag = :team_tag');
+        $adminStmt = $pdo->prepare('SELECT is_admin FROM users WHERE id = :id LIMIT 1');
+        $adminStmt->execute([':id' => $sessionUserId]);
+        $isAdmin = ((int)$adminStmt->fetchColumn()) === 1;
         foreach ($rows as $row) {
             if (!is_array($row)) {
                 continue;
@@ -66,36 +59,15 @@ if ($method === 'GET') {
             if ($estimateId <= 0) {
                 continue;
             }
-            $roleRank = 0; // none
-            if ((string)($row['visibility_scope'] ?? 'public_all_users') === 'public_all_users') {
-                $roleRank = max($roleRank, 1); // viewer
-            }
-            if ((int)($row['created_by_user_id'] ?? 0) === $sessionUserId) {
-                $roleRank = max($roleRank, 3); // owner
-            }
-            $userPermStmt->execute([':estimate_id' => $estimateId, ':user_id' => $sessionUserId]);
-            $up = $userPermStmt->fetch(PDO::FETCH_ASSOC);
-            if (is_array($up) && is_string($up['role'] ?? null)) {
-                $r = $up['role'];
-                if ($r === 'owner') $roleRank = max($roleRank, 3);
-                elseif ($r === 'editor') $roleRank = max($roleRank, 2);
-                elseif ($r === 'viewer') $roleRank = max($roleRank, 1);
-            }
-            foreach (array_keys($teamTags) as $teamTag) {
-                $teamPermStmt->execute([':estimate_id' => $estimateId, ':team_tag' => $teamTag]);
-                $teamRows = $teamPermStmt->fetchAll(PDO::FETCH_ASSOC);
-                if (!is_array($teamRows)) {
-                    continue;
-                }
-                foreach ($teamRows as $tp) {
-                    if (!is_array($tp) || !is_string($tp['role'] ?? null)) {
-                        continue;
-                    }
-                    $r = $tp['role'];
-                    if ($r === 'owner') $roleRank = max($roleRank, 3);
-                    elseif ($r === 'editor') $roleRank = max($roleRank, 2);
-                    elseif ($r === 'viewer') $roleRank = max($roleRank, 1);
-                }
+            $visibility = (string)($row['visibility_scope'] ?? 'public_all_users');
+            $createdBy = (int)($row['created_by_user_id'] ?? 0);
+            $roleRank = 0;
+            if ($createdBy === $sessionUserId) {
+                $roleRank = 3;
+            } elseif ($isAdmin) {
+                $roleRank = 2;
+            } elseif ($visibility === 'public_all_users') {
+                $roleRank = 1;
             }
             $effectiveRole = $roleRank >= 3 ? 'owner' : ($roleRank >= 2 ? 'editor' : ($roleRank >= 1 ? 'viewer' : 'none'));
             if ($effectiveRole === 'none') {

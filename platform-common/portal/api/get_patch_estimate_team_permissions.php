@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__, 2) . '/auth/bootstrap.php';
 require_once dirname(__DIR__) . '/includes/estimate_schema.php';
+require_once dirname(__DIR__) . '/includes/portal_query_int.php';
 
 header('Content-Type: application/json; charset=UTF-8');
 
@@ -26,7 +27,7 @@ try {
 }
 
 if ($method === 'GET') {
-    $estimateId = isset($_GET['estimate_id']) && is_string($_GET['estimate_id']) && ctype_digit($_GET['estimate_id']) ? (int)$_GET['estimate_id'] : 0;
+    $estimateId = portal_positive_int_from_query('estimate_id');
     if ($estimateId <= 0) {
         http_response_code(400);
         echo json_encode(['success' => false, 'message' => 'estimate_id を指定してください。'], JSON_UNESCAPED_UNICODE);
