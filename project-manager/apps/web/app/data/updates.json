@@ -1,5 +1,12 @@
 [
   {
+    "id": "gh-1632cda-moitavx6",
+    "datetime": "2026-04-29 00:59:15",
+    "version": "push-1632cda",
+    "title": "見積機能拡張(見積明細の項目名補完)",
+    "summary": ""
+  },
+  {
     "id": "gh-95dbcbd-mofyj8v6",
     "datetime": "2026-04-27 01:02:52",
     "version": "push-95dbcbd",
