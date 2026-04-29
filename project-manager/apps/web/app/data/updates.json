@@ -1,5 +1,12 @@
 [
   {
+    "id": "gh-dd0e038-mok4ugmj",
+    "datetime": "2026-04-29 23:10:36",
+    "version": "push-dd0e038",
+    "title": "Merge branch 'main' of https://github.com/hamano-bot/ALRfy-AI",
+    "summary": ""
+  },
+  {
     "id": "gh-1632cda-moitavx6",
     "datetime": "2026-04-29 00:59:15",
     "version": "push-1632cda",
@@ -130,13 +137,6 @@
     "datetime": "2026-04-17 20:02:05",
     "version": "push-4d69fd6",
     "title": "update-web-updates.mjs and SystemUpdatesCard.tsx（関連機能）の品質向上をしました",
-    "summary": ""
-  },
-  {
-    "id": "gh-98a4fe0-mo2s5y4s",
-    "datetime": "2026-04-17 19:43:22",
-    "version": "push-98a4fe0",
-    "title": "update-web-updates.mjs（関連機能）の品質向上をしました",
     "summary": ""
   }
 ]
